@@ -17,7 +17,9 @@ Each module owns one job; `main.rs` parses arguments with clap and dispatches.
 - `lint.rs` runs the rules in [[lint]].
 - `find.rs` resolves names, shows sections, and lists backlinks, outlinks and orphans.
 - `status.rs` derives current state and the Now block; `context.rs` builds the tiered load set.
-- `search.rs` is the BM25 ranker; `review.rs` records finished reviews.
+- `search.rs` is the BM25 ranker; `review.rs` builds the review packet, records finished reviews, and keeps the soul history.
+- `git.rs` wraps the `git` binary; `changes.rs` implements `owo changes` and the changed-file set for `lint --changed`.
+- `export.rs` writes character cards and SoulSpec packages.
 - `output.rs` defines diagnostics, the envelope and exit codes.
 
 ## Loading an identity

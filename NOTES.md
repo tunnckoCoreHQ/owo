@@ -15,3 +15,13 @@
 - `examples/thea` (neutral creative companion) and `examples/reviewer` (made-up senior code reviewer, 3 projects with missing KB paths) built with `owo new` and `owo add`, then written by hand. Both lint clean.
 - `index -q` and `stamp -q` are now quiet.
 - `npx -y lat.md check` passes.
+
+## 2026-11-04 (phase 3)
+
+- Lint's link and orphan checks now call `find.rs` (`raw_links`, `orphans`).
+- Added the `owo review` packet, `review done --through`, `soul note`, `soul history`, `changes [--since]` (Git or stamps), `lint --changed`.
+- Added `export card` (V3 with V2 fields, or V2; `--project` scopes the lorebook and scenario) and `export soulspec`.
+- Examples gained greetings, good and bad examples, filled `soul.json`, and one soul history record each.
+- `tests/examples.rs` covers card shape, the SoulSpec package, review packet then done, soul notes, changes and `lint --changed`.
+- Wrote the four skills under `skills/` with one shared `rules.md`.
+- HANDOFF.md rewritten as a standalone brief with the remaining work in priority order.

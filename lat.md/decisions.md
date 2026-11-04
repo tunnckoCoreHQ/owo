@@ -37,3 +37,21 @@ The project KB is a pointer for the agent to follow. `owo context` prints it whe
 ## Examples are built with owo
 
 `examples/thea` and `examples/reviewer` were scaffolded with `owo new` and `owo add`, filled by hand, then indexed, stamped and reviewed. `tests/examples.rs` checks they stay lint clean and current.
+
+## Changes read Git, else stamps
+
+`owo changes` reads `git log --name-status` for the identity folder when it sits in a repo, and lists uncommitted paths separately. Outside a repo it groups state-file `updated` stamps by day, so the command always answers.
+
+`lint --changed` keeps diagnostics whose path is uncommitted in Git or drifts from its stamp (`stamp --check`). The full lint still runs; only the report is filtered.
+
+## Review window uses two cursors
+
+Files count as changed when their stamp is newer than `last_reviewed`. Log days, events and journal count as unreviewed when their story date is after `reviewed_through`. Stamps track edits; story dates track the life.
+
+## Lint reuses find
+
+Lint's link rules and orphan check call `find::raw_links` and `find::orphans`, so `owo links --orphans` and the `orphans` rule always agree.
+
+## Skills live in the repo
+
+`skills/` holds the four skills. `skills/identity/references/rules.md` is the one shared rules file; the other skills link to it and call owo for every deterministic step.

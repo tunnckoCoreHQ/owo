@@ -23,7 +23,10 @@ The implemented command set; see `docs/design.md` section 7 for the full plan.
 - `owo context [--voice] [--look] [--with <name>]... [--notes N] [--format paths|text] [--no-touch]` prints the load set; see [[cli#Context]].
 - `owo state` prints the derived Now block; `owo recent [--days N]` lists recently stamped files.
 - `owo search <query> [--scope soul|life|work] [--limit N]` ranks entries with BM25; see [[decisions#Search is in-crate BM25]].
-- `owo review done` records a finished review: `last_reviewed`, `reviewed_through` (newest log date) and the MEMORY.md hash.
+- `owo review` prints the review packet; see [[cli#Review]]. `owo review done [--through <date>]` records a finished review: `last_reviewed`, `reviewed_through` (default: newest log date) and the MEMORY.md hash.
+- `owo soul note <file> --change <text> --evidence <name>...` appends to `soul/state.json` `history`. Evidence must resolve; fewer than two links and no defining event gives a warning. `owo soul history [file]` prints the trail.
+- `owo changes [--since]` lists changes by day; see [[decisions#Changes read Git, else stamps]]. `owo lint --changed` keeps diagnostics for changed files only.
+- `owo export card [--spec v3|v2] [--out]` and `owo export soulspec --out <dir>`; see [[cli#Export]].
 - `owo list`, `owo slug <text>`, `owo templates [name]`, `owo config`.
 
 ## Context
@@ -36,3 +39,32 @@ The implemented command set; see `docs/design.md` section 7 for the full plan.
 
 The KB path comes from `project.md` `kb`, else `identity.json` `projects.<p>.kb` (both relative to the identity folder), else `.owo.toml` `kb` (relative to that file). See [[decisions#KB pointer is always emitted]]. A project context records a session in `work/state.json` unless `--no-touch`.
 
+
+## Review
+
+`owo review` gathers what the review skill needs to compile MEMORY, as text or `--json`.
+
+- current MEMORY.md, its word count, and whether it changed outside a review
+- files whose stamp moved after `last_reviewed` (MEMORY.md excluded), with type, summary, word count, and Git `+added -removed` lines when the root is a repo
+- log days after `reviewed_through`, with their bodies
+- events and journal entries dated after `reviewed_through`, lessons among the changed files
+- open threads and conflicts, three-word phrases on three or more unreviewed days, the last soul change
+
+## Export
+
+`owo export card` writes Character Card V3 JSON (V2 with `--spec v2`); `--project <p>` scopes the work side.
+
+| Card field | Source |
+| :- | :- |
+| `description` | IDENTITY.md body, LOOK.md under `## Look` |
+| `system_prompt` | IDENTITY "Who she/he/they is/are" section, then VOICE.md |
+| `personality` | SOUL.md body |
+| `scenario` | with `--project`: project.md summary and body |
+| `first_mes`, `alternate_greetings` | `soul/examples/greetings.md`, one per `##` |
+| `mes_example` | `soul/examples/good.md`, prefixed `<START>` |
+| `tags`, `creator`, `character_version` | `soul/soul.json` |
+| `character_book` | MEMORY.md as a constant entry, then characters, locations, cultures, factions, eras, events, lessons, and the scoped project; keys are title plus aliases; `## Identifiers` and `## Sources` are left out |
+
+V3 adds `nickname` (first IDENTITY alias), `assets` (default icon), `creation_date`, `modification_date`, `source`, `group_only_greetings`, `creator_notes_multilingual`.
+
+`owo export soulspec` writes `soul.json`, `SOUL.md`, `IDENTITY.md` (LOOK appended), `STYLE.md` (from VOICE), `MEMORY.md` and `examples/`, and warns when the license is outside the allowlist in `export.rs`.
