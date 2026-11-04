@@ -949,13 +949,17 @@ fn run(cli: &Cli, out: &Out) -> Result<i32> {
                         cards.push(("ccv3", &card));
                     }
                     std::fs::write(f, export::embed_png(&avatar, &cards)?)?;
-                    out.say(format!("wrote {}", f.display()));
                 }
-                Some(f) => {
-                    std::fs::write(f, format!("{text}\n"))?;
-                    out.say(format!("wrote {}", f.display()));
-                }
+                Some(f) => std::fs::write(f, format!("{text}\n"))?,
+                None if out.json => Envelope::ok(card).print(),
                 None => println!("{text}"),
+            }
+            if let Some(f) = file {
+                if out.json {
+                    Envelope::ok(json!({ "path": f })).print();
+                } else {
+                    out.say(format!("wrote {}", f.display()));
+                }
             }
             Ok(exit::OK)
         }

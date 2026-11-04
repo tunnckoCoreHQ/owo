@@ -436,6 +436,9 @@ fn card_png_and_scenario() {
         v["data"]["scenario"],
         "The first kiln load that came out whole."
     );
+    let env = json(owo(&root).args(["-i", "thea", "export", "card"]));
+    assert_eq!(env["ok"], true);
+    assert_eq!(env["data"]["spec"], "chara_card_v3");
 }
 
 #[test]
