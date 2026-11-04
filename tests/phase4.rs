@@ -526,3 +526,46 @@ fn kb_path_expands_home() {
     ]));
     assert_eq!(v["data"]["kb"]["exists"], true, "{v}");
 }
+
+#[test]
+fn sync_done_and_prompt_guards() {
+    let tmp = copy_example("reviewer");
+    let t = tmp.path().join("t.jsonl");
+    fs::write(&t, r#"{"role":"user","text":"one"}"#).unwrap();
+    let tp = t.to_str().unwrap();
+    let sync = |args: &[&str]| {
+        owo(tmp.path())
+            .args(["-i", "reviewer", "sync"])
+            .args(args)
+            .assert()
+    };
+    sync(&[
+        "start",
+        "--session",
+        "s3",
+        "--transcript",
+        tp,
+        "--now",
+        "--project",
+        "nope",
+    ])
+    .code(1);
+    sync(&[
+        "start",
+        "--session",
+        "s3",
+        "--transcript",
+        tp,
+        "--now",
+        "--project",
+        "ledger-api",
+    ])
+    .success();
+    let prompt = fs::read_to_string(tmp.path().join(".owo/sessions/s3.prompt.md")).unwrap();
+    assert!(
+        prompt.contains("--root '") && prompt.contains("--no-touch --project ledger-api"),
+        "{prompt}"
+    );
+    sync(&["done", "--session", "s3", "--until", "500"]).code(1);
+    sync(&["done", "--session", "s3", "--until", "1"]).success();
+}

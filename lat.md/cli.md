@@ -82,4 +82,4 @@ Host-agnostic session sync: the host calls `sync start` after each turn and `syn
 
 `owo sync start --session <id> --transcript <path> [--format jsonl|claude-jsonl|opencode-json] [--every N] [--now]` parses user and assistant text, reads the bookmark in `<root>/.owo/sessions/<id>.json`, and counts new user turns. A run is due at `--every` turns (default `identity.json` `sync_every`, else 6), or at any new turn with `--now`.
 
-When due it writes the slice, with two earlier user turns as overlap, to `<root>/sources/<slug>/<date>_<session>_<from>-<until>.md`, and the ingest prompt to `.owo/sessions/<id>.prompt.md`. `owo sync done --session <id> --until <n>` moves the bookmark forward.
+When due it writes the slice, with two earlier user turns as overlap, to `<root>/sources/<slug>/<date>_<session>_<from>-<until>.md`, and the ingest prompt to `.owo/sessions/<id>.prompt.md`. `owo sync done --session <id> --until <n>` moves the bookmark forward; `--until` may not pass the message count the last `sync start` read. The prompt names the absolute root and runs `context --no-touch`, so ingest runs do not count as project sessions. `--project` must name an existing project.

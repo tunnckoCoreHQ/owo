@@ -194,6 +194,15 @@ fn write_bookmark(root: &Path, session: &str, doc: &Value) -> Result<()> {
 pub fn start(req: &StartRequest) -> Result<Start> {
     check_session(req.session)?;
     let _lock = Lock::take(req.root, req.session)?;
+    if let Some(p) = req.project {
+        let file = req
+            .root
+            .join(req.slug)
+            .join(format!("work/projects/{p}/project.md"));
+        if !file.is_file() {
+            bail!("project not found: work/projects/{p}/project.md (run `owo add project`)");
+        }
+    }
     let raw = fs::read_to_string(req.transcript)
         .with_context(|| format!("reading {}", req.transcript.display()))?;
     let messages = parse(&raw, req.format)?;
@@ -234,6 +243,7 @@ pub fn start(req: &StartRequest) -> Result<Start> {
     doc["identity"] = json!(req.slug);
     doc["transcript"] = json!(req.transcript.display().to_string());
     doc["format"] = json!(req.format);
+    doc["messages"] = json!(until);
     if doc.get("until").is_none() {
         doc["until"] = json!(0);
     }
@@ -255,9 +265,13 @@ pub fn start(req: &StartRequest) -> Result<Start> {
             .project
             .map(|p| format!(" --project {p}"))
             .unwrap_or_default();
+        let root = fs::canonicalize(req.root).unwrap_or_else(|_| req.root.to_path_buf());
+        let quoted = format!("'{}'", root.display().to_string().replace('\'', "'\\''"));
         let text = format!(
-            "Use the identity-ingest skill for identity `{slug}`{proj}.\n\nSource: `{source}` (relative to the identities root). Messages before {done} were ingested in an earlier run; the first part is overlap for context.\n\n1. `owo -i {slug} context --format text{project}` and `owo -i {slug} state`.\n2. Route each durable fact in the source to its home; cite `{cite}#L<a>-L<b>` under `## Sources`.\n3. Finish with `owo -i {slug} stamp && owo -i {slug} index && owo -i {slug} lint --changed`.\n4. Report changed paths or \"no changes\".\n\nWhen it succeeds the host runs `owo sync done --session {session} --until {until}`.\n",
+            "Use the identity-ingest skill for identity `{slug}`{proj}.\n\nSource: `{source}` (relative to the identities root `{root}`). Messages before {done} were ingested in an earlier run; the first part is overlap for context.\n\n1. `{owo} context --format text --no-touch{project}` and `{owo} state`.\n2. Route each durable fact in the source to its home; cite `{cite}#L<a>-L<b>` under `## Sources`.\n3. Finish with `{owo} stamp && {owo} index && {owo} lint --changed`.\n4. Report changed paths or \"no changes\".\n\nWhen it succeeds the host runs `owo --root {quoted} sync done --session {session} --until {until}`.\n",
             slug = req.slug,
+            root = root.display(),
+            owo = format!("owo --root {quoted} -i {}", req.slug),
             proj = req.project.map(|p| format!(" on project `{p}`")).unwrap_or_default(),
             cite = source.trim_start_matches("sources/"),
             session = req.session,
@@ -283,6 +297,9 @@ pub fn done(root: &Path, session: &str, until: usize) -> Result<Value> {
     let prev = doc["until"].as_u64().unwrap_or(0) as usize;
     if until < prev {
         bail!("--until {until} is behind the bookmark ({prev})");
+    }
+    if let Some(seen) = doc["messages"].as_u64().filter(|n| until as u64 > *n) {
+        bail!("--until {until} is past the {seen} messages the last `sync start` read");
     }
     doc["until"] = json!(until);
     doc["synced_at"] = json!(crate::state::now());
