@@ -13,7 +13,7 @@ Exit codes: 0 success, 1 problems found (lint errors, exists, unknown template, 
 The implemented command set; see `docs/design.md` section 7 for the full plan.
 
 - `owo new <name> [--slug]` creates an identity from templates, writes indexes and state files. Exits 1 when the folder exists.
-- `owo add <type> <title> [--date] [--parent] [--alias]...` creates one entry at its deterministic path. Uses `--project` for notes. A second `add log` for the same day succeeds and prints `exists <path>`.
+- `owo add <type> <title> [--date] [--parent] [--alias]... [--kb]` creates one entry at its deterministic path. Uses `--project` for notes. A second `add log` for the same day succeeds and prints `exists <path>`.
 - `owo lint [--rule <code>]...` runs [[lint]] rules. Exits 1 when any error is found.
 - `owo index [--check]` writes generated files, or reports stale ones and exits 1.
 - `owo stamp [--check]` refreshes state files from hashes; see [[decisions#Stamp touches frontmatter]].
@@ -21,13 +21,15 @@ The implemented command set; see `docs/design.md` section 7 for the full plan.
 - `owo show <name> [--section]` prints an entry or one `## ` section.
 - `owo links <name> [--in] [--out]` lists backlinks and outlinks; `owo links --orphans` lists unlinked entries.
 - `owo context [--voice] [--look] [--with <name>]... [--notes N] [--format paths|text] [--no-touch]` prints the load set; see [[cli#Context]].
-- `owo state` prints the derived Now block; `owo recent [--days N]` lists recently stamped files.
-- `owo search <query> [--scope soul|life|work] [--limit N]` ranks entries with BM25; see [[decisions#Search is in-crate BM25]].
+- `owo state [--days N]` prints the derived Now block, plus sessions and recent notes with `--project`; `owo recent [--days N]` lists recently stamped files.
+- `owo search <query> [--scope|--in soul|life|work] [--type <t>]... [--since <date>] [--limit N]` ranks entries with BM25; see [[decisions#Search is in-crate BM25]].
 - `owo review` prints the review packet; see [[cli#Review]]. `owo review done [--through <date>]` records a finished review: `last_reviewed`, `reviewed_through` (default: newest log date) and the MEMORY.md hash.
 - `owo soul note <file> --change <text> --evidence <name>...` appends to `soul/state.json` `history`. Evidence must resolve; fewer than two links and no defining event gives a warning. `owo soul history [file]` prints the trail.
 - `owo changes [--since]` lists changes by day; see [[decisions#Changes read Git, else stamps]]. `owo lint --changed` keeps diagnostics for changed files only.
-- `owo export card [--spec v3|v2] [--out]` and `owo export soulspec --out <dir>`; see [[cli#Export]].
-- `owo list`, `owo slug <text>`, `owo templates [name]`, `owo config`.
+- `owo export card [--spec v3|v2] [--scenario <name>] [--png <avatar> --out <file>]`, `owo export soulspec --out <dir>`, `owo export skill --out <dir>`; see [[cli#Export]].
+- `owo sync start` and `owo sync done`; see [[cli#Sync]].
+- `owo migrate v1 <path> --out <root>/<slug>`; see [[decisions#Migrate is mechanical]].
+- `owo list` prints slug, name, last activity and projects per identity. Also `owo slug <text>`, `owo templates [name]`, `owo config`.
 
 ## Context
 
@@ -68,3 +70,15 @@ The KB path comes from `project.md` `kb`, else `identity.json` `projects.<p>.kb`
 V3 adds `nickname` (first IDENTITY alias), `assets` (default icon), `creation_date`, `modification_date`, `source`, `group_only_greetings`, `creator_notes_multilingual`.
 
 `owo export soulspec` writes `soul.json`, `SOUL.md`, `IDENTITY.md` (LOOK appended), `STYLE.md` (from VOICE), `MEMORY.md` and `examples/`, and warns when the license is outside the allowlist in `export.rs`.
+
+`--scenario <name>` sets `scenario` from that entry's summary. `--png` writes the avatar with the card in `tEXt` chunks: `chara` (V2 JSON, base64) always and `ccv3` (V3) for V3 cards, replacing earlier ones.
+
+`owo export skill --out <dir>` writes a `SKILL.md` that loads the identity with `owo context` and lists the read and write commands.
+
+## Sync
+
+Host-agnostic session sync: the host calls `sync start` after each turn and `sync done` after a successful ingest run.
+
+`owo sync start --session <id> --transcript <path> [--format jsonl|claude-jsonl|opencode-json] [--every N] [--now]` parses user and assistant text, reads the bookmark in `<root>/.owo/sessions/<id>.json`, and counts new user turns. A run is due at `--every` turns (default `identity.json` `sync_every`, else 6), or at any new turn with `--now`.
+
+When due it writes the slice, with two earlier user turns as overlap, to `<root>/sources/<slug>/<date>_<session>_<from>-<until>.md`, and the ingest prompt to `.owo/sessions/<id>.prompt.md`. `owo sync done --session <id> --until <n>` moves the bookmark forward.

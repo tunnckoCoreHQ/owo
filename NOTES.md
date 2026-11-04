@@ -25,3 +25,12 @@
 - `tests/examples.rs` covers card shape, the SoulSpec package, review packet then done, soul notes, changes and `lint --changed`.
 - Wrote the four skills under `skills/` with one shared `rules.md`.
 - HANDOFF.md rewritten as a standalone brief with the remaining work in priority order.
+
+## 2026-11-04 (phase 4)
+
+- `sync start/done`: host-agnostic transcript slicing into `<root>/sources/<slug>/`, bookmark and prompt in `.owo/sessions/`.
+- `migrate v1`, tested on the invented `tests/fixtures/v1-lumen`.
+- `kb:` links: resolution in `find::kb_link`, lint rule `kb`, `owo show kb:...`. Links now keep their `#section`; `links` warns on a missing section.
+- `export skill`, `export card --png/--scenario`.
+- Flags: `add --kb`, `search --type/--since/--in` plus `--project`, `state --days/--project`, `list` with name, last activity and projects.
+- Self-review: removed the `all_links` and `links_in_value` wrappers; the findings left open are listed in HANDOFF.md.

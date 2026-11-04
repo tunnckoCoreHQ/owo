@@ -19,7 +19,8 @@ Each module owns one job; `main.rs` parses arguments with clap and dispatches.
 - `status.rs` derives current state and the Now block; `context.rs` builds the tiered load set.
 - `search.rs` is the BM25 ranker; `review.rs` builds the review packet, records finished reviews, and keeps the soul history.
 - `git.rs` wraps the `git` binary; `changes.rs` implements `owo changes` and the changed-file set for `lint --changed`.
-- `export.rs` writes character cards and SoulSpec packages.
+- `export.rs` writes character cards (JSON or PNG), SoulSpec packages and skill wrappers.
+- `sync.rs` parses transcripts and writes session slices; `migrate.rs` converts v1 identities.
 - `output.rs` defines diagnostics, the envelope and exit codes.
 
 ## Loading an identity

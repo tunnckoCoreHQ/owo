@@ -28,6 +28,7 @@ Tests:
 
 - unit tests in `src/` (slug, levenshtein, config, tokens and others)
 - `tests/cli.rs`: e2e on temp roots built with `owo new` plus `tests/fixtures/aria/`
+- `tests/phase4.rs`: e2e for sync, migrate, kb links, export skill and PNG cards, and the newer flags.
 - `tests/examples.rs`: e2e on the committed `examples/thea` and `examples/reviewer`. Read-only commands run in place (`context --no-touch`); writing commands run on a temp copy.
 
 After editing anything in `examples/`, run for each identity: `owo --root examples -i <slug> stamp && owo ... index && owo ... lint`. Run `owo ... review done` too if MEMORY.md changed. The examples test requires zero lint warnings.
@@ -47,29 +48,33 @@ After editing anything in `examples/`, run for each identity: `owo --root exampl
 
 | Command | Notes |
 | :- | :- |
-| `new`, `list`, `add` (15 types), `slug`, `templates`, `config` | |
-| `lint [--rule] [--changed]` | 16 rules; `--changed` = uncommitted in Git or drifting from stamps |
+| `new`, `add` (15 types, `--kb` for projects), `slug`, `templates`, `config` | |
+| `list` | slug, name, last activity, projects |
+| `lint [--rule] [--changed]` | 17 rules incl. `kb`; `links` also checks `#Section`; `--changed` = uncommitted in Git or drifting from stamps |
 | `index [--check]`, `stamp [--check]` | |
-| `resolve`, `show [--section]`, `links [--in|--out|--orphans]` | lint reuses `find.rs` |
+| `resolve`, `show [--section]`, `links [--in\|--out\|--orphans]` | `show kb:<p>:<path>#<S>` prints from the project KB |
 | `context [--voice --look --project --with --notes --format --no-touch]` | tiers, Now block, KB pointer with warning, `work/state.json` touch |
-| `state`, `recent [--days]` | |
-| `search [--scope --limit]` | in-crate BM25, no cache |
+| `state [--days] [--project]`, `recent [--days]` | |
+| `search [--scope/--in --type --since --limit]`, global `--project` | in-crate BM25, no cache |
 | `review`, `review done [--through]` | packet as text or JSON |
 | `soul note`, `soul history` | evidence must resolve; weak evidence warns |
 | `changes [--since]` | Git log, else stamps |
-| `export card [--spec v2|v3] [--out]`, `export soulspec --out` | |
+| `sync start`, `sync done` | jsonl, claude-jsonl, opencode-json; slices in `<root>/sources/<slug>/` |
+| `migrate v1` | tested on `tests/fixtures/v1-lumen` (invented) |
+| `export card [--spec --scenario --png --out]`, `export soulspec`, `export skill` | |
 | `skills/` | identity, identity-create, identity-ingest, identity-review, shared `identity/references/rules.md` |
 
 ## Left, in priority order
 
-1. **`owo sync start` / `sync done`** (design 6.3, 7.3). Read a transcript (`claude-jsonl`, `opencode-json`, `jsonl`), keep a per-session bookmark in `<root>/.owo/sessions/<id>.json`, write the new slice to `<identity>/sources/<date>_<session>.md`, and print the ingest prompt path. `done --until <n>` moves the bookmark. This is the main integration point for hosts (T3 Code, Claude Code hooks).
-2. **`owo migrate v1 <path> --out <root>/<slug>`** (design 11). Mechanical moves from the v1 layout per the table, then print the checklist. Test it on a synthetic v1 fixture created under `tests/fixtures/`. Never read real identity folders.
-3. **`kb:` links** (design 10.5): `[[kb:<p>:<path>#<Section>]]`. Resolve `<p>` via `context::kb_path`; lint warns when the file or section is missing and the KB exists, and stays silent when the KB folder is absent.
-4. **`owo export skill --out <dir>`**: a `SKILL.md` wrapper that runs `owo context -i <slug>` and lists the read and write commands (see `skills/identity/SKILL.md`).
-5. **Card extras**: `--png <avatar>` embeds the JSON (`chara` tEXt chunk for V2, `ccv3` for V3, base64); `--scenario <event or location>` sets `scenario` from that entry's summary.
-6. **Flag gaps against design 7.3**: `add project --kb <path>` (sets `kb:` in project.md); `search --type/--project/--since`; `state --days/--project`; `list` with display name, last activity and projects.
-7. **`owo mcp`**: stdio MCP server exposing resolve, search, links, show, context, state, add, stamp, index, lint over the same functions. Pick a small MCP crate or hand-roll JSON-RPC.
-8. **Search cache** in `<root>/.owo/cache/<slug>/` only if identities grow past a few thousand files; tantivy is the documented upgrade path.
+1. **`owo mcp`**: stdio MCP server exposing resolve, search, links, show, context, state, add, stamp, index, lint as tools over the same functions. Pick a small MCP crate or hand-roll JSON-RPC.
+2. **Migrate locations**: v1 `references/world/locations/` (and any other world folders) are reported as "no owo home". Map each location to `life/locations/<slug>/overview.md` with rooms as siblings.
+3. **Project scoping is inconsistent**: `search` and `export card` read only the `--project` flag; `context`, `add`, `state` and `sync` also accept `OWO_PROJECT` and `.owo.toml`. Pick one rule and document it in `lat.md/decisions.md`.
+4. **`review done` default**: design 7.3 says `reviewed_through` defaults to today; the code uses the newest log date (documented in `lat.md/cli.md`). Align the design or the code.
+5. **`templates` shape**: design says `owo templates [list | show <type>]`; the code has `owo templates [name]`.
+6. **Card nickname**: V3 `nickname` comes from IDENTITY aliases, but soul files have no frontmatter, so it is never set. Read it from `identity.json` (`nickname`) instead.
+7. **Recurring phrases** in the review packet include stop-word trigrams ("on the water"); filter stop words or require a content word.
+8. **Sync concurrency**: two `sync start` calls for one session can race on the bookmark. Add a lock file in `.owo/sessions/` if hosts call it in parallel.
+9. **Search cache** in `<root>/.owo/cache/<slug>/` only if identities grow past a few thousand files; tantivy is the documented upgrade path.
 
 ## Where things are
 

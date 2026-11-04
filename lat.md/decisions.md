@@ -55,3 +55,17 @@ Lint's link rules and orphan check call `find::raw_links` and `find::orphans`, s
 ## Skills live in the repo
 
 `skills/` holds the four skills. `skills/identity/references/rules.md` is the one shared rules file; the other skills link to it and call owo for every deterministic step.
+
+## Sync counts user turns
+
+Message indexes are positions in the parsed transcript (user and assistant text only; tool calls and tool results drop out). The bookmark stores the index the last successful ingest reached, so a failed run is retried by the next `sync start`.
+
+## Migrate is mechanical
+
+`owo migrate v1` does only file moves and frontmatter fills; judgment work goes to a printed checklist.
+
+It builds a fresh identity with `owo new`, copies soul files (STYLE becomes VOICE), adds missing frontmatter fields to world files, splits `conflicts.md` by `##`, copies `sources/`, then indexes and stamps. It reports files with no home and prints the judgment work as a checklist.
+
+## PNG cards without image crates
+
+Embedding a card only appends `tEXt` chunks before `IEND`, so `export.rs` walks PNG chunks with a small CRC32 and base64 instead of an image dependency.
