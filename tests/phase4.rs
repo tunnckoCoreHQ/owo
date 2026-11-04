@@ -458,3 +458,43 @@ fn section_links_are_checked() {
     assert_eq!(w.len(), 1, "{v}");
     assert!(w[0]["message"].as_str().unwrap().contains("Nope"));
 }
+
+#[test]
+fn sync_waits_for_a_pending_run() {
+    let tmp = copy_example("thea");
+    let t = tmp.path().join("t.jsonl");
+    let turns = |n: usize| {
+        let lines: Vec<String> = (1..=n)
+            .map(|i| format!(r#"{{"role":"user","text":"turn {i}"}}"#))
+            .collect();
+        fs::write(&t, lines.join("\n")).unwrap();
+    };
+    let tp = t.to_str().unwrap().to_string();
+    let start = || {
+        json(owo(tmp.path()).args([
+            "-i",
+            "thea",
+            "sync",
+            "start",
+            "--session",
+            "s2",
+            "--transcript",
+            &tp,
+            "--every",
+            "2",
+        ]))
+    };
+    turns(2);
+    assert_eq!(start()["data"]["due"], true);
+    turns(3);
+    let v = start();
+    assert_eq!(
+        v["data"]["due"], false,
+        "one turn after the pending run: {v}"
+    );
+    turns(4);
+    let v = start();
+    assert_eq!(v["data"]["due"], true);
+    assert_eq!(v["data"]["from"], 0, "the unfinished run is covered again");
+    assert!(!tmp.path().join(".owo/sessions/s2.lock").exists());
+}

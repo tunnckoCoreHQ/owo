@@ -73,7 +73,7 @@ After editing anything in `examples/`, run for each identity: `owo --root exampl
 5. **`templates` shape**: design says `owo templates [list | show <type>]`; the code has `owo templates [name]`.
 6. **Card nickname**: V3 `nickname` comes from IDENTITY aliases, but soul files have no frontmatter, so it is never set. Read it from `identity.json` (`nickname`) instead.
 7. **Recurring phrases** in the review packet include stop-word trigrams ("on the water"); filter stop words or require a content word.
-8. **Sync concurrency**: two `sync start` calls for one session can race on the bookmark. Add a lock file in `.owo/sessions/` if hosts call it in parallel.
+
 9. **Search cache** in `<root>/.owo/cache/<slug>/` only if identities grow past a few thousand files; tantivy is the documented upgrade path.
 
 ## Where things are

@@ -7,7 +7,8 @@ use anyhow::{bail, Context, Result};
 use serde::Serialize;
 use serde_json::{json, Value};
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::time::Duration;
 
 pub const FORMATS: &[&str] = &["jsonl", "claude-jsonl", "opencode-json"];
 const OVERLAP_TURNS: usize = 2;
@@ -130,6 +131,48 @@ fn check_session(session: &str) -> Result<()> {
     Ok(())
 }
 
+/// Holds `<root>/.owo/sessions/<id>.lock` while one sync step reads and writes the bookmark,
+/// so parallel calls for one session run one after the other.
+struct Lock(PathBuf);
+
+impl Lock {
+    fn take(root: &Path, session: &str) -> Result<Lock> {
+        let path = root.join(".owo/sessions").join(format!("{session}.lock"));
+        fs::create_dir_all(path.parent().expect("has parent"))?;
+        for _ in 0..100 {
+            match fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&path)
+            {
+                Ok(_) => return Ok(Lock(path)),
+                Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
+                    // A lock older than a minute belongs to a process that ended without cleanup.
+                    let stale = fs::metadata(&path)
+                        .and_then(|m| m.modified())
+                        .is_ok_and(|t| t.elapsed().unwrap_or_default() > Duration::from_secs(60));
+                    if stale {
+                        let _ = fs::remove_file(&path);
+                    } else {
+                        std::thread::sleep(Duration::from_millis(50));
+                    }
+                }
+                Err(e) => return Err(e.into()),
+            }
+        }
+        bail!(
+            "session {session:?} is busy: another `owo sync` holds {}",
+            path.display()
+        )
+    }
+}
+
+impl Drop for Lock {
+    fn drop(&mut self) {
+        let _ = fs::remove_file(&self.0);
+    }
+}
+
 fn bookmark_path(root: &Path, session: &str) -> std::path::PathBuf {
     root.join(".owo/sessions").join(format!("{session}.json"))
 }
@@ -150,6 +193,7 @@ fn write_bookmark(root: &Path, session: &str, doc: &Value) -> Result<()> {
 
 pub fn start(req: &StartRequest) -> Result<Start> {
     check_session(req.session)?;
+    let _lock = Lock::take(req.root, req.session)?;
     let raw = fs::read_to_string(req.transcript)
         .with_context(|| format!("reading {}", req.transcript.display()))?;
     let messages = parse(&raw, req.format)?;
@@ -157,7 +201,15 @@ pub fn start(req: &StartRequest) -> Result<Start> {
     let done = doc["until"].as_u64().unwrap_or(0) as usize;
     let done = done.min(messages.len());
     let until = messages.len();
-    let new_user = messages[done..].iter().filter(|m| m.role == "user").count();
+    // While a run is pending, count from its end so the next turns do not start it again.
+    // The slice still starts at the bookmark, so a run that never finished is covered again.
+    let counted_from = doc["pending"]["until"]
+        .as_u64()
+        .map_or(done, |u| (u as usize).clamp(done, until));
+    let new_user = messages[counted_from..]
+        .iter()
+        .filter(|m| m.role == "user")
+        .count();
     let due = new_user > 0 && (req.now || new_user >= req.every);
     let mut from = done;
     let mut seen = 0;
@@ -223,6 +275,7 @@ pub fn start(req: &StartRequest) -> Result<Start> {
 
 pub fn done(root: &Path, session: &str, until: usize) -> Result<Value> {
     check_session(session)?;
+    let _lock = Lock::take(root, session)?;
     let mut doc = read_bookmark(root, session);
     if doc.get("session").is_none() {
         bail!("no sync bookmark for session {session:?}; run `owo sync start` first");

@@ -62,6 +62,8 @@ Lint's link rules and orphan check call `find::raw_links` and `find::orphans`, s
 
 Message indexes are positions in the parsed transcript (user and assistant text only; tool calls and tool results drop out). The bookmark stores the index the last successful ingest reached, so a failed run is retried by the next `sync start`.
 
+While a run is pending, new user turns count from its end, so the turns that follow do not start it again; the next slice still starts at the bookmark. Each `sync start` and `sync done` holds `.owo/sessions/<id>.lock` while it touches the bookmark; a lock older than a minute is taken over.
+
 ## Migrate is mechanical
 
 `owo migrate v1` does only file moves and frontmatter fills; judgment work goes to a printed checklist.
