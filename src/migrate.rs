@@ -39,19 +39,36 @@ fn first_heading(body: &str) -> Option<String> {
         .map(|s| s.trim().to_string())
 }
 
-/// Adds the owo frontmatter fields a v1 file lacks; keeps every existing field.
-fn normalize(text: &str, kind: &str, stem: &str, date: Option<&str>, today: &str) -> String {
-    let split = crate::markdown::split(text);
-    let mut map: Mapping = split
+fn frontmatter(text: &str) -> Mapping {
+    crate::markdown::split(text)
         .frontmatter
         .and_then(|fm| serde_yaml::from_str(fm).ok())
-        .unwrap_or_default();
-    let title = map
+        .unwrap_or_default()
+}
+
+/// The title a migrated file gets: frontmatter `title`, else the first `# ` heading, else the stem.
+fn title_of(text: &str, stem: &str) -> String {
+    frontmatter(text)
         .get("title")
         .and_then(Yaml::as_str)
         .map(str::to_string)
-        .or_else(|| first_heading(split.body))
-        .unwrap_or_else(|| stem.replace('-', " "));
+        .or_else(|| first_heading(crate::markdown::split(text).body))
+        .unwrap_or_else(|| stem.replace('-', " "))
+}
+
+/// Adds the owo frontmatter fields a v1 file lacks; keeps every existing field.
+/// `parent` is the overview title for a location detail.
+fn normalize(
+    text: &str,
+    kind: &str,
+    stem: &str,
+    date: Option<&str>,
+    parent: Option<&str>,
+    today: &str,
+) -> String {
+    let split = crate::markdown::split(text);
+    let mut map = frontmatter(text);
+    let title = title_of(text, stem);
     let mut set = |k: &str, v: Yaml| {
         if !map.contains_key(k) {
             map.insert(Yaml::from(k), v);
@@ -77,7 +94,11 @@ fn normalize(text: &str, kind: &str, stem: &str, date: Option<&str>, today: &str
             set("people", Yaml::Sequence(vec![]));
         }
         "lesson" => set("evidence", Yaml::Sequence(vec![])),
-        "conflict" => set("state", Yaml::from("open")),
+        "conflict" | "thread" => set("state", Yaml::from("open")),
+        "location-detail" => set(
+            "parent",
+            Yaml::from(format!("[[{}]]", parent.unwrap_or_default())),
+        ),
         _ => {}
     }
     set("sources", Yaml::Sequence(vec![]));
@@ -101,6 +122,92 @@ fn md_files(dir: &Path) -> Vec<PathBuf> {
         .collect();
     v.sort();
     v
+}
+
+fn stem_of(p: &Path) -> String {
+    p.file_stem()
+        .map(|s| s.to_string_lossy().into_owned())
+        .unwrap_or_default()
+}
+
+/// v1 `world/locations/`: a folder `<x>/` becomes `life/locations/<x>/` with its overview
+/// (`overview.md`, `index.md`, `README.md`, `<x>.md` inside, or `<x>.md` beside it) and its
+/// other files as location details. A folder with no such file gets a stub overview.
+/// A loose `<x>.md` becomes `life/locations/<x>/overview.md`.
+fn migrate_locations(
+    locs: &Path,
+    dir: &Path,
+    today: &str,
+    rel: &dyn Fn(&Path) -> String,
+    r: &mut Report,
+) -> Result<()> {
+    let mut write = |from: &Path, text: &str, to: String, kind: &str, parent: Option<&str>| {
+        let target = dir.join(&to);
+        fs::create_dir_all(target.parent().expect("inside life/locations"))?;
+        let stem = from.file_stem().map(|s| s.to_string_lossy().into_owned());
+        let stem = stem.unwrap_or_default();
+        fs::write(&target, normalize(text, kind, &stem, None, parent, today))?;
+        r.moved.push((rel(from), to));
+        anyhow::Ok(())
+    };
+    let loose = md_files(locs);
+    let mut used: Vec<PathBuf> = vec![];
+    let mut folders: Vec<PathBuf> = fs::read_dir(locs)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| p.is_dir())
+        .collect();
+    folders.sort();
+    for folder in folders {
+        let name = folder
+            .file_name()
+            .map(|s| s.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        let slug = slugify(&name);
+        if slug.is_empty() {
+            continue;
+        }
+        let inside = md_files(&folder);
+        let overview = ["overview", "index", "readme", &name]
+            .iter()
+            .find_map(|n| inside.iter().find(|p| stem_of(p).eq_ignore_ascii_case(n)))
+            .or_else(|| loose.iter().find(|p| slugify(&stem_of(p)) == slug))
+            .cloned();
+        let base = format!("life/locations/{slug}");
+        let (title, text) = match &overview {
+            Some(p) => {
+                let text = fs::read_to_string(p)?;
+                used.push(p.clone());
+                (title_of(&text, &stem_of(p)), text)
+            }
+            None => {
+                let title = name.replace(['-', '_'], " ");
+                let text = format!("# {title}\n");
+                (title, text)
+            }
+        };
+        let from = overview.clone().unwrap_or_else(|| folder.clone());
+        write(
+            &from,
+            &text,
+            format!("{base}/overview.md"),
+            "location",
+            None,
+        )?;
+        for p in inside.iter().filter(|p| Some(*p) != overview.as_ref()) {
+            let text = fs::read_to_string(p)?;
+            let to = format!("{base}/{}.md", slugify(&stem_of(p)));
+            write(p, &text, to, "location-detail", Some(&title))?;
+        }
+    }
+    for p in loose.iter().filter(|p| !used.contains(p)) {
+        let text = fs::read_to_string(p)?;
+        let to = format!("life/locations/{}/overview.md", slugify(&stem_of(p)));
+        write(p, &text, to, "location", None)?;
+    }
+    Ok(())
 }
 
 pub fn v1(src: &Path, out: &Path) -> Result<Report> {
@@ -184,6 +291,11 @@ pub fn v1(src: &Path, out: &Path) -> Result<Report> {
         ("memory/daily", "life/log", "log", true),
         ("memory/journal", "life/journal", "journal", true),
         ("memory/lessons", "life/lessons", "lesson", false),
+        ("cultures", "life/cultures", "culture", false),
+        ("factions", "life/factions", "faction", false),
+        ("eras", "life/eras", "era", false),
+        ("history/eras", "life/eras", "era", false),
+        ("threads", "life/threads", "thread", false),
     ];
     for (from, to, kind, dated) in groups {
         for p in md_files(&world.join(from)) {
@@ -237,12 +349,14 @@ pub fn v1(src: &Path, out: &Path) -> Result<Report> {
                     kind,
                     &label,
                     date.as_deref().filter(|_| *dated),
+                    None,
                     &today,
                 ),
             )?;
             r.moved.push((rel(&p), format!("{to}/{name}")));
         }
     }
+    migrate_locations(&world.join("locations"), &dir, &today, &rel, &mut r)?;
     if let Ok(text) = fs::read_to_string(world.join("meta/conflicts.md")) {
         for block in text.split("\n## ").skip(1) {
             let (title, body) = block.split_once('\n').unwrap_or((block, ""));
@@ -258,7 +372,7 @@ pub fn v1(src: &Path, out: &Path) -> Result<Report> {
             );
             fs::write(
                 dir.join(&file),
-                normalize(&doc, "conflict", &slug, None, &today),
+                normalize(&doc, "conflict", &slug, None, None, &today),
             )?;
             r.moved
                 .push(("references/world/meta/conflicts.md".into(), file));
@@ -303,7 +417,7 @@ pub fn v1(src: &Path, out: &Path) -> Result<Report> {
         "Replace repeated accounts and quotes in logs with event links (`owo lint --rule dupes`).".into(),
         "Move exact personal identifiers into each character's `## Identifiers` (`owo lint --rule identifiers`).".into(),
         "Name account kinds in IDENTITY.md and keep handles in identity.json accounts.".into(),
-        "Fill summaries, and give locations folders with overview.md (`owo add location`).".into(),
+        "Fill empty summaries, and link each room from its location overview.".into(),
         "Run `owo stamp && owo index && owo lint`, then the first review (`owo review`, `owo review done`).".into(),
     ];
     Ok(r)

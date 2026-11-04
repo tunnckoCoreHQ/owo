@@ -854,6 +854,8 @@ Lorebook entries: `keys` from title and aliases; `content` from `summary` plus `
 | `references/manifest.json` | `identity.json` |
 | `references/world/characters/*.md` | `life/characters/*.md`, identifiers under `## Identifiers` |
 | `references/world/history/events/*.md` | `life/events/*.md` with `date` |
+| `references/world/locations/<x>/` or `<x>.md` | `life/locations/<x>/overview.md`, other files as location details |
+| `references/world/{cultures,factions,eras,threads}/*.md` | the matching `life/` folder |
 | `references/world/memory/daily/*.md` | `life/log/*.md` |
 | `references/world/memory/journal/*.md` | `life/journal/*.md` |
 | `references/world/memory/lessons/*.md` | `life/lessons/*.md` with `evidence` |

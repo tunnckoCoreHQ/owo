@@ -177,6 +177,10 @@ fn migrate_v1_fixture() {
         "life/journal/2026-01-01_tired.md",
         "life/lessons/trim-the-wick.md",
         "life/conflicts/ferry-day.md",
+        "life/locations/the-lighthouse/overview.md",
+        "life/locations/the-lighthouse/lamp-room.md",
+        "life/locations/harbour/overview.md",
+        "life/threads/paint-the-door.md",
     ] {
         assert!(out.join(f).is_file(), "{f}");
     }
@@ -186,6 +190,12 @@ fn migrate_v1_fixture() {
         .is_file());
     let skipped = v["data"]["skipped"].to_string();
     assert!(skipped.contains("changelog.md") && skipped.contains("notes.txt"));
+    let room = fs::read_to_string(out.join("life/locations/the-lighthouse/lamp-room.md")).unwrap();
+    assert!(
+        room.contains("type: location-detail") && room.contains("parent: '[[The Lighthouse]]'"),
+        "{room}"
+    );
+    assert!(!skipped.contains("locations"), "{skipped}");
     let id: Value =
         serde_json::from_str(&fs::read_to_string(out.join("identity.json")).unwrap()).unwrap();
     assert_eq!(id["name"], "Lumen");
