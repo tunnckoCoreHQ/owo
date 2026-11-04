@@ -77,6 +77,8 @@ pub fn section<'a>(body: &'a str, name: &str) -> Option<Vec<(usize, &'a str)>> {
 #[derive(Debug, Clone)]
 pub struct Link {
     pub target: String,
+    /// Text after `#`, if any.
+    pub section: Option<String>,
     pub line: usize,
 }
 
@@ -102,7 +104,12 @@ pub fn links(text: &str) -> Vec<Link> {
         let cleaned = strip_inline_code(line);
         for cap in link_re().captures_iter(&cleaned) {
             let target = cap[1].trim().to_string();
-            out.push(Link { target, line: i });
+            let section = cap.get(2).map(|m| m.as_str().trim().to_string());
+            out.push(Link {
+                target,
+                section,
+                line: i,
+            });
         }
     }
     out

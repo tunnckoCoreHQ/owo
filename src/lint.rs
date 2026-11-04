@@ -801,7 +801,11 @@ fn kb_links(c: &mut Ctx) {
     let mut found = vec![];
     for e in c.id.entries.iter().filter(|e| !e.is_generated()) {
         for (line, link) in all_links(e) {
-            match crate::find::kb_link(c.id, &link.target) {
+            let full = match &link.section {
+                Some(s) => format!("{}#{s}", link.target),
+                None => link.target.clone(),
+            };
+            match crate::find::kb_link(c.id, &full) {
                 None => {}
                 Some(Err(msg)) => found.push(err("kb", &e.rel, msg).at(line)),
                 Some(Ok(k)) if !k.root_exists => {}
