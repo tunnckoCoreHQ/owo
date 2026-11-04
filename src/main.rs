@@ -1,5 +1,6 @@
 //! owo: one world, one identity. CLI for living agent identities.
 
+mod add;
 mod config;
 mod create;
 mod identity;
@@ -8,6 +9,7 @@ mod lint;
 mod markdown;
 mod output;
 mod slug;
+mod stamp;
 mod state;
 mod templates;
 
@@ -56,6 +58,29 @@ enum Command {
     },
     /// List identities in the root
     List,
+    /// Create an entry from its template at its deterministic path
+    Add {
+        /// Entry type: character, location, location-detail, culture, faction, event, era, thread, conflict, lesson, writing, log, journal, project, note
+        #[arg(value_name = "TYPE")]
+        kind: String,
+        /// Title (for log: optional day title)
+        title: Vec<String>,
+        /// Date for dated entries (default: today)
+        #[arg(long)]
+        date: Option<String>,
+        /// Parent location for location-detail
+        #[arg(long)]
+        parent: Option<String>,
+        /// Alias (repeatable)
+        #[arg(long = "alias")]
+        aliases: Vec<String>,
+    },
+    /// Refresh state.json files from content hashes
+    Stamp {
+        /// Report drift and exit 1 instead of writing
+        #[arg(long)]
+        check: bool,
+    },
     /// Validate an identity
     Lint {
         /// Run only these rules (repeatable)
@@ -245,6 +270,83 @@ fn run(cli: &Cli, out: &Out) -> Result<i32> {
                 out.say(format!("{slug}: {errors} errors, {warnings} warnings"));
             }
             Ok(if errors > 0 { exit::PROBLEMS } else { exit::OK })
+        }
+        Command::Add {
+            kind,
+            title,
+            date,
+            parent,
+            aliases,
+        } => {
+            let r = resolved(cli)?;
+            let slug = need_identity(&r)?;
+            let id = identity::Identity::load(&r.root, &slug)?;
+            let title = if title.is_empty() && kind == "log" {
+                "Day".to_string()
+            } else {
+                title.join(" ")
+            };
+            let req = add::Request {
+                kind,
+                title: &title,
+                date: date.as_deref(),
+                parent: parent.as_deref(),
+                project: r.project.as_deref(),
+                aliases,
+            };
+            let (path, created) = match add::add(&id, &req)? {
+                add::Added::Created(p) => (p, true),
+                add::Added::Exists(p) => (p, false),
+            };
+            let ok = created || kind == "log";
+            if out.json {
+                let env = Envelope {
+                    ok,
+                    data: json!({ "path": path, "created": created }),
+                    warnings: vec![],
+                    errors: vec![],
+                };
+                env.print();
+            } else if created {
+                println!("{path}");
+            } else {
+                println!("exists {path}");
+            }
+            Ok(if ok { exit::OK } else { exit::PROBLEMS })
+        }
+        Command::Stamp { check } => {
+            let r = resolved(cli)?;
+            let slug = need_identity(&r)?;
+            let id = identity::Identity::load(&r.root, &slug)?;
+            let report = stamp::run(&id, *check)?;
+            let clean = report.is_clean();
+            if out.json {
+                let env = Envelope {
+                    ok: !*check || clean,
+                    data: serde_json::to_value(&report)?,
+                    warnings: vec![],
+                    errors: vec![],
+                };
+                env.print();
+            } else {
+                for (label, list) in [
+                    ("added", &report.added),
+                    ("changed", &report.changed),
+                    ("removed", &report.removed),
+                ] {
+                    for p in list {
+                        println!("{label} {p}");
+                    }
+                }
+                if clean {
+                    out.say("state is up to date");
+                }
+            }
+            Ok(if *check && !clean {
+                exit::PROBLEMS
+            } else {
+                exit::OK
+            })
         }
         Command::Index { check } => {
             let r = resolved(cli)?;

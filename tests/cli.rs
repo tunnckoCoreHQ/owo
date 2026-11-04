@@ -209,3 +209,155 @@ fn memory_budget_and_dupes_warn() {
         "{warnings:?}"
     );
 }
+
+#[test]
+fn add_creates_entries_at_deterministic_paths() {
+    let tmp = TempDir::new().unwrap();
+    owo(tmp.path()).args(["new", "Thea"]).assert().success();
+    let add = |args: &[&str]| {
+        owo(tmp.path())
+            .args(["-i", "thea", "add"])
+            .args(args)
+            .output()
+            .unwrap()
+    };
+    assert_eq!(
+        String::from_utf8(
+            add(&["character", "Mrs.", "Petrova", "--alias", "the neighbour"]).stdout
+        )
+        .unwrap()
+        .trim(),
+        "life/characters/mrs-petrova.md"
+    );
+    add(&["location", "Joe's Apartment"]);
+    let detail = add(&["location-detail", "Balcony", "--parent", "Joe's Apartment"]);
+    assert_eq!(
+        String::from_utf8(detail.stdout).unwrap().trim(),
+        "life/locations/joes-apartment/balcony.md"
+    );
+    add(&["event", "The Café Night", "--date", "2026-10-25"]);
+    add(&["journal", "Two beds", "--date", "2026-10-28"]);
+    add(&["project", "API Server"]);
+    let note = owo(tmp.path())
+        .args([
+            "-i",
+            "thea",
+            "--project",
+            "api-server",
+            "add",
+            "note",
+            "Release steps",
+            "--date",
+            "2026-11-12",
+        ])
+        .output()
+        .unwrap();
+    assert_eq!(
+        String::from_utf8(note.stdout).unwrap().trim(),
+        "work/projects/api-server/notes/2026-11-12_release-steps.md"
+    );
+    let dir = tmp.path().join("thea");
+    for rel in [
+        "life/locations/joes-apartment/overview.md",
+        "life/events/the-cafe-night.md",
+        "life/journal/2026-10-28_two-beds.md",
+        "work/projects/api-server/project.md",
+    ] {
+        assert!(dir.join(rel).is_file(), "{rel}");
+    }
+    let detail_text =
+        fs::read_to_string(dir.join("life/locations/joes-apartment/balcony.md")).unwrap();
+    assert!(detail_text.contains("parent: \"[[Joe's Apartment]]\""));
+    assert!(
+        fs::read_to_string(dir.join("life/characters/mrs-petrova.md"))
+            .unwrap()
+            .contains("aliases: [\"the neighbour\"]")
+    );
+    owo(tmp.path())
+        .args(["-i", "thea", "add", "event", "The Café Night"])
+        .assert()
+        .code(1);
+    owo(tmp.path())
+        .args(["-i", "thea", "add", "log", "--date", "2026-10-25"])
+        .assert()
+        .success();
+    owo(tmp.path())
+        .args(["-i", "thea", "add", "log", "--date", "2026-10-25"])
+        .assert()
+        .success();
+
+    owo(tmp.path())
+        .args(["-i", "thea", "index"])
+        .assert()
+        .success();
+    let v: Value = serde_json::from_slice(
+        &owo(tmp.path())
+            .args([
+                "-i", "thea", "lint", "--json", "--rule", "schema", "--rule", "links", "--rule",
+                "tree",
+            ])
+            .output()
+            .unwrap()
+            .stdout,
+    )
+    .unwrap();
+    assert_eq!(v["errors"].as_array().unwrap().len(), 0, "{v:#}");
+}
+
+#[test]
+fn stamp_tracks_changes_by_hash() {
+    let (tmp, dir) = aria();
+    owo(tmp.path())
+        .args(["-i", "aria", "stamp", "--check"])
+        .assert()
+        .code(1);
+    owo(tmp.path())
+        .args(["-i", "aria", "stamp"])
+        .assert()
+        .success();
+    owo(tmp.path())
+        .args(["-i", "aria", "stamp", "--check"])
+        .assert()
+        .success();
+    let v = lint_json(tmp.path(), &["state"]);
+    assert_eq!(v["warnings"].as_array().unwrap().len(), 0, "{v:#}");
+
+    let soul_version = |d: &Path| {
+        serde_json::from_str::<Value>(&fs::read_to_string(d.join("soul/soul.json")).unwrap())
+            .unwrap()["version"]
+            .clone()
+    };
+    let before = soul_version(&dir);
+    fs::write(dir.join("soul/SOUL.md"), "# Soul\n\nI am Aria. I sail.\n").unwrap();
+    let sam = dir.join("life/characters/sam.md");
+    fs::write(
+        &sam,
+        fs::read_to_string(&sam)
+            .unwrap()
+            .replace("sails with me", "sails with me most weekends"),
+    )
+    .unwrap();
+    let out: Value = serde_json::from_slice(
+        &owo(tmp.path())
+            .args(["-i", "aria", "--json", "stamp"])
+            .output()
+            .unwrap()
+            .stdout,
+    )
+    .unwrap();
+    let changed: Vec<&str> = out["data"]["changed"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|v| v.as_str().unwrap())
+        .collect();
+    assert_eq!(changed, vec!["life/characters/sam.md", "soul/SOUL.md"]);
+    assert_ne!(soul_version(&dir), before);
+    assert!(!fs::read_to_string(&sam)
+        .unwrap()
+        .contains("updated: 2026-10-02"));
+    owo(tmp.path())
+        .args(["-i", "aria", "stamp", "--check"])
+        .assert()
+        .success();
+}
