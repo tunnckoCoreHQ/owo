@@ -115,11 +115,6 @@ pub fn links(text: &str) -> Vec<Link> {
     out
 }
 
-/// Wiki-links inside a YAML string value, for fields like `parent` or `evidence`.
-pub fn links_in_value(value: &str) -> Vec<Link> {
-    links(value)
-}
-
 fn strip_inline_code(line: &str) -> String {
     let mut out = String::with_capacity(line.len());
     let mut in_code = false;

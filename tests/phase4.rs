@@ -417,3 +417,21 @@ fn card_png_and_scenario() {
         "The first kiln load that came out whole."
     );
 }
+
+#[test]
+fn section_links_are_checked() {
+    let tmp = copy_example("thea");
+    let f = tmp
+        .path()
+        .join("thea/life/journal/2026-10-31_rain-on-the-roof.md");
+    let text = fs::read_to_string(&f).unwrap();
+    fs::write(
+        &f,
+        format!("{text}\n[[First Firing#Lines]] and [[First Firing#Nope]]\n"),
+    )
+    .unwrap();
+    let v = json(owo(tmp.path()).args(["-i", "thea", "lint", "--rule", "links"]));
+    let w = v["warnings"].as_array().unwrap();
+    assert_eq!(w.len(), 1, "{v}");
+    assert!(w[0]["message"].as_str().unwrap().contains("Nope"));
+}

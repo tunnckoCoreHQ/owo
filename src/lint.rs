@@ -386,14 +386,10 @@ fn soul_plain(c: &mut Ctx) {
     }
 }
 
-fn all_links(e: &Entry) -> Vec<(usize, markdown::Link)> {
-    crate::find::raw_links(e)
-}
-
 fn links(c: &mut Ctx) {
     let mut found = vec![];
     for e in c.id.entries.iter().filter(|e| !e.is_generated()) {
-        for (line, link) in all_links(e) {
+        for (line, link) in crate::find::raw_links(e) {
             if link.target.starts_with("kb:") || link.target.is_empty() {
                 continue;
             }
@@ -407,7 +403,24 @@ fn links(c: &mut Ctx) {
                     )
                     .at(line),
                 ),
-                1 => {}
+                1 => {
+                    let target = &c.id.entries[hits[0]];
+                    if let Some(s) = link.section.as_deref().filter(|s| !s.is_empty()) {
+                        if markdown::section(target.body(), s).is_none() {
+                            found.push(
+                                warn(
+                                    "links",
+                                    &e.rel,
+                                    format!(
+                                        "[[{}#{s}]]: {} has no section {s:?}",
+                                        link.target, target.rel
+                                    ),
+                                )
+                                .at(line),
+                            );
+                        }
+                    }
+                }
                 _ => found.push(
                     warn(
                         "links",
@@ -526,7 +539,7 @@ fn journal(c: &mut Ctx) {
             .iter()
             .filter(|e| e.kind != Kind::Journal && !e.is_generated())
     {
-        for (line, link) in all_links(e) {
+        for (line, link) in crate::find::raw_links(e) {
             let hits = c.id.resolve_link(&c.keys, &link.target);
             if hits.iter().any(|&i| c.id.entries[i].kind == Kind::Journal) {
                 found.push(err("journal", &e.rel, format!("[[{}]] links into life/journal/; journal links stay between journal entries", link.target)).at(line));
@@ -537,7 +550,7 @@ fn journal(c: &mut Ctx) {
 }
 
 fn link_hits(c: &Ctx, value: &str) -> Vec<usize> {
-    markdown::links_in_value(value)
+    markdown::links(value)
         .iter()
         .flat_map(|l| c.id.resolve_link(&c.keys, &l.target))
         .collect()
@@ -550,7 +563,7 @@ fn supersede(c: &mut Ctx) {
             .iter()
             .filter(|e| e.kind == Kind::Conflict && e.field_str("state").as_deref() == Some("open"))
             .flat_map(|e| {
-                all_links(e)
+                crate::find::raw_links(e)
                     .into_iter()
                     .flat_map(|(_, l)| c.id.resolve_link(&c.keys, &l.target))
             })
@@ -800,7 +813,7 @@ fn review_due(c: &mut Ctx) {
 fn kb_links(c: &mut Ctx) {
     let mut found = vec![];
     for e in c.id.entries.iter().filter(|e| !e.is_generated()) {
-        for (line, link) in all_links(e) {
+        for (line, link) in crate::find::raw_links(e) {
             let full = match &link.section {
                 Some(s) => format!("{}#{s}", link.target),
                 None => link.target.clone(),

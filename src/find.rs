@@ -184,11 +184,7 @@ pub fn raw_links(e: &Entry) -> Vec<(usize, markdown::Link)> {
     let split = markdown::split(&e.text);
     let mut out = vec![];
     if let Some(fm) = split.frontmatter {
-        out.extend(
-            markdown::links_in_value(fm)
-                .into_iter()
-                .map(|l| (l.line + 2, l)),
-        );
+        out.extend(markdown::links(fm).into_iter().map(|l| (l.line + 2, l)));
     }
     out.extend(
         markdown::links(split.body)
