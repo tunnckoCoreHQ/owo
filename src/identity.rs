@@ -304,9 +304,11 @@ impl Identity {
         keys
     }
 
-    /// Resolves a link target to entry indexes. Tries the raw key, then its slug.
+    /// Resolves a link target to entry indexes. Tries the raw key (a path may end in `.md`),
+    /// then its slug.
     pub fn resolve_link(&self, keys: &BTreeMap<String, Vec<usize>>, target: &str) -> Vec<usize> {
         let raw = target.trim().to_lowercase();
+        let raw = raw.strip_suffix(".md").unwrap_or(&raw).to_string();
         if let Some(hit) = keys.get(&raw) {
             return hit.clone();
         }

@@ -47,6 +47,11 @@ fn examples_are_lint_clean_and_current() {
 
 #[test]
 fn resolve_show_links() {
+    owo(&examples(), "nicole")
+        .args(["resolve", "life/log/2026-10-30.md"])
+        .assert()
+        .success()
+        .stdout("life/log/2026-10-30.md\n");
     let root = examples();
     owo(&root, "reviewer")
         .args(["resolve", "Mina Okafor"])
