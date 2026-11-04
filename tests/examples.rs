@@ -160,3 +160,247 @@ fn recent_lists_stamped_files() {
     let v = json(owo(&examples(), "reviewer").args(["recent", "--days", "36500"]));
     assert!(v["data"]["files"].as_array().unwrap().len() > 20);
 }
+
+fn copy(id: &str) -> TempDir {
+    let tmp = TempDir::new().unwrap();
+    let from = examples().join(id);
+    for entry in walkdir::WalkDir::new(&from) {
+        let entry = entry.unwrap();
+        let target = tmp
+            .path()
+            .join(id)
+            .join(entry.path().strip_prefix(&from).unwrap());
+        if entry.file_type().is_dir() {
+            fs::create_dir_all(&target).unwrap();
+        } else {
+            fs::copy(entry.path(), &target).unwrap();
+        }
+    }
+    tmp
+}
+
+fn check_card(card: &Value, name: &str) {
+    assert_eq!(card["spec"], "chara_card_v3");
+    assert_eq!(card["spec_version"], "3.0");
+    let d = &card["data"];
+    assert_eq!(d["name"], name);
+    for key in [
+        "description",
+        "personality",
+        "scenario",
+        "first_mes",
+        "mes_example",
+        "creator_notes",
+        "system_prompt",
+        "post_history_instructions",
+        "creator",
+        "character_version",
+    ] {
+        assert!(d[key].is_string(), "{key} should be a string");
+    }
+    for key in [
+        "alternate_greetings",
+        "tags",
+        "group_only_greetings",
+        "source",
+        "assets",
+    ] {
+        assert!(d[key].is_array(), "{key} should be an array");
+    }
+    assert!(d["creation_date"].is_i64() && d["extensions"].is_object());
+    assert!(d["mes_example"].as_str().unwrap().starts_with("<START>"));
+    let entries = d["character_book"]["entries"].as_array().unwrap();
+    assert!(entries.iter().any(|e| e["constant"] == true));
+    for e in entries {
+        assert!(e["keys"].as_array().unwrap().iter().all(Value::is_string));
+        assert!(e["content"].is_string() && e["enabled"].is_boolean() && e["use_regex"] == false);
+        assert!(e["insertion_order"].is_i64() && e["extensions"].is_object());
+    }
+}
+
+#[test]
+fn export_card_v3_shape() {
+    let out = owo(&examples(), "thea")
+        .args(["export", "card"])
+        .output()
+        .unwrap();
+    let card: Value = serde_json::from_slice(&out.stdout).unwrap();
+    check_card(&card, "Thea");
+    assert_eq!(
+        card["data"]["alternate_greetings"]
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
+    let keys: Vec<String> = card["data"]["character_book"]["entries"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .flat_map(|e| {
+            e["keys"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|k| k.as_str().unwrap().to_string())
+        })
+        .collect();
+    assert!(
+        keys.contains(&"Kiln Studio".to_string()) && !keys.contains(&"Picture Book".to_string())
+    );
+
+    let out = owo(&examples(), "reviewer")
+        .args(["--project", "ledger-api", "export", "card"])
+        .output()
+        .unwrap();
+    let card: Value = serde_json::from_slice(&out.stdout).unwrap();
+    check_card(&card, "Rook Halvorsen");
+    assert!(card["data"]["scenario"]
+        .as_str()
+        .unwrap()
+        .contains("Payments ledger"));
+    let names: Vec<&str> = card["data"]["character_book"]["entries"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|e| e["name"].as_str().unwrap())
+        .collect();
+    assert!(
+        names.contains(&"Ledger API") && !names.contains(&"Build Cache"),
+        "{names:?}"
+    );
+
+    let out = owo(&examples(), "thea")
+        .args(["export", "card", "--spec", "v2"])
+        .output()
+        .unwrap();
+    let card: Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert_eq!(card["spec"], "chara_card_v2");
+    assert!(card["data"].get("assets").is_none());
+}
+
+#[test]
+fn export_soulspec_package() {
+    let tmp = TempDir::new().unwrap();
+    let dir = tmp.path().join("pkg");
+    owo(&examples(), "reviewer")
+        .args(["export", "soulspec", "--out"])
+        .arg(&dir)
+        .assert()
+        .success();
+    for f in [
+        "soul.json",
+        "SOUL.md",
+        "IDENTITY.md",
+        "STYLE.md",
+        "MEMORY.md",
+        "examples/good.md",
+    ] {
+        assert!(dir.join(f).is_file(), "{f}");
+    }
+    let manifest: Value =
+        serde_json::from_str(&fs::read_to_string(dir.join("soul.json")).unwrap()).unwrap();
+    assert_eq!(manifest["specVersion"], "0.5");
+    assert_eq!(manifest["files"]["style"], "STYLE.md");
+    assert!(fs::read_to_string(dir.join("IDENTITY.md"))
+        .unwrap()
+        .contains("## Look"));
+}
+
+#[test]
+fn review_packet_then_done() {
+    let tmp = copy("reviewer");
+    let p = json(owo(tmp.path(), "reviewer").arg("review"));
+    assert_eq!(p["data"]["unreviewed_days"].as_array().unwrap().len(), 0);
+    assert!(p["data"]["memory"]
+        .as_str()
+        .unwrap()
+        .contains("## Patterns"));
+    owo(tmp.path(), "reviewer")
+        .args(["add", "log", "Pairing", "--date", "2026-11-04"])
+        .assert()
+        .success();
+    let p = json(owo(tmp.path(), "reviewer").arg("review"));
+    let days = p["data"]["unreviewed_days"].as_array().unwrap();
+    assert_eq!(days.len(), 1);
+    assert_eq!(days[0]["date"], "2026-11-04");
+    fs::write(
+        tmp.path().join("reviewer/soul/MEMORY.md"),
+        "# Memory\n\n## Patterns\n\n- Pairing helps.\n",
+    )
+    .unwrap();
+    let lint = json(owo(tmp.path(), "reviewer").args(["lint", "--rule", "memory-review"]));
+    assert_eq!(lint["warnings"].as_array().unwrap().len(), 1);
+    owo(tmp.path(), "reviewer")
+        .args(["review", "done"])
+        .assert()
+        .success();
+    let lint = json(owo(tmp.path(), "reviewer").args(["lint", "--rule", "memory-review"]));
+    assert_eq!(lint["warnings"].as_array().unwrap().len(), 0);
+    let p = json(owo(tmp.path(), "reviewer").arg("review"));
+    assert_eq!(p["data"]["reviewed_through"], "2026-11-04");
+}
+
+#[test]
+fn soul_note_and_history() {
+    let tmp = copy("thea");
+    let v = json(owo(tmp.path(), "thea").args([
+        "soul",
+        "note",
+        "SOUL.md",
+        "--change",
+        "Waiting is part of the craft.",
+        "--evidence",
+        "[[Let It Dry]]",
+    ]));
+    assert_eq!(
+        v["warnings"].as_array().unwrap().len(),
+        1,
+        "one non-defining link warns"
+    );
+    owo(tmp.path(), "thea")
+        .args([
+            "soul",
+            "note",
+            "SOUL.md",
+            "--change",
+            "x",
+            "--evidence",
+            "Nowhere",
+        ])
+        .assert()
+        .code(1);
+    owo(tmp.path(), "thea")
+        .args(["soul", "note", "NOPE.md", "--change", "x"])
+        .assert()
+        .code(1);
+    let h = json(owo(tmp.path(), "thea").args(["soul", "history", "SOUL.md"]));
+    assert_eq!(h["data"]["history"].as_array().unwrap().len(), 2);
+}
+
+#[test]
+fn changes_and_lint_changed() {
+    let tmp = copy("thea");
+    let c = json(owo(tmp.path(), "thea").arg("changes"));
+    assert_eq!(c["data"]["source"], "state");
+    assert!(!c["data"]["days"].as_object().unwrap().is_empty());
+    let lint = json(owo(tmp.path(), "thea").args(["lint", "--changed"]));
+    assert_eq!(lint["warnings"].as_array().unwrap().len(), 0);
+    let ines = tmp.path().join("thea/life/characters/ines.md");
+    let text = fs::read_to_string(&ines).unwrap();
+    fs::write(&ines, format!("{text}\nSee [[Nobody Here]].\n")).unwrap();
+    fs::write(
+        tmp.path().join("thea/life/characters/joe.md"),
+        fs::read_to_string(tmp.path().join("thea/life/characters/joe.md")).unwrap(),
+    )
+    .unwrap();
+    let lint = json(owo(tmp.path(), "thea").args(["lint", "--changed"]));
+    let errors = lint["errors"].as_array().unwrap();
+    assert!(
+        !errors.is_empty()
+            && errors
+                .iter()
+                .all(|e| e["path"] == "life/characters/ines.md"),
+        "{lint}"
+    );
+}

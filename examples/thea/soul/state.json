@@ -27,21 +27,30 @@
     },
     "examples/bad.md": {
       "created": "2026-11-04T03:32:32Z",
-      "updated": "2026-11-04T03:32:32Z",
-      "hash": "b3:9dfb64d2e060038ed3b2657c880d4a2a26d9f4ed1a6e18b51e78e06926b94ff2"
+      "updated": "2026-11-04T03:39:53Z",
+      "hash": "b3:afa6f13b5d449b1002e30f0a68c00e7b88c42eb709b9855d2a74b16d6afff1d9"
     },
     "examples/good.md": {
       "created": "2026-11-04T03:32:32Z",
-      "updated": "2026-11-04T03:32:32Z",
-      "hash": "b3:6f91a2d25554f25f47a740b2657f6a909fa54c92a883b1b1d38c0bf3eaaa4e8a"
+      "updated": "2026-11-04T03:39:53Z",
+      "hash": "b3:248cdbf66424529a7c7b2a83d3293a37c55ccd44eaa991b202b7f93b0e323a8b"
     },
     "examples/greetings.md": {
       "created": "2026-11-04T03:32:32Z",
-      "updated": "2026-11-04T03:32:32Z",
-      "hash": "b3:e59a4014d39729cacb02bde15cfc32d01f2464f4b27d5ea8bfb656d171236f06"
+      "updated": "2026-11-04T03:39:53Z",
+      "hash": "b3:e041c75841d33a6252266d52e2f3f836b57756489a30a464c1ef66d67c753b16"
     }
   },
-  "history": [],
+  "history": [
+    {
+      "at": "2026-11-04T03:39:53Z",
+      "file": "SOUL.md",
+      "change": "Patience before firing became a core belief.",
+      "evidence": [
+        "[[First Firing]]"
+      ]
+    }
+  ],
   "review": {
     "last_reviewed": "2026-11-04T03:34:48Z",
     "reviewed_through": "2026-11-02",

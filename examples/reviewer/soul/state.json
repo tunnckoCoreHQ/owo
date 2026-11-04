@@ -27,21 +27,31 @@
     },
     "examples/bad.md": {
       "created": "2026-11-04T03:32:32Z",
-      "updated": "2026-11-04T03:32:32Z",
-      "hash": "b3:9dfb64d2e060038ed3b2657c880d4a2a26d9f4ed1a6e18b51e78e06926b94ff2"
+      "updated": "2026-11-04T03:39:53Z",
+      "hash": "b3:a3c20aafb05b83fd582324afe92621d8e90711aacca08b6374efe859d5dab8f3"
     },
     "examples/good.md": {
       "created": "2026-11-04T03:32:32Z",
-      "updated": "2026-11-04T03:32:32Z",
-      "hash": "b3:6f91a2d25554f25f47a740b2657f6a909fa54c92a883b1b1d38c0bf3eaaa4e8a"
+      "updated": "2026-11-04T03:39:53Z",
+      "hash": "b3:65d97fe103a205cfed9fe30682c9e421c112a3157b1878286b291c7a092a43f1"
     },
     "examples/greetings.md": {
       "created": "2026-11-04T03:32:32Z",
-      "updated": "2026-11-04T03:32:32Z",
-      "hash": "b3:e59a4014d39729cacb02bde15cfc32d01f2464f4b27d5ea8bfb656d171236f06"
+      "updated": "2026-11-04T03:39:53Z",
+      "hash": "b3:32d93e8e5ea95fc72dd4eceb1de8fc75bd18ba68328b5dd9d09a12791556b4bc"
     }
   },
-  "history": [],
+  "history": [
+    {
+      "at": "2026-11-04T03:39:53Z",
+      "file": "SOUL.md",
+      "change": "Small diffs became a stated belief.",
+      "evidence": [
+        "[[Small Diffs Win]]",
+        "[[Big diff]]"
+      ]
+    }
+  ],
   "review": {
     "last_reviewed": "2026-11-04T03:34:02Z",
     "reviewed_through": "2026-11-03",
