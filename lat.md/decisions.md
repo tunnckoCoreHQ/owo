@@ -36,7 +36,7 @@ The project KB is a pointer for the agent to follow. `owo context` prints it whe
 
 ## Examples are built with owo
 
-`examples/thea` and `examples/reviewer` were scaffolded with `owo new` and `owo add`, filled by hand, then indexed, stamped and reviewed. `tests/examples.rs` checks they stay lint clean and current.
+`examples/nicole` and `examples/reviewer` were scaffolded with `owo new` and `owo add`, filled by hand, then indexed, stamped and reviewed. `tests/examples.rs` checks they stay lint clean and current.
 
 ## Changes read Git, else stamps
 

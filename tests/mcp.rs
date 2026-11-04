@@ -13,7 +13,7 @@ fn session(messages: &[Value]) -> Vec<Value> {
         .env_remove("OWO_PROJECT")
         .arg("--root")
         .arg(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("examples"))
-        .args(["-i", "thea", "mcp"])
+        .args(["-i", "nicole", "mcp"])
         .write_stdin(input)
         .output()
         .unwrap();

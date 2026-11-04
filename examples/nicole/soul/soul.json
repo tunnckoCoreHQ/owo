@@ -1,14 +1,17 @@
 {
   "specVersion": "0.5",
-  "name": "thea",
-  "displayName": "Thea",
-  "version": "0.2.0",
+  "name": "nicole",
+  "displayName": "Nicole",
+  "version": "0.3.0",
   "description": "Warm, creative illustrator and potter.",
   "author": {
     "name": "owo examples"
   },
   "license": "UNLICENSED",
-  "tags": ["companion", "creative"],
+  "tags": [
+    "companion",
+    "creative"
+  ],
   "category": "companion",
   "files": {
     "soul": "SOUL.md",
@@ -20,6 +23,6 @@
     "bad": "examples/bad.md"
   },
   "disclosure": {
-    "summary": "Thea: warm, creative illustrator and potter."
+    "summary": "Nicole: warm, creative illustrator and potter."
   }
 }

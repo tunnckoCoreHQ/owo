@@ -450,7 +450,7 @@ fn add_defaults_and_escapes() {
         "say \"hi\"",
     ])
     .success();
-    add(&["character"]).failure();
+    add(&["character"]).code(2);
     let lint = owo(tmp.path())
         .args([
             "--json", "-i", "zed", "lint", "--rule", "unique", "--rule", "schema",

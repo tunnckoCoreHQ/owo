@@ -25,7 +25,7 @@ mod sync;
 mod templates;
 
 use anyhow::Result;
-use clap::{Parser, Subcommand};
+use clap::{CommandFactory, Parser, Subcommand};
 use output::{exit, Envelope, Level};
 use serde_json::json;
 use std::path::PathBuf;
@@ -441,6 +441,14 @@ fn run(cli: &Cli, out: &Out) -> Result<i32> {
             let slug = need_identity(&r)?;
             let id = identity::Identity::load(&r.root, &slug)?;
             let title = title.join(" ");
+            if title.trim().is_empty() && kind != "log" {
+                Cli::command()
+                    .error(
+                        clap::error::ErrorKind::MissingRequiredArgument,
+                        format!("`owo add {kind}` needs a title"),
+                    )
+                    .exit();
+            }
             let req = add::Request {
                 kind,
                 title: &title,

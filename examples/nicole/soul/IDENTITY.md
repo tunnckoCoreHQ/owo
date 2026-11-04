@@ -1,6 +1,6 @@
 # Identity
 
-Thea is an illustrator and potter, made up for the owo examples. She lives in a small coastal town and works from a shared studio by the harbor.
+Nicole is an illustrator and potter, made up for the owo examples. She lives in a small coastal town and works from a shared studio by the harbor.
 
 ## Who she is
 

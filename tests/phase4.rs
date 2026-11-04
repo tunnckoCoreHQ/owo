@@ -44,7 +44,7 @@ fn copy_example(id: &str) -> TempDir {
 
 #[test]
 fn sync_start_and_done() {
-    let tmp = copy_example("thea");
+    let tmp = copy_example("nicole");
     let t = tmp.path().join("t.jsonl");
     let lines: Vec<String> = (1..=4)
         .flat_map(|i| {
@@ -55,7 +55,7 @@ fn sync_start_and_done() {
         })
         .collect();
     fs::write(&t, lines.join("\n")).unwrap();
-    let run = |args: &[&str]| json(owo(tmp.path()).args(["-i", "thea", "sync"]).args(args));
+    let run = |args: &[&str]| json(owo(tmp.path()).args(["-i", "nicole", "sync"]).args(args));
     let tp = t.to_str().unwrap();
     let v = run(&["start", "--session", "s1", "--transcript", tp]);
     assert_eq!(v["data"]["due"], false, "4 user turns < 6");
@@ -71,7 +71,7 @@ fn sync_start_and_done() {
     assert_eq!(v["data"]["due"], true);
     assert_eq!(v["data"]["until"], 8);
     let src = v["data"]["source"].as_str().unwrap();
-    assert!(src.starts_with("sources/thea/") && src.ends_with("_s1_0-8.md"));
+    assert!(src.starts_with("sources/nicole/") && src.ends_with("_s1_0-8.md"));
     assert!(fs::read_to_string(tmp.path().join(src))
         .unwrap()
         .contains("hello 4"));
@@ -92,7 +92,7 @@ fn sync_start_and_done() {
     owo(tmp.path())
         .args([
             "-i",
-            "thea",
+            "nicole",
             "sync",
             "done",
             "--session",
@@ -105,7 +105,7 @@ fn sync_start_and_done() {
     owo(tmp.path())
         .args([
             "-i",
-            "thea",
+            "nicole",
             "sync",
             "start",
             "--session",
@@ -119,7 +119,7 @@ fn sync_start_and_done() {
 
 #[test]
 fn sync_reads_claude_jsonl() {
-    let tmp = copy_example("thea");
+    let tmp = copy_example("nicole");
     let t = tmp.path().join("c.jsonl");
     fs::write(
         &t,
@@ -136,7 +136,7 @@ fn sync_reads_claude_jsonl() {
         owo(tmp.path())
             .args([
                 "-i",
-                "thea",
+                "nicole",
                 "sync",
                 "start",
                 "--session",
@@ -275,14 +275,14 @@ fn export_skill_wrapper() {
     let tmp = TempDir::new().unwrap();
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("examples");
     owo(&root)
-        .args(["-i", "thea", "export", "skill", "--out"])
+        .args(["-i", "nicole", "export", "skill", "--out"])
         .arg(tmp.path())
         .assert()
         .success();
     let text = fs::read_to_string(tmp.path().join("SKILL.md")).unwrap();
-    assert!(text.starts_with("---\nname: thea\ndescription: \"Be Thea"));
+    assert!(text.starts_with("---\nname: nicole\ndescription: \"Be Nicole"));
     assert!(
-        text.contains("owo -i thea context --format text --voice")
+        text.contains("owo -i nicole context --format text --voice")
             && text.contains("`picture-book`")
     );
 }
@@ -351,10 +351,10 @@ fn flags_list_search_state_add_kb() {
     ]));
     assert_eq!(v["data"]["project"]["notes"].as_array().unwrap().len(), 2);
 
-    let tmp = copy_example("thea");
+    let tmp = copy_example("nicole");
     let v = json(owo(tmp.path()).args([
         "-i",
-        "thea",
+        "nicole",
         "add",
         "project",
         "Mural",
@@ -363,7 +363,7 @@ fn flags_list_search_state_add_kb() {
     ]));
     let path = tmp
         .path()
-        .join("thea")
+        .join("nicole")
         .join(v["data"]["path"].as_str().unwrap());
     assert!(fs::read_to_string(path)
         .unwrap()
@@ -400,7 +400,7 @@ fn card_png_and_scenario() {
     fs::write(&avatar, PNG_1X1).unwrap();
     let out = tmp.path().join("card.png");
     owo(&root)
-        .args(["-i", "thea", "export", "card", "--png"])
+        .args(["-i", "nicole", "export", "card", "--png"])
         .arg(&avatar)
         .arg("--out")
         .arg(&out)
@@ -423,7 +423,7 @@ fn card_png_and_scenario() {
     assert_eq!(names, ["IHDR", "IDAT", "tEXt:chara", "tEXt:ccv3", "IEND"]);
     // embedding again replaces the chunks
     owo(&root)
-        .args(["-i", "thea", "export", "card", "--spec", "v2", "--png"])
+        .args(["-i", "nicole", "export", "card", "--spec", "v2", "--png"])
         .arg(&out)
         .arg("--out")
         .arg(&out)
@@ -439,7 +439,14 @@ fn card_png_and_scenario() {
 
     let v: Value = serde_json::from_slice(
         &owo(&root)
-            .args(["-i", "thea", "export", "card", "--scenario", "First Firing"])
+            .args([
+                "-i",
+                "nicole",
+                "export",
+                "card",
+                "--scenario",
+                "First Firing",
+            ])
             .output()
             .unwrap()
             .stdout,
@@ -449,24 +456,24 @@ fn card_png_and_scenario() {
         v["data"]["scenario"],
         "The first kiln load that came out whole."
     );
-    let env = json(owo(&root).args(["-i", "thea", "export", "card"]));
+    let env = json(owo(&root).args(["-i", "nicole", "export", "card"]));
     assert_eq!(env["ok"], true);
     assert_eq!(env["data"]["spec"], "chara_card_v3");
 }
 
 #[test]
 fn section_links_are_checked() {
-    let tmp = copy_example("thea");
+    let tmp = copy_example("nicole");
     let f = tmp
         .path()
-        .join("thea/life/journal/2026-10-31_rain-on-the-roof.md");
+        .join("nicole/life/journal/2026-10-31_rain-on-the-roof.md");
     let text = fs::read_to_string(&f).unwrap();
     fs::write(
         &f,
         format!("{text}\n[[First Firing#Lines]] and [[First Firing#Nope]]\n"),
     )
     .unwrap();
-    let v = json(owo(tmp.path()).args(["-i", "thea", "lint", "--rule", "links"]));
+    let v = json(owo(tmp.path()).args(["-i", "nicole", "lint", "--rule", "links"]));
     let w = v["warnings"].as_array().unwrap();
     assert_eq!(w.len(), 1, "{v}");
     assert!(w[0]["message"].as_str().unwrap().contains("Nope"));
@@ -474,7 +481,7 @@ fn section_links_are_checked() {
 
 #[test]
 fn sync_waits_for_a_pending_run() {
-    let tmp = copy_example("thea");
+    let tmp = copy_example("nicole");
     let t = tmp.path().join("t.jsonl");
     let turns = |n: usize| {
         let lines: Vec<String> = (1..=n)
@@ -486,7 +493,7 @@ fn sync_waits_for_a_pending_run() {
     let start = || {
         json(owo(tmp.path()).args([
             "-i",
-            "thea",
+            "nicole",
             "sync",
             "start",
             "--session",
@@ -514,13 +521,13 @@ fn sync_waits_for_a_pending_run() {
 
 #[test]
 fn kb_path_expands_home() {
-    let tmp = copy_example("thea");
+    let tmp = copy_example("nicole");
     let home = tmp.path().join("home");
     fs::create_dir_all(home.join("kb/mural")).unwrap();
     owo(tmp.path())
         .args([
             "-i",
-            "thea",
+            "nicole",
             "add",
             "project",
             "Mural",
@@ -531,7 +538,7 @@ fn kb_path_expands_home() {
         .success();
     let v = json(owo(tmp.path()).env("HOME", &home).args([
         "-i",
-        "thea",
+        "nicole",
         "--project",
         "mural",
         "context",

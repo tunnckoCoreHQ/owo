@@ -30,7 +30,7 @@ fn json(cmd: &mut Command) -> Value {
 
 #[test]
 fn examples_are_lint_clean_and_current() {
-    for id in ["thea", "reviewer"] {
+    for id in ["nicole", "reviewer"] {
         let v = json(owo(&examples(), id).arg("lint"));
         assert_eq!(v["errors"].as_array().unwrap().len(), 0, "{id}: {v}");
         assert_eq!(v["warnings"].as_array().unwrap().len(), 0, "{id}: {v}");
@@ -70,7 +70,7 @@ fn resolve_show_links() {
         .map(|l| l["path"].as_str().unwrap())
         .collect();
     assert!(from.contains(&"life/events/the-rollback.md"), "{from:?}");
-    let v = json(owo(&root, "thea").args(["links", "--orphans"]));
+    let v = json(owo(&root, "nicole").args(["links", "--orphans"]));
     assert_eq!(v["data"]["orphans"].as_array().unwrap().len(), 0);
 }
 
@@ -114,12 +114,14 @@ fn context_with_project_points_at_missing_kb() {
 #[test]
 fn context_project_touches_work_state_on_a_copy() {
     let tmp = TempDir::new().unwrap();
-    for entry in walkdir::WalkDir::new(examples().join("thea")) {
+    for entry in walkdir::WalkDir::new(examples().join("nicole")) {
         let entry = entry.unwrap();
-        let target = tmp
-            .path()
-            .join("thea")
-            .join(entry.path().strip_prefix(examples().join("thea")).unwrap());
+        let target = tmp.path().join("nicole").join(
+            entry
+                .path()
+                .strip_prefix(examples().join("nicole"))
+                .unwrap(),
+        );
         if entry.file_type().is_dir() {
             fs::create_dir_all(&target).unwrap();
         } else {
@@ -127,22 +129,23 @@ fn context_project_touches_work_state_on_a_copy() {
         }
     }
     for _ in 0..2 {
-        owo(tmp.path(), "thea")
+        owo(tmp.path(), "nicole")
             .args(["--project", "picture-book", "context", "--format", "text"])
             .assert()
             .success();
     }
-    let state: Value =
-        serde_json::from_str(&fs::read_to_string(tmp.path().join("thea/work/state.json")).unwrap())
-            .unwrap();
+    let state: Value = serde_json::from_str(
+        &fs::read_to_string(tmp.path().join("nicole/work/state.json")).unwrap(),
+    )
+    .unwrap();
     assert_eq!(state["projects"]["picture-book"]["sessions"], 2);
-    let s = json(owo(tmp.path(), "thea").arg("state"));
+    let s = json(owo(tmp.path(), "nicole").arg("state"));
     assert_eq!(s["data"]["last_project"][0], "picture-book");
 }
 
 #[test]
 fn search_ranks_title_matches_first() {
-    let v = json(owo(&examples(), "thea").args(["search", "blue", "glaze"]));
+    let v = json(owo(&examples(), "nicole").args(["search", "blue", "glaze"]));
     assert_eq!(
         v["data"]["hits"][0]["path"],
         "life/threads/the-blue-glaze.md"
@@ -220,13 +223,13 @@ fn check_card(card: &Value, name: &str) {
 
 #[test]
 fn export_card_v3_shape() {
-    let out = owo(&examples(), "thea")
+    let out = owo(&examples(), "nicole")
         .args(["export", "card"])
         .output()
         .unwrap();
     let card: Value = serde_json::from_slice(&out.stdout).unwrap();
-    check_card(&card, "Thea");
-    assert_eq!(card["data"]["nickname"], "Tee");
+    check_card(&card, "Nicole");
+    assert_eq!(card["data"]["nickname"], "Nikki");
     assert_eq!(
         card["data"]["alternate_greetings"]
             .as_array()
@@ -271,7 +274,7 @@ fn export_card_v3_shape() {
         "{names:?}"
     );
 
-    let out = owo(&examples(), "thea")
+    let out = owo(&examples(), "nicole")
         .args(["export", "card", "--spec", "v2"])
         .output()
         .unwrap();
@@ -351,8 +354,8 @@ fn review_packet_then_done() {
 
 #[test]
 fn soul_note_and_history() {
-    let tmp = copy("thea");
-    let v = json(owo(tmp.path(), "thea").args([
+    let tmp = copy("nicole");
+    let v = json(owo(tmp.path(), "nicole").args([
         "soul",
         "note",
         "SOUL.md",
@@ -366,7 +369,7 @@ fn soul_note_and_history() {
         1,
         "one non-defining link warns"
     );
-    owo(tmp.path(), "thea")
+    owo(tmp.path(), "nicole")
         .args([
             "soul",
             "note",
@@ -378,31 +381,31 @@ fn soul_note_and_history() {
         ])
         .assert()
         .code(1);
-    owo(tmp.path(), "thea")
+    owo(tmp.path(), "nicole")
         .args(["soul", "note", "NOPE.md", "--change", "x"])
         .assert()
         .code(1);
-    let h = json(owo(tmp.path(), "thea").args(["soul", "history", "SOUL.md"]));
+    let h = json(owo(tmp.path(), "nicole").args(["soul", "history", "SOUL.md"]));
     assert_eq!(h["data"]["history"].as_array().unwrap().len(), 2);
 }
 
 #[test]
 fn changes_and_lint_changed() {
-    let tmp = copy("thea");
-    let c = json(owo(tmp.path(), "thea").arg("changes"));
+    let tmp = copy("nicole");
+    let c = json(owo(tmp.path(), "nicole").arg("changes"));
     assert_eq!(c["data"]["source"], "state");
     assert!(!c["data"]["days"].as_object().unwrap().is_empty());
-    let lint = json(owo(tmp.path(), "thea").args(["lint", "--changed"]));
+    let lint = json(owo(tmp.path(), "nicole").args(["lint", "--changed"]));
     assert_eq!(lint["warnings"].as_array().unwrap().len(), 0);
-    let ines = tmp.path().join("thea/life/characters/ines.md");
+    let ines = tmp.path().join("nicole/life/characters/ines.md");
     let text = fs::read_to_string(&ines).unwrap();
     fs::write(&ines, format!("{text}\nSee [[Nobody Here]].\n")).unwrap();
     fs::write(
-        tmp.path().join("thea/life/characters/joe.md"),
-        fs::read_to_string(tmp.path().join("thea/life/characters/joe.md")).unwrap(),
+        tmp.path().join("nicole/life/characters/joe.md"),
+        fs::read_to_string(tmp.path().join("nicole/life/characters/joe.md")).unwrap(),
     )
     .unwrap();
-    let lint = json(owo(tmp.path(), "thea").args(["lint", "--changed"]));
+    let lint = json(owo(tmp.path(), "nicole").args(["lint", "--changed"]));
     let errors = lint["errors"].as_array().unwrap();
     assert!(
         !errors.is_empty()
@@ -415,8 +418,8 @@ fn changes_and_lint_changed() {
 
 #[test]
 fn soul_note_counts_distinct_evidence() {
-    let tmp = copy("thea");
-    let v = json(owo(tmp.path(), "thea").args([
+    let tmp = copy("nicole");
+    let v = json(owo(tmp.path(), "nicole").args([
         "soul",
         "note",
         "SOUL.md",
@@ -433,7 +436,7 @@ fn soul_note_counts_distinct_evidence() {
 
 #[test]
 fn search_snippets_come_from_the_body() {
-    let v = json(owo(&examples(), "thea").args(["search", "kiln"]));
+    let v = json(owo(&examples(), "nicole").args(["search", "kiln"]));
     for h in v["data"]["hits"].as_array().unwrap() {
         let s = h["snippet"].as_str().unwrap();
         assert!(!s.starts_with("title:") && !s.starts_with("# "), "{s}");
@@ -442,7 +445,7 @@ fn search_snippets_come_from_the_body() {
 
 #[test]
 fn changes_and_lint_changed_read_git() {
-    let tmp = copy("thea");
+    let tmp = copy("nicole");
     let git = |args: &[&str]| {
         let ok = std::process::Command::new("git")
             .arg("-C")
@@ -458,15 +461,15 @@ fn changes_and_lint_changed_read_git() {
     git(&["init", "-q"]);
     git(&["add", "-A"]);
     git(&["commit", "-qm", "init"]);
-    let ines = tmp.path().join("thea/life/characters/ines.md");
+    let ines = tmp.path().join("nicole/life/characters/ines.md");
     let text = fs::read_to_string(&ines).unwrap();
     fs::write(&ines, format!("{text}\nSee [[Nowhere]].\n")).unwrap();
-    let v = json(owo(tmp.path(), "thea").arg("changes"));
+    let v = json(owo(tmp.path(), "nicole").arg("changes"));
     assert_eq!(
         v["data"]["pending"],
         serde_json::json!(["life/characters/ines.md"])
     );
-    let v = json(owo(tmp.path(), "thea").args(["lint", "--changed"]));
+    let v = json(owo(tmp.path(), "nicole").args(["lint", "--changed"]));
     let errors = v["errors"].as_array().unwrap();
     assert!(
         !errors.is_empty()
@@ -496,8 +499,8 @@ fn review_lists_unstamped_files() {
 
 #[test]
 fn card_greetings_and_lore_content() {
-    let tmp = copy("thea");
-    let dir = tmp.path().join("thea");
+    let tmp = copy("nicole");
+    let dir = tmp.path().join("nicole");
     fs::write(
         dir.join("soul/examples/greetings.md"),
         "# Greetings\n\nOne greeting per section.\nKeep them short.\n\n## Morning\n\nHello there.\n",
@@ -510,7 +513,7 @@ fn card_greetings_and_lore_content() {
         format!("{text}\n## Key facts\n\n- Fires on Fridays.\n"),
     )
     .unwrap();
-    let card = json(owo(tmp.path(), "thea").args(["export", "card"]));
+    let card = json(owo(tmp.path(), "nicole").args(["export", "card"]));
     let d = &card["data"]["data"];
     assert_eq!(d["first_mes"], "Hello there.");
     assert_eq!(d["alternate_greetings"], serde_json::json!([]));

@@ -1,6 +1,6 @@
 # Soul
 
-I am Thea.
+I am Nicole.
 
 ## Who I am
 

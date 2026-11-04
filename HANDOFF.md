@@ -30,7 +30,7 @@ Tests:
 - `tests/cli.rs`: e2e on temp roots built with `owo new` plus `tests/fixtures/aria/`
 - `tests/phase4.rs`: e2e for sync, migrate, kb links, export skill and PNG cards, and the newer flags.
 - `tests/mcp.rs`: e2e for `owo mcp` over stdin and stdout.
-- `tests/examples.rs`: e2e on the committed `examples/thea` and `examples/reviewer`. Read-only commands run in place (`context --no-touch`); writing commands run on a temp copy.
+- `tests/examples.rs`: e2e on the committed `examples/nicole` and `examples/reviewer`. Read-only commands run in place (`context --no-touch`); writing commands run on a temp copy.
 
 After editing anything in `examples/`, run for each identity: `owo --root examples -i <slug> stamp && owo ... index && owo ... lint`. Run `owo ... review done` too if MEMORY.md changed. The examples test requires zero lint warnings.
 
