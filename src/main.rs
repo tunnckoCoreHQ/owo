@@ -1,10 +1,13 @@
 //! owo: one world, one identity. CLI for living agent identities.
 
 mod add;
+mod changes;
 mod config;
 mod context;
 mod create;
+mod export;
 mod find;
+mod git;
 mod identity;
 mod index;
 mod lint;
@@ -91,6 +94,9 @@ enum Command {
         /// Run only these rules (repeatable)
         #[arg(long = "rule", value_parser = clap::builder::PossibleValuesParser::new(lint::RULES))]
         rules: Vec<String>,
+        /// Report only files changed since the last commit or stamp
+        #[arg(long)]
+        changed: bool,
     },
     /// Regenerate _index.md files and life/timeline.md
     Index {
@@ -168,10 +174,26 @@ enum Command {
         #[arg(long, default_value_t = 10)]
         limit: usize,
     },
-    /// Review bookkeeping
+    /// Print the review packet, or record a finished review with `done`
     Review {
         #[command(subcommand)]
-        action: ReviewAction,
+        action: Option<ReviewAction>,
+    },
+    /// Soul history: evidence-backed records of soul changes
+    Soul {
+        #[command(subcommand)]
+        action: SoulAction,
+    },
+    /// What changed, grouped by day (Git history, else state stamps)
+    Changes {
+        /// YYYY-MM-DD or anything `git log --since` accepts
+        #[arg(long)]
+        since: Option<String>,
+    },
+    /// Export the identity to another format
+    Export {
+        #[command(subcommand)]
+        format: ExportFormat,
     },
     /// Show how root, identity and project resolve
     Config,
@@ -306,16 +328,20 @@ fn run(cli: &Cli, out: &Out) -> Result<i32> {
             }
             Ok(exit::OK)
         }
-        Command::Lint { rules } => {
+        Command::Lint { rules, changed } => {
             let r = resolved(cli)?;
             let slug = need_identity(&r)?;
             let id = identity::Identity::load(&r.root, &slug)?;
-            let found = lint::run(
+            let mut found = lint::run(
                 &id,
                 &lint::Options {
                     rules: rules.clone(),
                 },
             );
+            if *changed {
+                let paths = changes::changed_paths(&id);
+                found.retain(|d| paths.contains(&d.path));
+            }
             let errors = found.iter().filter(|d| d.level == Level::Error).count();
             let warnings = found.iter().filter(|d| d.level == Level::Warning).count();
             if out.json {
@@ -649,11 +675,128 @@ fn run(cli: &Cli, out: &Out) -> Result<i32> {
                 exit::OK
             })
         }
-        Command::Review {
-            action: ReviewAction::Done,
+        Command::Review { action: None } => {
+            let id = load(cli)?;
+            let p = review::packet(&id);
+            if out.json {
+                Envelope::ok(serde_json::to_value(&p)?).print();
+            } else {
+                print!("{}", review::render(&p));
+            }
+            Ok(exit::OK)
+        }
+        Command::Soul {
+            action:
+                SoulAction::Note {
+                    file,
+                    change,
+                    evidence,
+                },
         } => {
             let id = load(cli)?;
-            let review = review::done(&id)?;
+            let note = review::soul_note(&id, file, change, evidence)?;
+            if out.json {
+                let warnings = note.warning.iter().map(|w| json!(w)).collect();
+                Envelope {
+                    ok: true,
+                    data: note.record,
+                    warnings,
+                    errors: vec![],
+                }
+                .print();
+            } else {
+                if let Some(w) = &note.warning {
+                    eprintln!("warning: {w}");
+                }
+                out.say(format!(
+                    "noted {}: {}",
+                    note.record["file"].as_str().unwrap_or(""),
+                    note.record["change"].as_str().unwrap_or("")
+                ));
+            }
+            Ok(exit::OK)
+        }
+        Command::Soul {
+            action: SoulAction::History { file },
+        } => {
+            let id = load(cli)?;
+            let list = review::soul_history(&id, file.as_deref());
+            if out.json {
+                Envelope::ok(json!({ "history": list })).print();
+            } else {
+                for r in &list {
+                    let ev: Vec<&str> = r["evidence"]
+                        .as_array()
+                        .map(|a| a.iter().filter_map(|v| v.as_str()).collect())
+                        .unwrap_or_default();
+                    println!(
+                        "{}  {}  {}\n    evidence: {}",
+                        r["at"].as_str().unwrap_or("?"),
+                        r["file"].as_str().unwrap_or("?"),
+                        r["change"].as_str().unwrap_or(""),
+                        ev.join(", ")
+                    );
+                }
+                if list.is_empty() {
+                    out.say("no soul changes recorded");
+                }
+            }
+            Ok(exit::OK)
+        }
+        Command::Changes { since } => {
+            let id = load(cli)?;
+            let c = changes::changes(&id, since.as_deref());
+            if out.json {
+                Envelope::ok(serde_json::to_value(&c)?).print();
+            } else {
+                print!("{}", changes::render(&c));
+            }
+            Ok(exit::OK)
+        }
+        Command::Export {
+            format: ExportFormat::Card { spec, out: file },
+        } => {
+            let id = load(cli)?;
+            let card = export::card(&id, spec, cli.project.as_deref())?;
+            let text = serde_json::to_string_pretty(&card)?;
+            match file {
+                Some(f) => {
+                    std::fs::write(f, format!("{text}\n"))?;
+                    out.say(format!("wrote {}", f.display()));
+                }
+                None => println!("{text}"),
+            }
+            Ok(exit::OK)
+        }
+        Command::Export {
+            format: ExportFormat::Soulspec { out: dir },
+        } => {
+            let id = load(cli)?;
+            let report = export::soulspec(&id, dir)?;
+            if out.json {
+                let warnings = report.warnings.iter().map(|w| json!(w)).collect();
+                Envelope {
+                    ok: true,
+                    data: json!({ "dir": dir, "files": report.files }),
+                    warnings,
+                    errors: vec![],
+                }
+                .print();
+            } else {
+                for w in &report.warnings {
+                    eprintln!("warning: {w}");
+                }
+                for f in &report.files {
+                    out.say(format!("wrote {f}"));
+                }
+            }
+            Ok(exit::OK)
+        }
+        Command::Review {
+            action: Some(ReviewAction::Done { through }),
+        } => {
+            let id = load(cli)?;
+            let review = review::done(&id, through.as_deref())?;
             if out.json {
                 Envelope::ok(review).print();
             } else {
@@ -670,7 +813,44 @@ fn run(cli: &Cli, out: &Out) -> Result<i32> {
 #[derive(Subcommand)]
 enum ReviewAction {
     /// Record a finished review (dates and the MEMORY.md hash)
-    Done,
+    Done {
+        /// Last log day covered (default: newest log date)
+        #[arg(long)]
+        through: Option<String>,
+    },
+}
+
+#[derive(Subcommand)]
+enum SoulAction {
+    /// Append a soul change with its evidence
+    Note {
+        /// Soul file, for example SOUL.md
+        file: String,
+        #[arg(long)]
+        change: String,
+        /// Evidence entry name or [[link]] (repeatable)
+        #[arg(long)]
+        evidence: Vec<String>,
+    },
+    /// Print the soul history, optionally for one file
+    History { file: Option<String> },
+}
+
+#[derive(Subcommand)]
+enum ExportFormat {
+    /// Character Card JSON (V3 with V2-compatible fields, or V2)
+    Card {
+        #[arg(long, default_value = "v3", value_parser = ["v2", "v3"])]
+        spec: String,
+        /// Write to a file instead of stdout
+        #[arg(long)]
+        out: Option<PathBuf>,
+    },
+    /// SoulSpec v0.5 package folder
+    Soulspec {
+        #[arg(long)]
+        out: PathBuf,
+    },
 }
 
 fn load(cli: &Cli) -> Result<identity::Identity> {
