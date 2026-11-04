@@ -46,12 +46,45 @@ pub struct Hit {
     pub snippet: Option<String>,
 }
 
-pub fn search(id: &Identity, query: &str, scope: Option<&str>, limit: usize) -> Vec<Hit> {
+/// Which entries a search looks at.
+#[derive(Default)]
+pub struct Filter<'a> {
+    /// soul, life or work
+    pub scope: Option<&'a str>,
+    /// entry type names, as in `owo add`
+    pub types: &'a [String],
+    /// only `work/projects/<p>/`
+    pub project: Option<&'a str>,
+    /// story `date`, else `updated`, on or after this YYYY-MM-DD
+    pub since: Option<&'a str>,
+}
+
+impl Filter<'_> {
+    fn keep(&self, e: &Entry) -> bool {
+        self.scope
+            .is_none_or(|s| e.rel.starts_with(&format!("{s}/")))
+            && (self.types.is_empty()
+                || self
+                    .types
+                    .iter()
+                    .any(|t| t == crate::find::kind_name(e.kind)))
+            && self
+                .project
+                .is_none_or(|p| e.rel.starts_with(&format!("work/projects/{p}/")))
+            && self.since.is_none_or(|s| {
+                e.field_str("date")
+                    .or_else(|| e.field_str("updated"))
+                    .is_some_and(|d| d.as_str() >= s)
+            })
+    }
+}
+
+pub fn search(id: &Identity, query: &str, filter: &Filter, limit: usize) -> Vec<Hit> {
     let q = tokens(query);
     let docs: Vec<(&Entry, Vec<String>)> = id
         .entries
         .iter()
-        .filter(|e| !e.is_generated() && scope.is_none_or(|s| e.rel.starts_with(&format!("{s}/"))))
+        .filter(|e| !e.is_generated() && filter.keep(e))
         .map(|e| (e, doc_tokens(e)))
         .collect();
     if docs.is_empty() || q.is_empty() {

@@ -14,6 +14,8 @@ pub struct Request<'a> {
     pub parent: Option<&'a str>,
     pub project: Option<&'a str>,
     pub aliases: &'a [String],
+    /// KB path for a project (`kb:` in project.md)
+    pub kb: Option<&'a str>,
 }
 
 pub enum Added {
@@ -123,6 +125,10 @@ pub fn add(id: &Identity, req: &Request) -> Result<Added> {
             .collect::<Vec<_>>()
             .join(", ");
         text = text.replacen("aliases: []", &format!("aliases: [{list}]"), 1);
+    }
+    if let (Some(kb), "project") = (req.kb, req.kind) {
+        let kb = kb.replace('"', "\\\"");
+        text = text.replacen("kb: \"\"", &format!("kb: \"{kb}\""), 1);
     }
     fs::create_dir_all(path.parent().expect("has parent"))?;
     if req.kind == "project" {

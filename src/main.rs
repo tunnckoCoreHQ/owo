@@ -84,6 +84,9 @@ enum Command {
         /// Alias (repeatable)
         #[arg(long = "alias")]
         aliases: Vec<String>,
+        /// KB path for a project, relative to the identity folder
+        #[arg(long)]
+        kb: Option<String>,
     },
     /// Refresh state.json files from content hashes
     Stamp {
@@ -161,7 +164,11 @@ enum Command {
         no_touch: bool,
     },
     /// Derived current state: activity, recent days and events, open threads, review
-    State,
+    State {
+        /// Window for recent events
+        #[arg(long, default_value_t = 14)]
+        days: i64,
+    },
     /// Files updated in the last N days
     Recent {
         #[arg(long, default_value_t = 7)]
@@ -171,8 +178,14 @@ enum Command {
     Search {
         query: Vec<String>,
         /// Limit to soul, life or work
-        #[arg(long)]
+        #[arg(long, visible_alias = "in")]
         scope: Option<String>,
+        /// Limit to entry types (repeatable)
+        #[arg(long = "type")]
+        types: Vec<String>,
+        /// Only entries dated (or updated) on or after YYYY-MM-DD
+        #[arg(long)]
+        since: Option<String>,
         #[arg(long, default_value_t = 10)]
         limit: usize,
     },
@@ -330,12 +343,23 @@ fn run(cli: &Cli, out: &Out) -> Result<i32> {
         }
         Command::List => {
             let r = resolved(cli)?;
-            let slugs = config::list_identities(&r.root);
+            let rows = status::list(&r.root);
             if out.json {
-                Envelope::ok(json!({ "root": r.root, "identities": slugs })).print();
+                Envelope::ok(json!({ "root": r.root, "identities": rows })).print();
             } else {
-                for s in &slugs {
-                    println!("{s}");
+                for row in &rows {
+                    let last = row
+                        .last_activity
+                        .as_deref()
+                        .map(|t| &t[..10.min(t.len())])
+                        .unwrap_or("-");
+                    println!(
+                        "{:<16} {:<20} {:<10} {}",
+                        row.slug,
+                        row.name,
+                        last,
+                        row.projects.join(", ")
+                    );
                 }
             }
             Ok(exit::OK)
@@ -388,6 +412,7 @@ fn run(cli: &Cli, out: &Out) -> Result<i32> {
             date,
             parent,
             aliases,
+            kb,
         } => {
             let r = resolved(cli)?;
             let slug = need_identity(&r)?;
@@ -404,6 +429,7 @@ fn run(cli: &Cli, out: &Out) -> Result<i32> {
                 parent: parent.as_deref(),
                 project: r.project.as_deref(),
                 aliases,
+                kb: kb.as_deref(),
             };
             let (path, created) = match add::add(&id, &req)? {
                 add::Added::Created(p) => (p, true),
@@ -688,9 +714,13 @@ fn run(cli: &Cli, out: &Out) -> Result<i32> {
             }
             Ok(exit::OK)
         }
-        Command::State => {
-            let id = load(cli)?;
-            let s = status::compute(&id, 14, 5);
+        Command::State { days } => {
+            let r = resolved(cli)?;
+            let id = identity::Identity::load(&r.root, &need_identity(&r)?)?;
+            let mut s = status::compute(&id, *days, 5);
+            if let Some(p) = r.project.as_deref() {
+                s.project = Some(status::project(&id, p)?);
+            }
             if out.json {
                 Envelope::ok(serde_json::to_value(&s)?).print();
             } else {
@@ -713,10 +743,22 @@ fn run(cli: &Cli, out: &Out) -> Result<i32> {
         Command::Search {
             query,
             scope,
+            types,
+            since,
             limit,
         } => {
             let id = load(cli)?;
-            let hits = search::search(&id, &query.join(" "), scope.as_deref(), *limit);
+            let hits = search::search(
+                &id,
+                &query.join(" "),
+                &search::Filter {
+                    scope: scope.as_deref(),
+                    types,
+                    project: cli.project.as_deref(),
+                    since: since.as_deref(),
+                },
+                *limit,
+            );
             if out.json {
                 Envelope::ok(json!({ "hits": hits })).print();
             } else {

@@ -263,3 +263,76 @@ fn export_skill_wrapper() {
             && text.contains("`picture-book`")
     );
 }
+
+#[test]
+fn flags_list_search_state_add_kb() {
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("examples");
+    let v = json(owo(&root).arg("list"));
+    let rows = v["data"]["identities"].as_array().unwrap();
+    let rook = rows.iter().find(|r| r["slug"] == "reviewer").unwrap();
+    assert_eq!(rook["name"], "Rook Halvorsen");
+    assert_eq!(rook["projects"].as_array().unwrap().len(), 3);
+
+    let v = json(owo(&root).args([
+        "-i",
+        "reviewer",
+        "search",
+        "review",
+        "--type",
+        "note",
+        "--since",
+        "2026-10-29",
+    ]));
+    let hits = v["data"]["hits"].as_array().unwrap();
+    assert!(
+        !hits.is_empty()
+            && hits
+                .iter()
+                .all(|h| h["path"].as_str().unwrap().contains("/notes/2026-1"))
+    );
+    let v = json(owo(&root).args([
+        "-i",
+        "reviewer",
+        "--project",
+        "ledger-api",
+        "search",
+        "review",
+    ]));
+    assert!(v["data"]["hits"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .all(|h| h["path"]
+            .as_str()
+            .unwrap()
+            .starts_with("work/projects/ledger-api/")));
+
+    let v = json(owo(&root).args([
+        "-i",
+        "reviewer",
+        "--project",
+        "ledger-api",
+        "state",
+        "--days",
+        "30",
+    ]));
+    assert_eq!(v["data"]["project"]["notes"].as_array().unwrap().len(), 2);
+
+    let tmp = copy_example("thea");
+    let v = json(owo(tmp.path()).args([
+        "-i",
+        "thea",
+        "add",
+        "project",
+        "Mural",
+        "--kb",
+        "../kb/mural",
+    ]));
+    let path = tmp
+        .path()
+        .join("thea")
+        .join(v["data"]["path"].as_str().unwrap());
+    assert!(fs::read_to_string(path)
+        .unwrap()
+        .contains("kb: \"../kb/mural\""));
+}

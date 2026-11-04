@@ -53,6 +53,84 @@ pub struct State {
     pub open_conflicts: Vec<Link>,
     pub review: Review,
     pub last_soul_change: Option<Value>,
+    /// With `--project`: sessions and recent notes for that project.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub project: Option<ProjectState>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ProjectState {
+    pub slug: String,
+    pub first_touched: Option<String>,
+    pub last_touched: Option<String>,
+    pub sessions: u64,
+    pub notes: Vec<Link>,
+}
+
+pub fn project(id: &Identity, slug: &str) -> anyhow::Result<ProjectState> {
+    if id
+        .entry(&format!("work/projects/{slug}/project.md"))
+        .is_none()
+    {
+        anyhow::bail!("project not found: work/projects/{slug}/project.md");
+    }
+    let rec = id
+        .read_json("work/state.json")
+        .and_then(|d| d.get("projects")?.get(slug).cloned())
+        .unwrap_or(Value::Null);
+    let prefix = format!("work/projects/{slug}/notes/");
+    let mut notes: Vec<&Entry> = id
+        .entries
+        .iter()
+        .filter(|e| e.kind == Kind::Note && e.rel.starts_with(&prefix))
+        .collect();
+    notes.sort_by(|a, b| b.rel.cmp(&a.rel));
+    Ok(ProjectState {
+        slug: slug.into(),
+        first_touched: rec["first_touched"].as_str().map(str::to_string),
+        last_touched: rec["last_touched"].as_str().map(str::to_string),
+        sessions: rec["sessions"].as_u64().unwrap_or(0),
+        notes: notes.into_iter().take(5).map(Link::of).collect(),
+    })
+}
+
+#[derive(Debug, Serialize)]
+pub struct Row {
+    pub slug: String,
+    pub name: String,
+    pub last_activity: Option<String>,
+    pub projects: Vec<String>,
+}
+
+/// One row per identity in the root for `owo list`.
+pub fn list(root: &std::path::Path) -> Vec<Row> {
+    crate::config::list_identities(root)
+        .into_iter()
+        .map(|slug| match Identity::load(root, &slug) {
+            Ok(id) => Row {
+                name: id
+                    .manifest
+                    .as_ref()
+                    .and_then(|m| m["name"].as_str())
+                    .unwrap_or(&slug)
+                    .to_string(),
+                last_activity: scope_activity(&id).into_iter().map(|(_, t)| t).max(),
+                projects: id
+                    .entries
+                    .iter()
+                    .filter(|e| e.kind == Kind::Project)
+                    .filter_map(|e| e.rel.split('/').nth(2).map(str::to_string))
+                    .collect(),
+                slug,
+            },
+            Err(_) => Row {
+                name: slug.clone(),
+                slug,
+                last_activity: None,
+                projects: vec![],
+            },
+        })
+        .collect()
 }
 
 fn by_date_desc(id: &Identity, kind: Kind) -> Vec<&Entry> {
@@ -177,6 +255,7 @@ pub fn compute(id: &Identity, days: i64, logs: usize) -> State {
             .and_then(|d| d.get("history"))
             .and_then(Value::as_array)
             .and_then(|h| h.last().cloned()),
+        project: None,
     }
 }
 
@@ -251,6 +330,19 @@ pub fn render(s: &State) -> String {
             "- Last soul change: {} {}\n",
             change.get("file").and_then(Value::as_str).unwrap_or("?"),
             change.get("change").and_then(Value::as_str).unwrap_or("")
+        ));
+    }
+    if let Some(p) = &s.project {
+        let last = p
+            .last_touched
+            .as_deref()
+            .map(|t| &t[..10.min(t.len())])
+            .unwrap_or("never");
+        out.push_str(&format!(
+            "- Project {}: {} sessions, last {last}, notes {}\n",
+            p.slug,
+            p.sessions,
+            join(&p.notes)
         ));
     }
     if s.review.memory_changed_outside_review {
