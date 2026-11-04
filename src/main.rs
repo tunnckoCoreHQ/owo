@@ -19,6 +19,7 @@ mod slug;
 mod stamp;
 mod state;
 mod status;
+mod sync;
 mod templates;
 
 use anyhow::Result;
@@ -194,6 +195,11 @@ enum Command {
     Export {
         #[command(subcommand)]
         format: ExportFormat,
+    },
+    /// Session sync: slice a host transcript into sources/ for ingest
+    Sync {
+        #[command(subcommand)]
+        action: SyncAction,
     },
     /// Show how root, identity and project resolve
     Config,
@@ -675,6 +681,70 @@ fn run(cli: &Cli, out: &Out) -> Result<i32> {
                 exit::OK
             })
         }
+        Command::Sync {
+            action:
+                SyncAction::Start {
+                    session,
+                    transcript,
+                    format,
+                    now,
+                    every,
+                },
+        } => {
+            let r = resolved(cli)?;
+            let slug = need_identity(&r)?;
+            let id = identity::Identity::load(&r.root, &slug)?;
+            let every = every
+                .or_else(|| {
+                    id.manifest
+                        .as_ref()
+                        .and_then(|m| m.get("sync_every"))
+                        .and_then(|v| v.as_u64())
+                        .map(|v| v as usize)
+                })
+                .unwrap_or(6)
+                .max(1);
+            let req = sync::StartRequest {
+                root: &r.root,
+                slug: &slug,
+                session,
+                transcript,
+                format,
+                now: *now,
+                every,
+                project: r.project.as_deref(),
+            };
+            let s = sync::start(&req)?;
+            if out.json {
+                Envelope::ok(serde_json::to_value(&s)?).print();
+            } else if let Some(src) = &s.source {
+                println!(
+                    "due {} {}-{}\nsource {src}\nprompt {}",
+                    s.identity,
+                    s.from,
+                    s.until,
+                    s.prompt.as_deref().unwrap_or("")
+                );
+            } else {
+                out.say(format!(
+                    "not due: {} new user turns (every {})",
+                    s.new_user_turns, s.every
+                ));
+            }
+            Ok(exit::OK)
+        }
+        Command::Sync {
+            action: SyncAction::Done { session, until },
+        } => {
+            let r = resolved(cli)?;
+            let doc = sync::done(&r.root, session, *until)?;
+            if out.json {
+                Envelope::ok(doc).print();
+            } else {
+                out.say(format!("session {session} synced until {until}"));
+            }
+            Ok(exit::OK)
+        }
         Command::Review { action: None } => {
             let id = load(cli)?;
             let p = review::packet(&id);
@@ -850,6 +920,32 @@ enum ExportFormat {
     Soulspec {
         #[arg(long)]
         out: PathBuf,
+    },
+}
+
+#[derive(Subcommand)]
+enum SyncAction {
+    /// Read the transcript and, when a run is due, write the slice and the ingest prompt
+    Start {
+        #[arg(long)]
+        session: String,
+        #[arg(long)]
+        transcript: PathBuf,
+        #[arg(long, default_value = "jsonl", value_parser = clap::builder::PossibleValuesParser::new(sync::FORMATS))]
+        format: String,
+        /// Take any new turns now (session end)
+        #[arg(long)]
+        now: bool,
+        /// New user turns per run (default: identity.json sync_every, else 6)
+        #[arg(long)]
+        every: Option<usize>,
+    },
+    /// Move the bookmark after a successful ingest run
+    Done {
+        #[arg(long)]
+        session: String,
+        #[arg(long)]
+        until: usize,
     },
 }
 
