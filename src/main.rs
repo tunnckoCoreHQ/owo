@@ -238,6 +238,11 @@ impl Out {
 }
 
 fn main() -> ExitCode {
+    // Exit quietly when stdout closes early (`owo search x | head`).
+    #[cfg(unix)]
+    unsafe {
+        libc::signal(libc::SIGPIPE, libc::SIG_DFL);
+    }
     let cli = Cli::parse();
     let out = Out {
         json: cli.json,
@@ -281,13 +286,20 @@ fn resolved(cli: &Cli) -> Result<config::Resolved> {
 }
 
 fn need_identity(r: &config::Resolved) -> Result<String> {
-    r.identity.clone().ok_or_else(|| {
+    let slug = r.identity.clone().ok_or_else(|| {
         ConfigError(format!(
             "no identity selected in {}: pass -i <slug> or set OWO_IDENTITY",
             r.root.display()
         ))
-        .into()
-    })
+    })?;
+    if !r.root.join(&slug).is_dir() {
+        return Err(ConfigError(format!(
+            "identity folder not found: {}; `owo list` shows the identities in this root",
+            r.root.join(&slug).display()
+        ))
+        .into());
+    }
+    Ok(slug)
 }
 
 fn run(cli: &Cli, out: &Out) -> Result<i32> {

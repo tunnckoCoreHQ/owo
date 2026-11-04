@@ -34,18 +34,24 @@ fn files_mut(doc: &mut Value) -> &mut Map<String, Value> {
     doc["files"].as_object_mut().expect("files is an object")
 }
 
-/// Sets `updated: <today>` inside frontmatter. Returns the new text when it changed.
+/// Sets `updated: <today>` inside frontmatter, keeping the file's line endings.
+/// Returns the new text when it changed.
 fn touch_updated(text: &str, today: &str) -> Option<String> {
     let split = crate::markdown::split(text);
     let fm = split.frontmatter?;
-    let re = Regex::new(r"(?m)^updated:.*$").expect("valid regex");
+    let nl = if text.starts_with("---\r\n") {
+        "\r\n"
+    } else {
+        "\n"
+    };
+    let re = Regex::new(r"(?m)^updated:[^\r\n]*").expect("valid regex");
     let line = format!("updated: {today}");
     let new_fm = if re.is_match(fm) {
         re.replace(fm, line.as_str()).to_string()
     } else {
-        format!("{fm}{line}\n")
+        format!("{fm}{line}{nl}")
     };
-    (new_fm != fm).then(|| format!("---\n{new_fm}---\n{}", split.body))
+    (new_fm != fm).then(|| format!("---{nl}{new_fm}---{nl}{}", split.body))
 }
 
 pub fn run(id: &Identity, check: bool) -> Result<Report> {
@@ -171,5 +177,10 @@ mod tests {
             "---\ntitle: A\nupdated: 2026-11-04\n---\n# A\n"
         );
         assert!(touch_updated("---\nupdated: 2026-11-04\n---\n", "2026-11-04").is_none());
+        let crlf = "---\r\ntitle: A\r\nupdated: 2020-01-01\r\n---\r\n# A\r\n";
+        assert_eq!(
+            touch_updated(crlf, "2026-11-04").unwrap(),
+            "---\r\ntitle: A\r\nupdated: 2026-11-04\r\n---\r\n# A\r\n"
+        );
     }
 }

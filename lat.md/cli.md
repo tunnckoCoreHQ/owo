@@ -6,7 +6,7 @@ Commands implemented so far. Every command accepts `--root`, `-i/--identity`, `-
 
 With `--json` every command prints `{ "ok", "data", "warnings", "errors" }`; otherwise readable text.
 
-Exit codes: 0 success, 1 problems found (lint errors, exists, unknown template, stale check), 2 usage error (clap), 3 config error (no identity selected), 4 I/O error.
+Exit codes: 0 success, 1 problems found (lint errors, exists, unknown template, stale check), 2 usage error (clap), 3 config error (no identity selected, identity folder missing), 4 I/O error. A closed stdout (`owo search x | head`) ends the process quietly.
 
 ## Commands
 

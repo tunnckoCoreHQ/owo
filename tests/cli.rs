@@ -104,6 +104,10 @@ fn json_envelope_and_exit_codes() {
     assert_eq!(v["data"]["slug"], "jays-penthouse");
     owo(tmp.path()).args(["lint"]).assert().code(3);
     owo(tmp.path())
+        .args(["-i", "nosuch", "lint"])
+        .assert()
+        .code(3);
+    owo(tmp.path())
         .args(["templates", "show", "nope"])
         .assert()
         .code(1);

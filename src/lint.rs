@@ -228,7 +228,12 @@ fn check_entry_schema(e: &Entry, out: &mut Vec<Diagnostic>) {
         return;
     }
     if e.frontmatter.is_none() {
-        out.push(err("schema", rel, "frontmatter is missing"));
+        let msg = if e.text.starts_with("---") {
+            "frontmatter is not closed; end it with a `---` line"
+        } else {
+            "frontmatter is missing"
+        };
+        out.push(err("schema", rel, msg));
         return;
     }
     match e.field_str("type") {
