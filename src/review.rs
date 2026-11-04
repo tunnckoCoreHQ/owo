@@ -65,12 +65,22 @@ fn link(e: &crate::identity::Entry) -> Link {
     }
 }
 
-/// Three-word phrases that show up on at least three different log days.
+/// Short function words; a recurring phrase may not start or end with one.
+const STOP_WORDS: &[&str] = &[
+    "a", "an", "and", "are", "as", "at", "be", "but", "by", "for", "from", "had", "has", "have",
+    "he", "her", "his", "if", "in", "into", "is", "it", "its", "me", "my", "of", "on", "or", "our",
+    "she", "so", "that", "the", "their", "them", "then", "they", "this", "to", "was", "we", "were",
+    "with", "you", "your",
+];
+
+/// Three-word phrases that show up on at least three different log days and start and end
+/// with a content word.
 fn recurring(days: &[Day]) -> Vec<(String, usize)> {
+    let content = |w: &str| !STOP_WORDS.contains(&w);
     let mut seen: BTreeMap<String, BTreeSet<&str>> = BTreeMap::new();
     for d in days {
         let toks = crate::search::tokens(&d.body);
-        for w in toks.windows(3) {
+        for w in toks.windows(3).filter(|w| content(&w[0]) && content(&w[2])) {
             seen.entry(w.join(" ")).or_default().insert(&d.date);
         }
     }
@@ -356,4 +366,27 @@ pub fn soul_history(id: &Identity, file: Option<&str>) -> Vec<Value> {
         .into_iter()
         .filter(|r| file.is_none_or(|f| r["file"].as_str() == Some(f)))
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn recurring_phrases_skip_function_words() {
+        let days: Vec<Day> = ["01", "02", "03"]
+            .iter()
+            .map(|d| Day {
+                path: String::new(),
+                date: format!("2026-01-{d}"),
+                title: String::new(),
+                body: "Out on the water, glazed blue tiles again.".into(),
+            })
+            .collect();
+        let phrases: Vec<String> = recurring(&days).into_iter().map(|(p, _)| p).collect();
+        assert!(phrases.contains(&"glazed blue tiles".to_string()));
+        assert!(!phrases
+            .iter()
+            .any(|p| p == "on the water" || p == "out on the"));
+    }
 }

@@ -6,7 +6,7 @@ A standalone brief for the next coding agent. Read this, then `lat.md/lat.md`, t
 
 owo ("one world, one identity") is a Rust CLI for living agent identities. An identity is a folder `<root>/<slug>/`:
 
-- `identity.json`: name, accounts, budgets, `review_every_days`, `projects.<p>.kb`.
+- `identity.json`: name, optional `nickname`, accounts, budgets, `review_every_days`, `sync_every`, `projects.<p>.kb`.
 - `soul/`: IDENTITY, SOUL, VOICE, LOOK, MEMORY (Markdown), `soul.json` (SoulSpec manifest), `examples/`, `state.json` (stamps, `history`, `review`).
 - `life/`: characters, locations, cultures, factions, eras, events, threads, conflicts, lessons, writing, log, journal; `timeline.md` and `_index.md` files are generated; `state.json`.
 - `work/`: `README.md` (profile), `projects/<p>/project.md` and `projects/<p>/notes/<date>_<slug>.md`; `state.json` (stamps, per-project sessions).

@@ -305,6 +305,7 @@ The identity's own accounts live in `identity.json` → `accounts`, under the sa
   "schema": "owo/1",
   "slug": "thea",
   "name": "Thea",
+  "nickname": "Tee",
   "accounts": [
     { "kind": "x", "handle": "@<handle>" }
   ],
@@ -810,7 +811,7 @@ Use: compiling MEMORY and evolving the soul, on request when `owo state` shows r
 
 | Card field | Source |
 | :- | :- |
-| `name`, `nickname` | `identity.json` name, first alias in IDENTITY |
+| `name`, `nickname` | `identity.json` `name` and `nickname` (V3 only; null when unset) |
 | `description` | IDENTITY.md, with LOOK.md appended |
 | `system_prompt` | IDENTITY.md "Who they are" section |
 | `personality` | SOUL.md |

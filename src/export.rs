@@ -219,8 +219,10 @@ pub fn card(
     }
     let now = chrono::Utc::now().timestamp();
     let nickname = id
-        .entry("soul/IDENTITY.md")
-        .and_then(|e| e.aliases.first().cloned());
+        .manifest
+        .as_ref()
+        .and_then(|m| m.get("nickname")?.as_str())
+        .filter(|n| !n.trim().is_empty());
     let extra = json!({
         "nickname": nickname, "assets": [{ "type": "icon", "uri": "ccdefault:", "name": "main", "ext": "png" }],
         "creator_notes_multilingual": {}, "source": [], "group_only_greetings": [],

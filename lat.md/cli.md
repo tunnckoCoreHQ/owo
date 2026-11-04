@@ -50,7 +50,7 @@ The KB path comes from `project.md` `kb`, else `identity.json` `projects.<p>.kb`
 - files whose stamp moved after `last_reviewed` (MEMORY.md excluded), with type, summary, word count, and Git `+added -removed` lines when the root is a repo
 - log days after `reviewed_through`, with their bodies
 - events and journal entries dated after `reviewed_through`, lessons among the changed files
-- open threads and conflicts, three-word phrases on three or more unreviewed days, the last soul change
+- open threads and conflicts, three-word phrases on three or more unreviewed days that start and end with a content word, the last soul change
 
 ## Export
 
@@ -67,7 +67,7 @@ The KB path comes from `project.md` `kb`, else `identity.json` `projects.<p>.kb`
 | `tags`, `creator`, `character_version` | `soul/soul.json` |
 | `character_book` | MEMORY.md as a constant entry, then characters, locations, cultures, factions, eras, events, lessons, and the scoped project; keys are title plus aliases; `## Identifiers` and `## Sources` are left out |
 
-V3 adds `nickname` (first IDENTITY alias), `assets` (default icon), `creation_date`, `modification_date`, `source`, `group_only_greetings`, `creator_notes_multilingual`.
+V3 adds `nickname` (`identity.json` `nickname`), `assets` (default icon), `creation_date`, `modification_date`, `source`, `group_only_greetings`, `creator_notes_multilingual`.
 
 `owo export soulspec` writes `soul.json`, `SOUL.md`, `IDENTITY.md` (LOOK appended), `STYLE.md` (from VOICE), `MEMORY.md` and `examples/`, and warns when the license is outside the allowlist in `export.rs`.
 

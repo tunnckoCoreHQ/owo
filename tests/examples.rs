@@ -226,6 +226,7 @@ fn export_card_v3_shape() {
         .unwrap();
     let card: Value = serde_json::from_slice(&out.stdout).unwrap();
     check_card(&card, "Thea");
+    assert_eq!(card["data"]["nickname"], "Tee");
     assert_eq!(
         card["data"]["alternate_greetings"]
             .as_array()
