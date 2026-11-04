@@ -63,7 +63,7 @@ After editing anything in `examples/`, run for each identity: `owo --root exampl
 | `sync start`, `sync done` | jsonl, claude-jsonl, opencode-json; slices in `<root>/sources/<slug>/`; session lock; a pending run is not restarted each turn; `done --until` bounded by the messages read |
 | `migrate v1` | locations, cultures, factions, eras, threads included; tested on `tests/fixtures/v1-lumen` (invented) |
 | `export card [--spec --scenario --png --out]`, `export soulspec`, `export skill` | `nickname` from `identity.json` |
-| `mcp` | stdio JSON-RPC; each tool runs the same binary; see `lat.md/decisions.md` |
+| `mcp [--remote [ADDR]] [--port]` | every command as a tool; stdio, or HTTP on 4224 with the URL printed; each tool runs the same binary; no auth |
 | `skills/` | identity, identity-create, identity-ingest, identity-review, shared `identity/references/rules.md` |
 
 ## Left, in priority order

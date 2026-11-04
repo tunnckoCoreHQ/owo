@@ -1,12 +1,14 @@
 //! `owo mcp`: a stdio MCP server. Each tool runs this same binary with the matching
 //! command line, so a tool call and a CLI call share one code path and one output.
-//! Messages are newline-delimited JSON-RPC 2.0.
+//! Messages are JSON-RPC 2.0: one per line on stdio, or one per POST to `/mcp` with `--remote`.
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use serde_json::{json, Map, Value};
-use std::io::{BufRead, Write};
+use std::io::{BufRead, BufReader, Read, Write};
+use std::net::{TcpListener, TcpStream};
 use std::path::PathBuf;
 use std::process::Command;
+use std::time::Duration;
 
 const PROTOCOL: &str = "2025-06-18";
 
@@ -159,6 +161,156 @@ const TOOLS: &[Tool] = &[
             p("rule", "array", Flag("--rule"), false, "Run only these rules"),
             p("changed", "boolean", Switch("--changed"), false, "Report only changed files"),
         ],
+    },
+    Tool {
+        name: "new",
+        about: "Create a new identity from the built-in templates.",
+        command: &["new"],
+        json: true,
+        params: &[
+            p("name", "string", Positional, true, "Display name"),
+            p("slug", "string", Flag("--slug"), false, "Slug override"),
+        ],
+    },
+    Tool {
+        name: "list",
+        about: "List identities in the root.",
+        command: &["list"],
+        json: true,
+        params: &[],
+    },
+    Tool {
+        name: "recent",
+        about: "Files updated in the last N days.",
+        command: &["recent"],
+        json: true,
+        params: &[p("days", "integer", Flag("--days"), false, "Window in days (default 7)")],
+    },
+    Tool {
+        name: "changes",
+        about: "What changed, grouped by day (Git history, else state stamps).",
+        command: &["changes"],
+        json: true,
+        params: &[p("since", "string", Flag("--since"), false, "YYYY-MM-DD or anything `git log --since` accepts")],
+    },
+    Tool {
+        name: "review",
+        about: "The review packet: MEMORY, changed files, unreviewed days, events, open threads.",
+        command: &["review"],
+        json: true,
+        params: &[],
+    },
+    Tool {
+        name: "review_done",
+        about: "Record a finished review (dates and the MEMORY.md hash).",
+        command: &["review", "done"],
+        json: true,
+        params: &[p("through", "string", Flag("--through"), false, "Last story day covered, YYYY-MM-DD")],
+    },
+    Tool {
+        name: "soul_note",
+        about: "Append a soul change with its evidence to soul/state.json history.",
+        command: &["soul", "note"],
+        json: true,
+        params: &[
+            p("file", "string", Positional, true, "Soul file, for example SOUL.md"),
+            p("change", "string", Flag("--change"), true, "What changed"),
+            p("evidence", "array", Flag("--evidence"), false, "Evidence entry names or [[links]]"),
+        ],
+    },
+    Tool {
+        name: "soul_history",
+        about: "The soul change trail, optionally for one file.",
+        command: &["soul", "history"],
+        json: true,
+        params: &[p("file", "string", Positional, false, "Soul file")],
+    },
+    Tool {
+        name: "export_card",
+        about: "Character Card JSON (V3, or V2), or a PNG card with --png and --out.",
+        command: &["export", "card"],
+        json: true,
+        params: &[
+            p("spec", "string", Flag("--spec"), false, "v3 (default) or v2"),
+            p("scenario", "string", Flag("--scenario"), false, "Event or location whose summary becomes the scenario"),
+            p("png", "string", Flag("--png"), false, "Avatar PNG path on the server (needs out)"),
+            p("out", "string", Flag("--out"), false, "File path on the server"),
+        ],
+    },
+    Tool {
+        name: "export_soulspec",
+        about: "Write a SoulSpec v0.5 package folder.",
+        command: &["export", "soulspec"],
+        json: true,
+        params: &[p("out", "string", Flag("--out"), true, "Folder path on the server")],
+    },
+    Tool {
+        name: "export_skill",
+        about: "Write a SKILL.md wrapper that loads the identity with owo.",
+        command: &["export", "skill"],
+        json: true,
+        params: &[p("out", "string", Flag("--out"), true, "Folder path on the server")],
+    },
+    Tool {
+        name: "sync_start",
+        about: "Read a transcript and, when a run is due, write the slice and the ingest prompt.",
+        command: &["sync", "start"],
+        json: true,
+        params: &[
+            p("session", "string", Flag("--session"), true, "Session name"),
+            p("transcript", "string", Flag("--transcript"), true, "Transcript path on the server"),
+            p("format", "string", Flag("--format"), false, "jsonl (default), claude-jsonl or opencode-json"),
+            p("now", "boolean", Switch("--now"), false, "Take any new turns now"),
+            p("every", "integer", Flag("--every"), false, "New user turns per run"),
+        ],
+    },
+    Tool {
+        name: "sync_done",
+        about: "Move the sync bookmark after a successful ingest run.",
+        command: &["sync", "done"],
+        json: true,
+        params: &[
+            p("session", "string", Flag("--session"), true, "Session name"),
+            p("until", "integer", Flag("--until"), true, "The until value from sync_start"),
+        ],
+    },
+    Tool {
+        name: "migrate_v1",
+        about: "Migrate a v1 identity folder (with references/) into <root>/<slug>.",
+        command: &["migrate", "v1"],
+        json: true,
+        params: &[
+            p("path", "string", Positional, true, "v1 identity folder on the server"),
+            p("out", "string", Flag("--out"), true, "New identity folder, <root>/<slug>"),
+        ],
+    },
+    Tool {
+        name: "templates_list",
+        about: "List template names and where each comes from.",
+        command: &["templates", "list"],
+        json: true,
+        params: &[],
+    },
+    Tool {
+        name: "templates_show",
+        about: "Print a template as new and add would use it.",
+        command: &["templates", "show"],
+        json: true,
+        params: &[p("name", "string", Positional, true, "Template name from templates_list")],
+    },
+    Tool {
+        name: "slug",
+        about: "Print the slug for a text.",
+        command: &["slug"],
+        json: true,
+        params: &[p("text", "string", Positional, true, "Text")],
+    },
+    Tool {
+        name: "config",
+        about: "Show how root, identity and project resolve.",
+        command: &["config"],
+        json: true,
+        params: &[],
     },
 ];
 
@@ -315,35 +467,97 @@ fn respond(id: &Value, method: &str, params: &Value, d: &Defaults) -> Option<Val
     }
 }
 
+/// The reply to one JSON-RPC message, or None for notifications and responses.
+fn handle(text: &str, d: &Defaults) -> Option<Value> {
+    match serde_json::from_str::<Value>(text) {
+        Ok(msg) if msg.get("id").is_some() && msg.get("method").is_some() => {
+            let method = msg["method"].as_str().unwrap_or_default();
+            respond(&msg["id"], method, &msg["params"], d)
+        }
+        Ok(_) => None,
+        Err(e) => Some(json!({
+            "jsonrpc": "2.0",
+            "id": null,
+            "error": { "code": -32700, "message": format!("parse error: {e}") },
+        })),
+    }
+}
+
 /// Serves MCP on stdin and stdout until stdin closes.
 pub fn serve(d: &Defaults) -> Result<()> {
-    let stdin = std::io::stdin();
     let mut stdout = std::io::stdout();
-    for line in stdin.lock().lines() {
+    for line in std::io::stdin().lock().lines() {
         let line = line?;
         if line.trim().is_empty() {
             continue;
         }
-        let reply = match serde_json::from_str::<Value>(&line) {
-            Ok(msg) => {
-                let id = msg.get("id").cloned().unwrap_or(Value::Null);
-                let method = msg["method"].as_str().unwrap_or_default();
-                // Notifications (no id) and responses get no reply.
-                if msg.get("id").is_none() || msg.get("method").is_none() {
-                    continue;
-                }
-                respond(&id, method, &msg["params"], d)
-            }
-            Err(e) => Some(json!({
-                "jsonrpc": "2.0",
-                "id": null,
-                "error": { "code": -32700, "message": format!("parse error: {e}") },
-            })),
-        };
-        if let Some(r) = reply {
+        if let Some(r) = handle(&line, d) {
             writeln!(stdout, "{r}")?;
             stdout.flush()?;
         }
     }
     Ok(())
+}
+
+pub const DEFAULT_PORT: u16 = 4224;
+
+/// Serves MCP over HTTP at `http://<addr>:<port>/mcp` (Streamable HTTP with JSON replies).
+/// Without `port` it takes 4224, or the next free port up to 4323. Prints the URL, then
+/// handles one request at a time.
+pub fn serve_http(addr: &str, port: Option<u16>, d: &Defaults) -> Result<()> {
+    let listener = match port {
+        Some(p) => TcpListener::bind((addr, p)).with_context(|| format!("binding {addr}:{p}"))?,
+        None => (DEFAULT_PORT..DEFAULT_PORT + 100)
+            .find_map(|p| TcpListener::bind((addr, p)).ok())
+            .with_context(|| format!("no free port on {addr} from {DEFAULT_PORT}"))?,
+    };
+    println!("http://{}/mcp", listener.local_addr()?);
+    std::io::stdout().flush()?;
+    for stream in listener.incoming() {
+        let Ok(stream) = stream else { continue };
+        // A broken or slow client only ends its own request.
+        let _ = http_request(stream, d);
+    }
+    Ok(())
+}
+
+fn http_request(stream: TcpStream, d: &Defaults) -> std::io::Result<()> {
+    stream.set_read_timeout(Some(Duration::from_secs(30)))?;
+    let mut reader = BufReader::new(stream.try_clone()?);
+    let mut request = String::new();
+    reader.read_line(&mut request)?;
+    let mut length = 0;
+    loop {
+        let mut header = String::new();
+        if reader.read_line(&mut header)? == 0 || header.trim().is_empty() {
+            break;
+        }
+        if let Some((k, v)) = header.split_once(':') {
+            if k.trim().eq_ignore_ascii_case("content-length") {
+                length = v.trim().parse().unwrap_or(0);
+            }
+        }
+    }
+    let mut parts = request.split_whitespace();
+    let (method, path) = (parts.next().unwrap_or(""), parts.next().unwrap_or(""));
+    let path = path.split('?').next().unwrap_or("");
+    let (status, body) = match (method, path) {
+        ("POST", "/mcp") => {
+            let mut body = vec![0; length];
+            reader.read_exact(&mut body)?;
+            match handle(&String::from_utf8_lossy(&body), d) {
+                Some(reply) => ("200 OK", reply.to_string()),
+                None => ("202 Accepted", String::new()),
+            }
+        }
+        (_, "/mcp") => ("405 Method Not Allowed", String::new()),
+        _ => ("404 Not Found", String::new()),
+    };
+    let mut stream = stream;
+    write!(
+        stream,
+        "HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+        body.len()
+    )?;
+    stream.flush()
 }

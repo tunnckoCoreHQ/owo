@@ -29,7 +29,7 @@ The implemented command set; see `docs/design.md` section 7 for the full plan.
 - `owo export card [--spec v3|v2] [--scenario <name>] [--png <avatar> --out <file>]`, `owo export soulspec --out <dir>`, `owo export skill --out <dir>`; see [[cli#Export]].
 - `owo sync start` and `owo sync done`; see [[cli#Sync]].
 - `owo migrate v1 <path> --out <root>/<slug>`; see [[decisions#Migrate is mechanical]].
-- `owo mcp` serves resolve, search, links, show, context, state, add, stamp, index and lint as MCP tools over stdio. `--root`, `-i` and `--project` given to `owo mcp` are the defaults; each tool also takes `identity` and `project`.
+- `owo mcp [--remote [ADDR]] [--port N]` serves every command as an MCP tool (subcommands as `review_done`, `export_card` and so on). Without `--remote` it speaks over stdio. With `--remote` it listens on ADDR (default `127.0.0.1`), port N or 4224 (else the next free port), prints `http://<addr>:<port>/mcp`, and answers each POST with JSON. `--root`, `-i` and `--project` given to `owo mcp` are the defaults; each tool also takes `identity` and `project`. Paths in tool arguments are paths on the server.
 - `owo list` prints slug, name, last activity and projects per identity. Also `owo slug <text>`, `owo templates [list | show <name>]` (list marks overrides), `owo config`.
 
 ## Context

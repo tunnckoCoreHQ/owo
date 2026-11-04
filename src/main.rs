@@ -223,8 +223,15 @@ enum Command {
     },
     /// Show how root, identity and project resolve
     Config,
-    /// Serve resolve, search, links, show, context, state, add, stamp, index and lint as MCP tools over stdio
-    Mcp,
+    /// Serve every command as an MCP tool, over stdio or HTTP with --remote
+    Mcp {
+        /// Serve over HTTP instead of stdio, on ADDR (default 127.0.0.1); prints the URL
+        #[arg(long, value_name = "ADDR", num_args = 0..=1, default_missing_value = "127.0.0.1")]
+        remote: Option<String>,
+        /// Port for --remote (default 4224, or the next free one)
+        #[arg(long, requires = "remote")]
+        port: Option<u16>,
+    },
 }
 
 struct Out {
@@ -321,12 +328,16 @@ fn run(cli: &Cli, out: &Out) -> Result<i32> {
             })
         }
         Command::Templates { action } => templates_cmd(cli, action.as_ref(), out),
-        Command::Mcp => {
-            mcp::serve(&mcp::Defaults {
+        Command::Mcp { remote, port } => {
+            let d = mcp::Defaults {
                 root: cli.root.clone(),
                 identity: cli.identity.clone(),
                 project: cli.project.clone(),
-            })?;
+            };
+            match remote {
+                Some(addr) => mcp::serve_http(addr, *port, &d)?,
+                None => mcp::serve(&d)?,
+            }
             Ok(exit::OK)
         }
         Command::Config => {

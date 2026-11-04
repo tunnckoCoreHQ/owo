@@ -705,7 +705,7 @@ overlap = 2
 #### MCP
 
 `owo mcp`
-: Serves `resolve`, `search`, `links`, `show`, `context`, `state`, `add`, `stamp`, `index` and `lint` as MCP tools over stdio, as a thin layer over the same functions.
+: Serves every command as an MCP tool, as a thin layer over the same binary. Over stdio by default; `owo mcp --remote [<addr>] [--port <n>]` serves HTTP at `/mcp` on port 4224 (or the next free one) and prints the URL.
 
 ### 7.4 Build notes
 

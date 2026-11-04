@@ -63,7 +63,34 @@ fn mcp_lists_and_calls_tools() {
         .map(|t| t["name"].as_str().unwrap())
         .collect();
     for t in [
-        "resolve", "search", "links", "show", "context", "state", "add", "stamp", "index", "lint",
+        "resolve",
+        "search",
+        "links",
+        "show",
+        "context",
+        "state",
+        "add",
+        "stamp",
+        "index",
+        "lint",
+        "new",
+        "list",
+        "recent",
+        "changes",
+        "review",
+        "review_done",
+        "soul_note",
+        "soul_history",
+        "export_card",
+        "export_soulspec",
+        "export_skill",
+        "sync_start",
+        "sync_done",
+        "migrate_v1",
+        "templates_list",
+        "templates_show",
+        "slug",
+        "config",
     ] {
         assert!(tools.contains(&t), "{t}");
     }
@@ -77,4 +104,50 @@ fn mcp_lists_and_calls_tools() {
     assert!(text(&replies[5]).contains("unknown argument"));
     assert!(text(&replies[6]).contains("soul/VOICE.md"));
     assert_eq!(replies[7]["error"]["code"], -32601);
+}
+
+#[test]
+fn mcp_remote_serves_http() {
+    use std::io::{BufRead, BufReader, Read, Write};
+    let mut child = std::process::Command::new(env!("CARGO_BIN_EXE_owo"))
+        .env_remove("OWO_ROOT")
+        .env_remove("OWO_IDENTITY")
+        .env_remove("OWO_PROJECT")
+        .arg("--root")
+        .arg(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("examples"))
+        .args(["-i", "nicole", "mcp", "--remote", "--port", "0"])
+        .stdout(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    let mut url = String::new();
+    BufReader::new(child.stdout.take().unwrap())
+        .read_line(&mut url)
+        .unwrap();
+    let host = url
+        .trim()
+        .strip_prefix("http://")
+        .and_then(|u| u.strip_suffix("/mcp"))
+        .unwrap()
+        .to_string();
+    let post = |body: &str| {
+        let mut s = std::net::TcpStream::connect(&host).unwrap();
+        write!(
+            s,
+            "POST /mcp HTTP/1.1\r\nHost: {host}\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{body}",
+            body.len()
+        )
+        .unwrap();
+        let mut reply = String::new();
+        s.read_to_string(&mut reply).unwrap();
+        reply
+    };
+    let reply = post(
+        r#"{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"resolve","arguments":{"name":"First Firing"}}}"#,
+    );
+    let notify = post(r#"{"jsonrpc":"2.0","method":"notifications/initialized"}"#);
+    child.kill().unwrap();
+    child.wait().unwrap();
+    assert!(reply.starts_with("HTTP/1.1 200 OK"), "{reply}");
+    assert!(reply.contains("life/events/first-firing.md"));
+    assert!(notify.starts_with("HTTP/1.1 202"), "{notify}");
 }
