@@ -120,7 +120,10 @@ pub fn packet(id: &Identity) -> Packet {
                 .map(str::to_string)
             })
             .unwrap_or_default();
-        if last.as_deref().is_some_and(|l| updated.as_str() <= l) || e.rel == "soul/MEMORY.md" {
+        // A file with no stamp yet is new since the last stamp, so it counts as changed.
+        let reviewed =
+            !updated.is_empty() && last.as_deref().is_some_and(|l| updated.as_str() <= l);
+        if reviewed || e.rel == "soul/MEMORY.md" {
             continue;
         }
         changed.push(Changed {

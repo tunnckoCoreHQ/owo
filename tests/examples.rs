@@ -476,3 +476,20 @@ fn changes_and_lint_changed_read_git() {
         "{v}"
     );
 }
+
+#[test]
+fn review_lists_unstamped_files() {
+    let tmp = copy("reviewer");
+    owo(tmp.path(), "reviewer")
+        .args(["add", "lesson", "Fresh Lesson"])
+        .assert()
+        .success();
+    let p = json(owo(tmp.path(), "reviewer").arg("review"));
+    assert!(p["data"]
+        .to_string()
+        .contains("life/lessons/fresh-lesson.md"));
+    owo(tmp.path(), "reviewer")
+        .args(["state", "--days", "99999"])
+        .assert()
+        .code(2);
+}

@@ -167,12 +167,12 @@ enum Command {
     /// Derived current state: activity, recent days and events, open threads, review
     State {
         /// Window for recent events
-        #[arg(long, default_value_t = 14)]
+        #[arg(long, default_value_t = 14, value_parser = clap::value_parser!(i64).range(0..=36500))]
         days: i64,
     },
     /// Files updated in the last N days
     Recent {
-        #[arg(long, default_value_t = 7)]
+        #[arg(long, default_value_t = 7, value_parser = clap::value_parser!(i64).range(0..=36500))]
         days: i64,
     },
     /// BM25 search over titles, aliases, summaries and bodies
