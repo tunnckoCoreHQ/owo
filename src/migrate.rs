@@ -143,6 +143,11 @@ fn migrate_locations(
 ) -> Result<()> {
     let mut write = |from: &Path, text: &str, to: String, kind: &str, parent: Option<&str>| {
         let target = dir.join(&to);
+        if target.exists() {
+            r.skipped
+                .push(format!("{} (target {to} exists; merge by hand)", rel(from)));
+            return anyhow::Ok(());
+        }
         fs::create_dir_all(target.parent().expect("inside life/locations"))?;
         let stem = from.file_stem().map(|s| s.to_string_lossy().into_owned());
         let stem = stem.unwrap_or_default();
@@ -339,9 +344,17 @@ pub fn v1(src: &Path, out: &Path) -> Result<Report> {
                     date.clone().unwrap_or_default(),
                     slugify(if rest.is_empty() { "entry" } else { &rest })
                 ),
-                _ => format!("{}.md", slugify(&rest)),
+                _ if !slugify(&rest).is_empty() => format!("{}.md", slugify(&rest)),
+                _ => format!("{}.md", slugify(&title_of(&text, &label))),
             };
             let target = dir.join(to).join(&name);
+            if target.exists() {
+                r.skipped.push(format!(
+                    "{} (target {to}/{name} exists; merge by hand)",
+                    rel(&p)
+                ));
+                continue;
+            }
             fs::write(
                 &target,
                 normalize(
@@ -358,13 +371,20 @@ pub fn v1(src: &Path, out: &Path) -> Result<Report> {
     }
     migrate_locations(&world.join("locations"), &dir, &today, &rel, &mut r)?;
     if let Ok(text) = fs::read_to_string(world.join("meta/conflicts.md")) {
-        for block in text.split("\n## ").skip(1) {
+        for block in format!("\n{text}").split("\n## ").skip(1) {
             let (title, body) = block.split_once('\n').unwrap_or((block, ""));
             let slug = slugify(title);
             if slug.is_empty() {
                 continue;
             }
             let file = format!("life/conflicts/{slug}.md");
+            if dir.join(&file).exists() {
+                r.skipped.push(format!(
+                    "references/world/meta/conflicts.md ## {} (target {file} exists; merge by hand)",
+                    title.trim()
+                ));
+                continue;
+            }
             let doc = format!(
                 "# {}\n\n## Account A\n\n{}\n\n## Account B\n\n## Resolution\n",
                 title.trim(),

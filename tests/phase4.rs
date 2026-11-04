@@ -181,6 +181,7 @@ fn migrate_v1_fixture() {
         "life/locations/the-lighthouse/lamp-room.md",
         "life/locations/harbour/overview.md",
         "life/threads/paint-the-door.md",
+        "life/events/lantern-night.md",
     ] {
         assert!(out.join(f).is_file(), "{f}");
     }
@@ -196,6 +197,18 @@ fn migrate_v1_fixture() {
         "{room}"
     );
     assert!(!skipped.contains("locations"), "{skipped}");
+    assert!(
+        skipped.contains("2026-01-02_extra.md (target life/log/2026-01-02.md exists"),
+        "{skipped}"
+    );
+    assert_eq!(
+        fs::read_to_string(out.join("life/log/2026-01-02.md"))
+            .unwrap()
+            .trim_end()
+            .lines()
+            .last(),
+        Some("Calm.")
+    );
     let id: Value =
         serde_json::from_str(&fs::read_to_string(out.join("identity.json")).unwrap()).unwrap();
     assert_eq!(id["name"], "Lumen");
