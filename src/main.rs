@@ -408,7 +408,7 @@ fn run(cli: &Cli, out: &Out) -> Result<i32> {
                     ("removed", &report.removed),
                 ] {
                     for p in list {
-                        println!("{label} {p}");
+                        out.say(format!("{label} {p}"));
                     }
                 }
                 if clean {
@@ -441,7 +441,7 @@ fn run(cli: &Cli, out: &Out) -> Result<i32> {
                 env.print();
             } else {
                 for p in &paths {
-                    println!("{}{p}", if *check { "stale " } else { "wrote " });
+                    out.say(format!("{}{p}", if *check { "stale " } else { "wrote " }));
                 }
                 if paths.is_empty() {
                     out.say("generated files are up to date");

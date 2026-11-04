@@ -1,0 +1,25 @@
+{
+  "specVersion": "0.5",
+  "name": "reviewer",
+  "displayName": "Reviewer",
+  "version": "0.2.0",
+  "description": "Reviewer.",
+  "author": {
+    "name": ""
+  },
+  "license": "UNLICENSED",
+  "tags": [],
+  "category": "",
+  "files": {
+    "soul": "SOUL.md",
+    "identity": "IDENTITY.md",
+    "style": "VOICE.md"
+  },
+  "examples": {
+    "good": "examples/good.md",
+    "bad": "examples/bad.md"
+  },
+  "disclosure": {
+    "summary": "Reviewer."
+  }
+}

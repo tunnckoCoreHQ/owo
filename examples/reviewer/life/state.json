@@ -1,0 +1,95 @@
+{
+  "files": {
+    "characters/mina-okafor.md": {
+      "created": "2026-11-04T03:33:55Z",
+      "updated": "2026-11-04T03:33:55Z",
+      "hash": "b3:76f45f1411137c54d45b818e2eaf0a406226c07fb17afd86ab8f9f099f8e6fcd"
+    },
+    "characters/priya-sand.md": {
+      "created": "2026-11-04T03:33:55Z",
+      "updated": "2026-11-04T03:33:55Z",
+      "hash": "b3:34d396fd0811016f9c7d671038fce9d5567f67f37a2ce5b194513569444ec7f3"
+    },
+    "characters/teo-brandt.md": {
+      "created": "2026-11-04T03:33:55Z",
+      "updated": "2026-11-04T03:33:55Z",
+      "hash": "b3:f56b7b05a48f548fda77e6cf391c6a3da7c7c6702a91b8475f66dfa26057bea9"
+    },
+    "events/the-rollback.md": {
+      "created": "2026-11-04T03:33:55Z",
+      "updated": "2026-11-04T03:33:55Z",
+      "hash": "b3:dae11da81d62c2a80205139a9341e31b2aec2ae2607e6d9e11acd7839e2d1b5f"
+    },
+    "lessons/name-the-risk.md": {
+      "created": "2026-11-04T03:33:55Z",
+      "updated": "2026-11-04T03:33:55Z",
+      "hash": "b3:08f2214fabd6f013cace97daa50a3faf7702d24caf31df0da3dfcebb0bfd3f5e"
+    },
+    "lessons/read-the-tests-first.md": {
+      "created": "2026-11-04T03:33:55Z",
+      "updated": "2026-11-04T03:33:55Z",
+      "hash": "b3:1de8102812841adc86672f4dea67c2165f2c7cc8e08f788db043047b21ddf465"
+    },
+    "lessons/small-diffs-win.md": {
+      "created": "2026-11-04T03:33:55Z",
+      "updated": "2026-11-04T03:33:55Z",
+      "hash": "b3:e0453ebd3c054999221872de6ad433be1c23c61c2ecf7de70d42ffa387216cdb"
+    },
+    "log/2026-10-22.md": {
+      "created": "2026-11-04T03:33:55Z",
+      "updated": "2026-11-04T03:33:55Z",
+      "hash": "b3:4ff85835a3d8675c3355180ea13caa332f1eb0a12c84d36d99d46ea97827e932"
+    },
+    "log/2026-10-23.md": {
+      "created": "2026-11-04T03:33:55Z",
+      "updated": "2026-11-04T03:33:55Z",
+      "hash": "b3:5bd9ab13f028b52600bd65b22e8079e46b70bb372b565a32d66eb0b5d958e26b"
+    },
+    "log/2026-10-24.md": {
+      "created": "2026-11-04T03:33:55Z",
+      "updated": "2026-11-04T03:33:55Z",
+      "hash": "b3:cf19eb52b54c06e6fece7c72202921b7a51cec13e543c93ce31de1e9c4e84545"
+    },
+    "log/2026-10-27.md": {
+      "created": "2026-11-04T03:33:55Z",
+      "updated": "2026-11-04T03:33:55Z",
+      "hash": "b3:515317e70bccee794bdbff74d4487da1c4e92c62a6d1d62aadf5ca2eee1741e7"
+    },
+    "log/2026-10-28.md": {
+      "created": "2026-11-04T03:33:55Z",
+      "updated": "2026-11-04T03:33:55Z",
+      "hash": "b3:95f9e52800f0f9770137a98ca4addb96b0825d9a13ba7d8f08437bc0a805acf7"
+    },
+    "log/2026-10-29.md": {
+      "created": "2026-11-04T03:33:55Z",
+      "updated": "2026-11-04T03:33:55Z",
+      "hash": "b3:8905e9dc338eb59f56c2e89bef8e6f19e72f44dc19a944eb7f60d66f1746ad50"
+    },
+    "log/2026-10-30.md": {
+      "created": "2026-11-04T03:33:55Z",
+      "updated": "2026-11-04T03:33:55Z",
+      "hash": "b3:b1719894bae0a67282dd2fc7781921f20ac199c62ecf112658ac27b9df722efc"
+    },
+    "log/2026-11-02.md": {
+      "created": "2026-11-04T03:33:55Z",
+      "updated": "2026-11-04T03:33:55Z",
+      "hash": "b3:90312b99dfe867e3279a610b8c9aa71e9a737a0624962c21494ad7276d0f5069"
+    },
+    "log/2026-11-03.md": {
+      "created": "2026-11-04T03:33:55Z",
+      "updated": "2026-11-04T03:33:55Z",
+      "hash": "b3:0b4b108404651417740a8f107a90210ed62d06769b05cfb4f843ca2924487d4e"
+    },
+    "threads/flaky-cache-test.md": {
+      "created": "2026-11-04T03:33:55Z",
+      "updated": "2026-11-04T03:33:55Z",
+      "hash": "b3:b6a7b9639343801ad32f6049b323f844bb6f2bee9cb50ff8f86dc30155838b23"
+    },
+    "writing/2026-11-04_review-opinions.md": {
+      "created": "2026-11-04T03:33:55Z",
+      "updated": "2026-11-04T03:33:55Z",
+      "hash": "b3:50890442fa24956ca69924e091ee003c0584e34c2dd119c5f376921c97281141"
+    }
+  },
+  "last_write": "2026-11-04T03:33:55Z"
+}

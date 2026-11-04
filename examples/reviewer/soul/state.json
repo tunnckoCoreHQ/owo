@@ -1,0 +1,50 @@
+{
+  "files": {
+    "IDENTITY.md": {
+      "created": "2026-11-04T03:32:32Z",
+      "updated": "2026-11-04T03:33:55Z",
+      "hash": "b3:1c1d9e53ae4da56f9bf3999dec1ccb8fa18b07214eafa79955fdec22b605a797"
+    },
+    "LOOK.md": {
+      "created": "2026-11-04T03:32:32Z",
+      "updated": "2026-11-04T03:33:55Z",
+      "hash": "b3:3e47e73088f2a261cd5061f0caab73123c97ff53e346b7fb3660a5c5ad38abf1"
+    },
+    "MEMORY.md": {
+      "created": "2026-11-04T03:32:32Z",
+      "updated": "2026-11-04T03:33:55Z",
+      "hash": "b3:cc84dab1555831e32673614dd6dd827661c9020e65cc06b5cc375ffb1aa2548c"
+    },
+    "SOUL.md": {
+      "created": "2026-11-04T03:32:32Z",
+      "updated": "2026-11-04T03:33:55Z",
+      "hash": "b3:a62cba1e2c52b66d53f4f5115a747bfb6e7b25fd0c0a3f292a8ef13307d13301"
+    },
+    "VOICE.md": {
+      "created": "2026-11-04T03:32:32Z",
+      "updated": "2026-11-04T03:33:55Z",
+      "hash": "b3:9156d556132445da7ed11584a67890fac49c1d9067fce4ff5d27ee878deea686"
+    },
+    "examples/bad.md": {
+      "created": "2026-11-04T03:32:32Z",
+      "updated": "2026-11-04T03:32:32Z",
+      "hash": "b3:9dfb64d2e060038ed3b2657c880d4a2a26d9f4ed1a6e18b51e78e06926b94ff2"
+    },
+    "examples/good.md": {
+      "created": "2026-11-04T03:32:32Z",
+      "updated": "2026-11-04T03:32:32Z",
+      "hash": "b3:6f91a2d25554f25f47a740b2657f6a909fa54c92a883b1b1d38c0bf3eaaa4e8a"
+    },
+    "examples/greetings.md": {
+      "created": "2026-11-04T03:32:32Z",
+      "updated": "2026-11-04T03:32:32Z",
+      "hash": "b3:e59a4014d39729cacb02bde15cfc32d01f2464f4b27d5ea8bfb656d171236f06"
+    }
+  },
+  "history": [],
+  "review": {
+    "last_reviewed": "2026-11-04T03:34:02Z",
+    "reviewed_through": "2026-11-03",
+    "memory_hash": "b3:cc84dab1555831e32673614dd6dd827661c9020e65cc06b5cc375ffb1aa2548c"
+  }
+}

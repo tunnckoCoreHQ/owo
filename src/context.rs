@@ -52,15 +52,21 @@ fn item(tier: &'static str, path: &str, reason: &str) -> Item {
     }
 }
 
-/// KB root for a project: identity.json `projects.<p>.kb` (relative to the identity
-/// folder), else the `.owo.toml` value.
+/// KB path for a project: project.md `kb`, else identity.json `projects.<p>.kb`
+/// (both relative to the identity folder), else the `.owo.toml` value.
 pub fn kb_path(id: &Identity, project: &str, config_kb: Option<&Path>) -> Option<PathBuf> {
-    let from_manifest = id
-        .manifest
-        .as_ref()
-        .and_then(|m| m.pointer(&format!("/projects/{project}/kb")))
-        .and_then(|v| v.as_str())
+    let from_note = id
+        .entry(&format!("work/projects/{project}/project.md"))
+        .and_then(|e| e.field_str("kb"))
         .filter(|s| !s.is_empty());
+    let from_manifest = from_note.or_else(|| {
+        id.manifest
+            .as_ref()
+            .and_then(|m| m.pointer(&format!("/projects/{project}/kb")))
+            .and_then(|v| v.as_str())
+            .filter(|s| !s.is_empty())
+            .map(str::to_string)
+    });
     match from_manifest {
         Some(raw) => {
             let p = PathBuf::from(raw);
@@ -123,11 +129,15 @@ pub fn build(id: &Identity, req: &Request) -> Result<Context> {
             Some(path) => {
                 let path = normalize(&path);
                 let exists = path.exists();
-                let entry = ["lat.md", "README.md", "index.md"]
-                    .iter()
-                    .map(|f| path.join(f))
-                    .find(|f| f.is_file())
-                    .map(|f| f.display().to_string());
+                let entry = if path.is_file() {
+                    Some(path.display().to_string())
+                } else {
+                    ["lat.md", "README.md", "index.md"]
+                        .iter()
+                        .map(|f| path.join(f))
+                        .find(|f| f.is_file())
+                        .map(|f| f.display().to_string())
+                };
                 if !exists {
                     warnings.push(format!("project KB not found at {}", path.display()));
                 }
