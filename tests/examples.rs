@@ -411,3 +411,21 @@ fn changes_and_lint_changed() {
         "{lint}"
     );
 }
+
+#[test]
+fn soul_note_counts_distinct_evidence() {
+    let tmp = copy("thea");
+    let v = json(owo(tmp.path(), "thea").args([
+        "soul",
+        "note",
+        "SOUL.md",
+        "--change",
+        "Waiting is part of the craft.",
+        "--evidence",
+        "[[Let It Dry]]",
+        "--evidence",
+        "Let It Dry",
+    ]));
+    assert_eq!(v["warnings"].as_array().unwrap().len(), 1, "{v}");
+    assert_eq!(v["data"]["evidence"].as_array().unwrap().len(), 1);
+}

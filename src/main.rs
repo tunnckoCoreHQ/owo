@@ -70,10 +70,10 @@ enum Command {
     List,
     /// Create an entry from its template at its deterministic path
     Add {
-        /// Entry type: character, location, location-detail, culture, faction, event, era, thread, conflict, lesson, writing, log, journal, project, note
-        #[arg(value_name = "TYPE")]
+        /// Entry type
+        #[arg(value_name = "TYPE", value_parser = clap::builder::PossibleValuesParser::new(templates::ENTRY_TEMPLATES.iter().map(|(n, _)| *n)))]
         kind: String,
-        /// Title (for log: optional day title)
+        /// Title (a log without one is titled by its date)
         title: Vec<String>,
         /// Date for dated entries (default: today)
         #[arg(long)]

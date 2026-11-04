@@ -318,6 +318,7 @@ pub fn soul_note(id: &Identity, file: &str, change: &str, evidence: &[String]) -
         bail!("--change is empty");
     }
     let mut links = vec![];
+    let mut seen = std::collections::BTreeSet::new();
     let mut defining = false;
     for raw in evidence {
         let name = raw.trim().trim_start_matches("[[").trim_end_matches("]]");
@@ -326,7 +327,9 @@ pub fn soul_note(id: &Identity, file: &str, change: &str, evidence: &[String]) -
                 let e = &id.entries[i];
                 defining |=
                     e.kind == Kind::Event && e.field_str("defining").as_deref() == Some("true");
-                links.push(format!("[[{name}]]"));
+                if seen.insert(i) {
+                    links.push(format!("[[{name}]]"));
+                }
             }
             _ => bail!("evidence [[{name}]] does not resolve"),
         }

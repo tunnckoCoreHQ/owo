@@ -757,7 +757,7 @@ fn soul_evidence(c: &mut Ctx) {
     };
     let mut found = vec![];
     for (n, record) in history.iter().enumerate() {
-        let evidence: Vec<usize> = record
+        let evidence: std::collections::BTreeSet<usize> = record
             .get("evidence")
             .and_then(Json::as_array)
             .map(|items| {
