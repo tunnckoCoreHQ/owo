@@ -53,7 +53,7 @@ fn item(tier: &'static str, path: &str, reason: &str) -> Item {
 }
 
 /// KB path for a project: project.md `kb`, else identity.json `projects.<p>.kb`
-/// (both relative to the identity folder), else the `.owo.toml` value.
+/// (both relative to the identity folder; `~/` is the home folder), else the `.owo.toml` value.
 pub fn kb_path(id: &Identity, project: &str, config_kb: Option<&Path>) -> Option<PathBuf> {
     let from_note = id
         .entry(&format!("work/projects/{project}/project.md"))
@@ -69,7 +69,11 @@ pub fn kb_path(id: &Identity, project: &str, config_kb: Option<&Path>) -> Option
     });
     match from_manifest {
         Some(raw) => {
-            let p = PathBuf::from(raw);
+            let home = std::env::var_os("HOME").map(PathBuf::from);
+            let p = match (raw.strip_prefix("~/"), home) {
+                (Some(rest), Some(home)) => home.join(rest),
+                _ => PathBuf::from(raw),
+            };
             Some(if p.is_absolute() { p } else { id.dir.join(p) })
         }
         None => config_kb.map(Path::to_path_buf),

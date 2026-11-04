@@ -498,3 +498,31 @@ fn sync_waits_for_a_pending_run() {
     assert_eq!(v["data"]["from"], 0, "the unfinished run is covered again");
     assert!(!tmp.path().join(".owo/sessions/s2.lock").exists());
 }
+
+#[test]
+fn kb_path_expands_home() {
+    let tmp = copy_example("thea");
+    let home = tmp.path().join("home");
+    fs::create_dir_all(home.join("kb/mural")).unwrap();
+    owo(tmp.path())
+        .args([
+            "-i",
+            "thea",
+            "add",
+            "project",
+            "Mural",
+            "--kb",
+            "~/kb/mural",
+        ])
+        .assert()
+        .success();
+    let v = json(owo(tmp.path()).env("HOME", &home).args([
+        "-i",
+        "thea",
+        "--project",
+        "mural",
+        "context",
+        "--no-touch",
+    ]));
+    assert_eq!(v["data"]["kb"]["exists"], true, "{v}");
+}
