@@ -50,3 +50,4 @@
 - Renamed the example identity `thea` to `nicole` (nickname Nikki), so the real Thea has its slug. `owo add <type>` without a title is a usage error (exit 2), except for `log`.
 - `owo mcp` exposes every command as a tool, and `--remote [ADDR] [--port N]` serves it over HTTP at `/mcp` (port 4224 or the next free one), printing the URL.
 - Dependencies: `toml` 1.x; `serde_yaml` (archived) replaced by `serde-saphyr`, with frontmatter held as `serde_json` values.
+- Migrate drops v1 `index.md` files and maps other status values to canon; `dupes` ignores `## Sources`.

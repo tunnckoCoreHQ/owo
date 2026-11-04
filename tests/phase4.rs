@@ -197,6 +197,10 @@ fn migrate_v1_fixture() {
         "{room}"
     );
     assert!(!skipped.contains("locations"), "{skipped}");
+    assert!(!skipped.contains("index.md") && !out.join("life/characters/index.md").exists());
+    assert!(fs::read_to_string(out.join("life/characters/ada.md"))
+        .unwrap()
+        .contains("status: canon"));
     assert!(
         skipped.contains("2026-01-02_extra.md (target life/log/2026-01-02.md exists"),
         "{skipped}"

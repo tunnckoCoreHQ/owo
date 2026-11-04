@@ -103,6 +103,13 @@ fn normalize(
     }
     set("sources", json!([]));
     map.insert("type".to_string(), Value::from(kind));
+    // v1 status values such as "established" mean canon.
+    if !matches!(
+        map.get("status").and_then(Value::as_str),
+        Some("canon" | "disputed" | "superseded")
+    ) {
+        map.insert("status".to_string(), Value::from("canon"));
+    }
     let fm = serde_saphyr::to_string(&map).unwrap_or_default();
     let body = if first_heading(split.body).is_some() {
         split.body.trim_start().to_string()
@@ -155,7 +162,10 @@ fn migrate_locations(
         r.moved.push((rel(from), to));
         anyhow::Ok(())
     };
-    let loose = md_files(locs);
+    let loose: Vec<PathBuf> = md_files(locs)
+        .into_iter()
+        .filter(|p| !matches!(stem_of(p).as_str(), "index" | "_index"))
+        .collect();
     let mut used: Vec<PathBuf> = vec![];
     let mut folders: Vec<PathBuf> = fs::read_dir(locs)
         .into_iter()
@@ -303,7 +313,11 @@ pub fn v1(src: &Path, out: &Path) -> Result<Report> {
         ("threads", "life/threads", "thread", false),
     ];
     for (from, to, kind, dated) in groups {
-        for p in md_files(&world.join(from)) {
+        // v1 index files are generated; owo writes its own.
+        for p in md_files(&world.join(from))
+            .into_iter()
+            .filter(|p| !matches!(stem_of(p).as_str(), "index" | "_index"))
+        {
             let stem = p
                 .file_stem()
                 .and_then(|s| s.to_str())
@@ -419,7 +433,9 @@ pub fn v1(src: &Path, out: &Path) -> Result<Report> {
     for e in walkdir::WalkDir::new(&refs)
         .into_iter()
         .flatten()
-        .filter(|e| e.file_type().is_file())
+        .filter(|e| {
+            e.file_type().is_file() && !matches!(stem_of(e.path()).as_str(), "index" | "_index")
+        })
     {
         let p = rel(e.path());
         if !known.contains(&p) && !r.skipped.iter().any(|s| s.starts_with(&p)) {
