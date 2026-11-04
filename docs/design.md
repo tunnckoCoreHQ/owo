@@ -709,7 +709,7 @@ overlap = 2
 
 ### 7.4 Build notes
 
-- Crates: `clap`, `serde`, `serde_json`, `serde_yaml`, `walkdir`, `pulldown-cmark`, `tantivy`, `blake3`, `deunicode`, `strsim`, `minijinja`, `png`.
+- Crates: `clap`, `serde`, `serde_json`, `serde-saphyr`, `walkdir`, `pulldown-cmark`, `tantivy`, `blake3`, `deunicode`, `strsim`, `minijinja`, `png`.
 - Templates are embedded with `include_str!` and can be overridden from `.templates/`.
 - Every command works on files. `.owo/` is a cache that can be deleted at any time.
 - Tests use fixture identities under `tests/fixtures/`.

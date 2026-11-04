@@ -1,10 +1,11 @@
 //! Loads one identity folder into memory: manifest, state files and every Markdown entry.
 
 use crate::markdown;
+use crate::markdown::Fields;
 use crate::slug::slugify;
 use anyhow::{Context, Result};
 use serde_json::Value as Json;
-use serde_yaml::{Mapping, Value as Yaml};
+use serde_json::Value as Yaml;
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -98,7 +99,7 @@ pub struct Entry {
     pub rel: String,
     pub kind: Kind,
     pub text: String,
-    pub frontmatter: Option<Mapping>,
+    pub frontmatter: Option<Fields>,
     pub frontmatter_error: Option<String>,
     pub title: Option<String>,
     pub aliases: Vec<String>,
@@ -110,9 +111,7 @@ impl Entry {
     }
 
     pub fn field(&self, key: &str) -> Option<&Yaml> {
-        self.frontmatter
-            .as_ref()?
-            .get(Yaml::String(key.to_string()))
+        self.frontmatter.as_ref()?.get(key)
     }
 
     pub fn field_str(&self, key: &str) -> Option<String> {
@@ -189,11 +188,9 @@ fn parse_entry(rel: String, text: String) -> Entry {
     let mut frontmatter = None;
     let mut frontmatter_error = None;
     if let Some(fm) = split.frontmatter {
-        match serde_yaml::from_str::<Yaml>(fm) {
-            Ok(Yaml::Mapping(m)) => frontmatter = Some(m),
-            Ok(Yaml::Null) => frontmatter = Some(Mapping::new()),
-            Ok(_) => frontmatter_error = Some("frontmatter is not a mapping".into()),
-            Err(e) => frontmatter_error = Some(e.to_string()),
+        match markdown::parse_frontmatter(fm) {
+            Ok(m) => frontmatter = Some(m),
+            Err(e) => frontmatter_error = Some(e),
         }
     }
     let heading = markdown::first_heading(split.body);
@@ -210,7 +207,7 @@ fn parse_entry(rel: String, text: String) -> Entry {
         .field_str("title")
         .filter(|t| !t.trim().is_empty())
         .or(heading);
-    if let Some(Yaml::Sequence(items)) = entry.field("aliases") {
+    if let Some(Yaml::Array(items)) = entry.field("aliases") {
         entry.aliases = items
             .iter()
             .filter_map(|v| v.as_str().map(str::to_string))

@@ -7,7 +7,7 @@ use crate::slug::is_slug;
 use crate::{index, state};
 use chrono::{DateTime, NaiveDate, Utc};
 use serde_json::Value as Json;
-use serde_yaml::Value as Yaml;
+use serde_json::Value as Yaml;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fs;
 
@@ -271,7 +271,7 @@ fn check_entry_schema(e: &Entry, out: &mut Vec<Diagnostic>) {
     for key in ["aliases", "sources"] {
         match e.field(key) {
             None | Some(Yaml::Null) => {}
-            Some(Yaml::Sequence(items)) if items.iter().all(|i| i.is_string()) => {}
+            Some(Yaml::Array(items)) if items.iter().all(|i| i.is_string()) => {}
             Some(_) => out.push(err(
                 "schema",
                 rel,

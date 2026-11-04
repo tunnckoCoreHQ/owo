@@ -1,11 +1,11 @@
 //! `owo migrate v1 <path> --out <root>/<slug>`: the mechanical part of moving a v1
 //! identity (a `references/` tree) into the owo layout. Prints a checklist for the rest.
 
+use crate::markdown::{parse_frontmatter, Fields};
 use crate::slug::slugify;
 use anyhow::{bail, Context, Result};
 use serde::Serialize;
 use serde_json::{json, Value};
-use serde_yaml::{Mapping, Value as Yaml};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -39,10 +39,10 @@ fn first_heading(body: &str) -> Option<String> {
         .map(|s| s.trim().to_string())
 }
 
-fn frontmatter(text: &str) -> Mapping {
+fn frontmatter(text: &str) -> Fields {
     crate::markdown::split(text)
         .frontmatter
-        .and_then(|fm| serde_yaml::from_str(fm).ok())
+        .and_then(|fm| parse_frontmatter(fm).ok())
         .unwrap_or_default()
 }
 
@@ -50,7 +50,7 @@ fn frontmatter(text: &str) -> Mapping {
 fn title_of(text: &str, stem: &str) -> String {
     frontmatter(text)
         .get("title")
-        .and_then(Yaml::as_str)
+        .and_then(Value::as_str)
         .map(str::to_string)
         .or_else(|| first_heading(crate::markdown::split(text).body))
         .unwrap_or_else(|| stem.replace('-', " "))
@@ -69,41 +69,41 @@ fn normalize(
     let split = crate::markdown::split(text);
     let mut map = frontmatter(text);
     let title = title_of(text, stem);
-    let mut set = |k: &str, v: Yaml| {
+    let mut set = |k: &str, v: Value| {
         if !map.contains_key(k) {
-            map.insert(Yaml::from(k), v);
+            map.insert(k.to_string(), v);
         }
     };
-    set("type", Yaml::from(kind));
-    set("title", Yaml::from(title.as_str()));
-    set("aliases", Yaml::Sequence(vec![]));
-    set("summary", Yaml::from(""));
-    set("status", Yaml::from("canon"));
-    set("created", Yaml::from(date.unwrap_or(today)));
-    set("updated", Yaml::from(today));
+    set("type", Value::from(kind));
+    set("title", Value::from(title.as_str()));
+    set("aliases", json!([]));
+    set("summary", Value::from(""));
+    set("status", Value::from("canon"));
+    set("created", Value::from(date.unwrap_or(today)));
+    set("updated", Value::from(today));
     if let Some(d) = date {
-        set("date", Yaml::from(d));
+        set("date", Value::from(d));
     }
     match kind {
         "character" => {
-            set("pronouns", Yaml::from(""));
-            set("kind", Yaml::from("person"));
+            set("pronouns", Value::from(""));
+            set("kind", Value::from("person"));
         }
         "event" => {
-            set("places", Yaml::Sequence(vec![]));
-            set("people", Yaml::Sequence(vec![]));
+            set("places", json!([]));
+            set("people", json!([]));
         }
-        "lesson" => set("evidence", Yaml::Sequence(vec![])),
-        "conflict" | "thread" => set("state", Yaml::from("open")),
+        "lesson" => set("evidence", json!([])),
+        "conflict" | "thread" => set("state", Value::from("open")),
         "location-detail" => set(
             "parent",
-            Yaml::from(format!("[[{}]]", parent.unwrap_or_default())),
+            Value::from(format!("[[{}]]", parent.unwrap_or_default())),
         ),
         _ => {}
     }
-    set("sources", Yaml::Sequence(vec![]));
-    map.insert(Yaml::from("type"), Yaml::from(kind));
-    let fm = serde_yaml::to_string(&map).unwrap_or_default();
+    set("sources", json!([]));
+    map.insert("type".to_string(), Value::from(kind));
+    let fm = serde_saphyr::to_string(&map).unwrap_or_default();
     let body = if first_heading(split.body).is_some() {
         split.body.trim_start().to_string()
     } else {
@@ -318,8 +318,8 @@ pub fn v1(src: &Path, out: &Path) -> Result<Report> {
             let text = fs::read_to_string(&p)?;
             let date = date.or_else(|| {
                 let fm = crate::markdown::split(&text).frontmatter?;
-                let m: Mapping = serde_yaml::from_str(fm).ok()?;
-                m.get("date").and_then(Yaml::as_str).map(str::to_string)
+                let m = parse_frontmatter(fm).ok()?;
+                m.get("date").and_then(Value::as_str).map(str::to_string)
             });
             if *kind == "event" && date.is_none() {
                 r.skipped

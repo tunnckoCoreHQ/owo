@@ -19,8 +19,8 @@ deunicode = "1"
 regex = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }
-serde_yaml = "0.9"
-toml = "0.8"
+serde-saphyr = "2"
+toml = "1"
 walkdir = "2"
 
 [target.'cfg(unix)'.dependencies]

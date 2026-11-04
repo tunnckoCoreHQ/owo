@@ -43,6 +43,22 @@ pub fn split(text: &str) -> Split<'_> {
     }
 }
 
+/// Frontmatter fields, keyed by name.
+pub type Fields = serde_json::Map<String, serde_json::Value>;
+
+/// Parses YAML frontmatter into fields. Empty frontmatter has no fields.
+pub fn parse_frontmatter(fm: &str) -> Result<Fields, String> {
+    if fm.trim().is_empty() {
+        return Ok(Fields::new());
+    }
+    match serde_saphyr::from_str::<serde_json::Value>(fm) {
+        Ok(serde_json::Value::Object(m)) => Ok(m),
+        Ok(serde_json::Value::Null) => Ok(Fields::new()),
+        Ok(_) => Err("frontmatter is not a mapping".into()),
+        Err(e) => Err(e.to_string()),
+    }
+}
+
 /// Level and text of an ATX heading line (`# ` to `###### `).
 pub fn heading(line: &str) -> Option<(usize, &str)> {
     let level = line.chars().take_while(|c| *c == '#').count();

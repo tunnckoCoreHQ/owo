@@ -193,7 +193,7 @@ fn migrate_v1_fixture() {
     assert!(skipped.contains("changelog.md") && skipped.contains("notes.txt"));
     let room = fs::read_to_string(out.join("life/locations/the-lighthouse/lamp-room.md")).unwrap();
     assert!(
-        room.contains("type: location-detail") && room.contains("parent: '[[The Lighthouse]]'"),
+        room.contains("type: location-detail") && room.contains("parent: \"[[The Lighthouse]]\""),
         "{room}"
     );
     assert!(!skipped.contains("locations"), "{skipped}");
