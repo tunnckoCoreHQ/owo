@@ -1,8 +1,8 @@
-//! Built-in templates, embedded in the binary. `<root>/.templates/<name>` overrides one.
+//! Built-in templates, embedded in the binary. `<root>/.templates/<file>` overrides one.
 
 use std::collections::BTreeMap;
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 /// Templates used by `owo new`, keyed by their identity-relative output path.
 pub const IDENTITY_FILES: &[(&str, &str)] = &[
@@ -65,22 +65,29 @@ pub const ENTRY_TEMPLATES: &[(&str, &str)] = &[
     ("note", include_str!("../templates/entries/note.md")),
 ];
 
-/// Returns the template text for a name, preferring `<root>/.templates/<name>`.
+/// Every template as (name shown by `owo templates`, file name looked up in `.templates/`, built-in text).
+pub fn all() -> Vec<(&'static str, String, &'static str)> {
+    IDENTITY_FILES
+        .iter()
+        .map(|(n, t)| (*n, n.to_string(), *t))
+        .chain(
+            ENTRY_TEMPLATES
+                .iter()
+                .map(|(n, t)| (*n, format!("{n}.md"), *t)),
+        )
+        .collect()
+}
+
+/// The override for a template: `<root>/.templates/<file>`, where `<file>` is the name from `all`.
+pub fn override_path(root: &Path, file: &str) -> Option<PathBuf> {
+    Some(root.join(".templates").join(file)).filter(|p| p.is_file())
+}
+
+/// Returns the template text for a name, preferring its override in `<root>/.templates/`.
 pub fn get(root: &Path, name: &str, builtin: &str) -> String {
-    let file = Path::new(name)
-        .file_name()
-        .map(|f| f.to_os_string())
-        .unwrap_or_default();
-    let candidates = [
-        root.join(".templates").join(name),
-        root.join(".templates").join(file),
-    ];
-    for path in candidates {
-        if let Ok(text) = fs::read_to_string(&path) {
-            return text;
-        }
-    }
-    builtin.to_string()
+    override_path(root, name)
+        .and_then(|p| fs::read_to_string(p).ok())
+        .unwrap_or_else(|| builtin.to_string())
 }
 
 /// Replaces `{{key}}` placeholders. Keys ending in `_yaml` get double-quote escaping.

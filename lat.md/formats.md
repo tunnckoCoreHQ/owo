@@ -40,6 +40,6 @@ Identity resolves from `-i`, `OWO_IDENTITY`, `.owo.toml`, user config, then the 
 
 ## Templates
 
-Templates are embedded in the binary; a file with the same name in `<root>/.templates/` overrides one.
+Templates are embedded in the binary. `<root>/.templates/<name>` overrides one, where `<name>` is the identity-relative path for identity files (`soul/IDENTITY.md`, `work/README.md`) and `<type>.md` for entries (`character.md`).
 
 Placeholders are `{{name}}`, `{{slug}}`, `{{title}}`, `{{today}}`, `{{date}}`, `{{parent}}`, `{{project}}`. A `{{key_yaml}}` form escapes double quotes for YAML strings.

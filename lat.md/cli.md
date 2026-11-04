@@ -29,7 +29,7 @@ The implemented command set; see `docs/design.md` section 7 for the full plan.
 - `owo export card [--spec v3|v2] [--scenario <name>] [--png <avatar> --out <file>]`, `owo export soulspec --out <dir>`, `owo export skill --out <dir>`; see [[cli#Export]].
 - `owo sync start` and `owo sync done`; see [[cli#Sync]].
 - `owo migrate v1 <path> --out <root>/<slug>`; see [[decisions#Migrate is mechanical]].
-- `owo list` prints slug, name, last activity and projects per identity. Also `owo slug <text>`, `owo templates [name]`, `owo config`.
+- `owo list` prints slug, name, last activity and projects per identity. Also `owo slug <text>`, `owo templates [list | show <name>]` (list marks overrides), `owo config`.
 
 ## Context
 

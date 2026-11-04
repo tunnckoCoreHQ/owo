@@ -599,7 +599,7 @@ overlap = 2
 : Creates one entry from its template at its deterministic path and prints the path. For `log`, it opens or creates the day's file. Exits 1 when the path exists and prints that path.
 
 `owo templates [list | show <type>]`
-: Lists or prints templates, built in or overridden by `.templates/`.
+: Lists or prints templates, built in or overridden by `.templates/`. An override has the identity-relative path for identity files (`.templates/soul/IDENTITY.md`) and `<type>.md` for entries (`.templates/character.md`).
 
 `owo slug <text>`
 : Prints the slug.

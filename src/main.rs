@@ -111,10 +111,10 @@ enum Command {
     },
     /// Print the slug for a text
     Slug { text: Vec<String> },
-    /// List or show built-in templates
+    /// List templates, or show one (built in, or overridden in <root>/.templates/)
     Templates {
-        /// Template name to print (omit to list)
-        name: Option<String>,
+        #[command(subcommand)]
+        action: Option<TemplatesAction>,
     },
     /// Resolve a name to an entry path the way links do
     Resolve {
@@ -305,7 +305,7 @@ fn run(cli: &Cli, out: &Out) -> Result<i32> {
                 exit::OK
             })
         }
-        Command::Templates { name } => templates_cmd(name.as_deref(), out),
+        Command::Templates { action } => templates_cmd(cli, action.as_ref(), out),
         Command::Config => {
             let r = resolved(cli)?;
             if out.json {
@@ -1023,6 +1023,16 @@ fn run(cli: &Cli, out: &Out) -> Result<i32> {
 }
 
 #[derive(Subcommand)]
+enum TemplatesAction {
+    /// List template names and where each comes from
+    List,
+    /// Print a template as `owo new` and `owo add` would use it
+    Show {
+        /// Template name from `owo templates list`
+        name: String,
+    },
+}
+#[derive(Subcommand)]
 enum ReviewAction {
     /// Record a finished review (dates and the MEMORY.md hash)
     Done {
@@ -1134,41 +1144,43 @@ fn resolve_one(id: &identity::Identity, name: &str) -> Result<usize> {
     }
 }
 
-fn templates_cmd(name: Option<&str>, out: &Out) -> Result<i32> {
-    let all: Vec<(&str, &str)> = templates::IDENTITY_FILES
-        .iter()
-        .chain(templates::ENTRY_TEMPLATES.iter())
-        .copied()
-        .collect();
-    match name {
-        None => {
-            let names: Vec<&str> = all.iter().map(|(n, _)| *n).collect();
+fn templates_cmd(cli: &Cli, action: Option<&TemplatesAction>, out: &Out) -> Result<i32> {
+    let root = resolved(cli)?.root;
+    let all = templates::all();
+    match action {
+        None | Some(TemplatesAction::List) => {
+            let rows: Vec<_> = all
+                .iter()
+                .map(|(name, file, _)| (*name, templates::override_path(&root, file)))
+                .collect();
             if out.json {
-                Envelope::ok(json!({ "templates": names })).print();
+                let list: Vec<_> = rows
+                    .iter()
+                    .map(|(name, path)| json!({ "name": name, "override": path }))
+                    .collect();
+                Envelope::ok(json!({ "templates": list })).print();
             } else {
-                for n in names {
-                    println!("{n}");
+                for (name, path) in rows {
+                    match path {
+                        Some(p) => println!("{name:<28} override {}", p.display()),
+                        None => println!("{name:<28} built-in"),
+                    }
                 }
             }
             Ok(exit::OK)
         }
-        Some(n) => match all.iter().find(|(k, _)| *k == n) {
-            Some((_, text)) => {
-                if out.json {
-                    Envelope::ok(json!({ "name": n, "text": text })).print();
-                } else {
-                    print!("{text}");
-                }
-                Ok(exit::OK)
+        Some(TemplatesAction::Show { name }) => {
+            let Some((name, file, builtin)) = all.iter().find(|(n, _, _)| n == name) else {
+                anyhow::bail!("unknown template {name:?}; run `owo templates` for the list");
+            };
+            let text = templates::get(&root, file, builtin);
+            if out.json {
+                let path = templates::override_path(&root, file);
+                Envelope::ok(json!({ "name": name, "override": path, "text": text })).print();
+            } else {
+                print!("{text}");
             }
-            None => {
-                if out.json {
-                    Envelope::fail(&format!("unknown template {n:?}")).print();
-                } else {
-                    eprintln!("owo: unknown template {n:?}; run `owo templates` for the list");
-                }
-                Ok(exit::PROBLEMS)
-            }
-        },
+            Ok(exit::OK)
+        }
     }
 }

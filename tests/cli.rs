@@ -103,7 +103,10 @@ fn json_envelope_and_exit_codes() {
     assert_eq!(v["ok"], true);
     assert_eq!(v["data"]["slug"], "jays-penthouse");
     owo(tmp.path()).args(["lint"]).assert().code(3);
-    owo(tmp.path()).args(["templates", "nope"]).assert().code(1);
+    owo(tmp.path())
+        .args(["templates", "show", "nope"])
+        .assert()
+        .code(1);
     owo(tmp.path()).args(["bogus"]).assert().code(2);
 }
 
@@ -360,4 +363,48 @@ fn stamp_tracks_changes_by_hash() {
         .args(["-i", "aria", "stamp", "--check"])
         .assert()
         .success();
+}
+
+#[test]
+fn templates_list_show_and_override() {
+    let tmp = TempDir::new().unwrap();
+    let tpl = tmp.path().join(".templates");
+    fs::create_dir_all(tpl.join("soul")).unwrap();
+    let character = "---\ntype: character\ntitle: \"{{title_yaml}}\"\naliases: []\nsummary: \"\"\nstatus: canon\ncreated: {{today}}\nupdated: {{today}}\nsources: []\n---\n\n# {{title}}\n\nCustom.\n";
+    fs::write(tpl.join("character.md"), character).unwrap();
+    fs::write(tpl.join("soul/IDENTITY.md"), "# Custom identity\n").unwrap();
+    fs::write(tpl.join("README.md"), "notes about this folder\n").unwrap();
+
+    let out = owo(tmp.path())
+        .args(["--json", "templates", "list"])
+        .output()
+        .unwrap();
+    let v: Value = serde_json::from_slice(&out.stdout).unwrap();
+    let list = v["data"]["templates"].as_array().unwrap();
+    let row = |n: &str| list.iter().find(|r| r["name"] == n).unwrap().clone();
+    assert!(row("character")["override"].is_string());
+    assert!(row("soul/IDENTITY.md")["override"].is_string());
+    assert!(row("work/README.md")["override"].is_null());
+    owo(tmp.path())
+        .args(["templates", "show", "character"])
+        .assert()
+        .success()
+        .stdout(character);
+
+    owo(tmp.path()).args(["new", "Zed"]).assert().success();
+    let dir = tmp.path().join("zed");
+    assert_eq!(
+        fs::read_to_string(dir.join("soul/IDENTITY.md")).unwrap(),
+        "# Custom identity\n"
+    );
+    assert!(!fs::read_to_string(dir.join("work/README.md"))
+        .unwrap()
+        .contains("notes about this folder"));
+    owo(tmp.path())
+        .args(["-i", "zed", "add", "character", "Bo"])
+        .assert()
+        .success();
+    assert!(fs::read_to_string(dir.join("life/characters/bo.md"))
+        .unwrap()
+        .contains("Custom."));
 }
