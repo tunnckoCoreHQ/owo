@@ -911,6 +911,18 @@ fn run(cli: &Cli, out: &Out) -> Result<i32> {
             Ok(exit::OK)
         }
         Command::Export {
+            format: ExportFormat::Skill { out: dir },
+        } => {
+            let id = load(cli)?;
+            let path = export::skill(&id, dir)?;
+            if out.json {
+                Envelope::ok(json!({ "path": path })).print();
+            } else {
+                out.say(format!("wrote {path}"));
+            }
+            Ok(exit::OK)
+        }
+        Command::Export {
             format: ExportFormat::Soulspec { out: dir },
         } => {
             let id = load(cli)?;
@@ -987,6 +999,11 @@ enum ExportFormat {
         /// Write to a file instead of stdout
         #[arg(long)]
         out: Option<PathBuf>,
+    },
+    /// SKILL.md wrapper that loads the identity with owo
+    Skill {
+        #[arg(long)]
+        out: PathBuf,
     },
     /// SoulSpec v0.5 package folder
     Soulspec {

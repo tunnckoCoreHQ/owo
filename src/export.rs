@@ -273,3 +273,75 @@ pub fn soulspec(id: &Identity, dir: &Path) -> Result<Report> {
     }
     Ok(Report { files, warnings })
 }
+
+/// A `SKILL.md` wrapper for hosts that load identities as skills.
+pub fn skill(id: &Identity, dir: &Path) -> Result<String> {
+    let name = id
+        .manifest
+        .as_ref()
+        .and_then(|m| m["name"].as_str())
+        .unwrap_or(&id.slug)
+        .to_string();
+    let soul = id.read_json("soul/soul.json").unwrap_or(Value::Null);
+    let about = soul["description"]
+        .as_str()
+        .filter(|s| !s.is_empty())
+        .map(str::to_string)
+        .unwrap_or_else(|| format!("The {name} identity."));
+    let slug = &id.slug;
+    let projects: Vec<String> = id
+        .entries
+        .iter()
+        .filter(|e| e.kind == Kind::Project)
+        .map(|e| e.rel.split('/').nth(2).unwrap_or_default().to_string())
+        .collect();
+    let project_line = if projects.is_empty() {
+        String::new()
+    } else {
+        format!(
+            "\nProjects: {}. Add `--project <p>` when working on one.\n",
+            projects
+                .iter()
+                .map(|p| format!("`{p}`"))
+                .collect::<Vec<_>>()
+                .join(", ")
+        )
+    };
+    let text = format!(
+        r#"---
+name: {slug}
+description: "Be {name} ({about_yaml}). Use when a task asks for {name}, before speaking, writing or working as them."
+---
+
+# {name}
+
+{about}
+
+## Load
+
+```sh
+owo -i {slug} context --format text --voice
+```
+{project_line}
+Add `--look` when visuals matter.
+
+## Read on demand
+
+- `owo -i {slug} resolve <name>`, `owo -i {slug} show <name> [--section <s>]`
+- `owo -i {slug} search <words>`, `owo -i {slug} links <name>`
+- `owo -i {slug} state`
+
+## Write
+
+- New entries: `owo -i {slug} add <type> <title>`; small things: `owo -i {slug} add log`.
+- Edit existing entries in place; each fact has one home.
+- MEMORY.md and soul changes happen in review.
+- Session end: `owo -i {slug} stamp && owo -i {slug} index && owo -i {slug} lint --changed`.
+"#,
+        about_yaml = about.replace('"', "'").trim_end_matches('.'),
+    );
+    fs::create_dir_all(dir)?;
+    let path = dir.join("SKILL.md");
+    fs::write(&path, text)?;
+    Ok(path.display().to_string())
+}

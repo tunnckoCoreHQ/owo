@@ -246,3 +246,20 @@ fn kb_links_lint_and_show() {
         "{shown}"
     );
 }
+
+#[test]
+fn export_skill_wrapper() {
+    let tmp = TempDir::new().unwrap();
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("examples");
+    owo(&root)
+        .args(["-i", "thea", "export", "skill", "--out"])
+        .arg(tmp.path())
+        .assert()
+        .success();
+    let text = fs::read_to_string(tmp.path().join("SKILL.md")).unwrap();
+    assert!(text.starts_with("---\nname: thea\ndescription: \"Be Thea"));
+    assert!(
+        text.contains("owo -i thea context --format text --voice")
+            && text.contains("`picture-book`")
+    );
+}
