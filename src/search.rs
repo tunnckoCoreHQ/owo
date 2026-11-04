@@ -115,13 +115,19 @@ pub fn search(id: &Identity, query: &str, filter: &Filter, limit: usize) -> Vec<
             score += idf * tf * (K1 + 1.0) / (tf + K1 * (1.0 - B + B * len / avg));
         }
         if score > 0.0 {
-            let best = e
-                .text
-                .lines()
-                .enumerate()
-                .map(|(i, l)| (tokens(l).iter().filter(|t| q.contains(t)).count(), i, l))
-                .filter(|(c, _, _)| *c > 0)
-                .max_by(|a, b| a.0.cmp(&b.0).then(b.1.cmp(&a.1)));
+            // The best line comes from the body (the title is shown already), else from
+            // the frontmatter when only the summary or aliases match.
+            let body_line = crate::markdown::split(&e.text).body_line;
+            let best_in = |in_body: bool| {
+                e.text
+                    .lines()
+                    .enumerate()
+                    .filter(|(i, l)| (i + 1 >= body_line) == in_body && !l.starts_with("# "))
+                    .map(|(i, l)| (tokens(l).iter().filter(|t| q.contains(t)).count(), i, l))
+                    .filter(|(c, _, _)| *c > 0)
+                    .max_by(|a, b| a.0.cmp(&b.0).then(b.1.cmp(&a.1)))
+            };
+            let best = best_in(true).or_else(|| best_in(false));
             hits.push(Hit {
                 path: e.rel.clone(),
                 title: e.title.clone().unwrap_or_else(|| e.stem_key()),

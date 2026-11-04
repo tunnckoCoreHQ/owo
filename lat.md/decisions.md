@@ -28,7 +28,7 @@ Templates are compiled in with `include_str!` so the binary works with no instal
 
 `owo search` is about 100 lines of BM25 in `search.rs` over a few hundred files, rebuilt per call. It adds no dependency and no cache, and an identity stays small enough that a scan takes milliseconds.
 
-Title and aliases count three times, summary twice, body once. Each hit reports the line with the most query terms. Tantivy fits if identities grow past a few thousand files.
+Title and aliases count three times, summary twice, body once. Each hit reports the body line with the most query terms (top-level headings skipped), else the best frontmatter line. Tantivy fits if identities grow past a few thousand files.
 
 ## KB pointer is always emitted
 

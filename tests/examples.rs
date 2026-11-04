@@ -430,3 +430,12 @@ fn soul_note_counts_distinct_evidence() {
     assert_eq!(v["warnings"].as_array().unwrap().len(), 1, "{v}");
     assert_eq!(v["data"]["evidence"].as_array().unwrap().len(), 1);
 }
+
+#[test]
+fn search_snippets_come_from_the_body() {
+    let v = json(owo(&examples(), "thea").args(["search", "kiln"]));
+    for h in v["data"]["hits"].as_array().unwrap() {
+        let s = h["snippet"].as_str().unwrap();
+        assert!(!s.starts_with("title:") && !s.starts_with("# "), "{s}");
+    }
+}
