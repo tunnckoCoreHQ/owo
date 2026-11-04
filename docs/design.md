@@ -702,7 +702,7 @@ overlap = 2
 `owo export skill --out <dir>`
 : A `SKILL.md` wrapper for hosts that load identities as skills. It tells the agent to run `owo context -i <slug>` and lists the read and write commands.
 
-#### Later
+#### MCP
 
 `owo mcp`
 : Serves `resolve`, `search`, `links`, `show`, `context`, `state`, `add`, `stamp`, `index` and `lint` as MCP tools over stdio, as a thin layer over the same functions.
@@ -803,7 +803,7 @@ Use: compiling MEMORY and evolving the soul, on request when `owo state` shows r
 - Claude Code: a `Stop` hook calls `owo sync start --format claude-jsonl`; a `SessionStart` hook or the exported skill wrapper calls `owo context`.
 - OpenCode: a plugin calls the same commands on `session.idle` and `compaction`.
 - Grok Bot, OpenClaw-style runtimes, scripts: `owo context` for the system prompt and `owo sync` with `jsonl` transcripts.
-- MCP hosts: `owo mcp` once it exists.
+- MCP hosts: `owo mcp`.
 
 ### 10.3 Character card export
 
@@ -876,5 +876,5 @@ Checklist: move MEMORY "Moments" into the event links under "Defining moments"; 
 5. Git commits: does `owo commit` exist, or do hosts and people commit?
 6. Card greetings: hand-written `greetings.md`, or generated from selected events?
 7. Search: BM25 first; add local embeddings later if keyword search misses?
-8. MCP mode: first release or later?
+8. MCP mode: `owo mcp` ships with the first release.
 9. Soft budgets: are 800/800/1000/600/1500 right?

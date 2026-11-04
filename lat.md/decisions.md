@@ -81,3 +81,9 @@ Embedding a card only appends `tEXt` chunks before `IEND`, so `export.rs` walks 
 The working project resolves from `--project`, `OWO_PROJECT`, then `.owo.toml`; `context`, `add note`, `state` and `sync` use it. `search` and `export card` narrow to a project only with an explicit `--project` flag.
 
 A filter hides results, so it comes from the command line and never from the environment. Inside a project checkout, `owo search` still finds life and soul entries, and `owo export card` still exports the whole identity.
+
+## MCP runs the CLI
+
+`owo mcp` is a newline-delimited JSON-RPC loop in `mcp.rs` with no MCP crate. Each tool call runs the same `owo` binary with the matching command line and returns its output, so a tool and a command always behave alike.
+
+Most tools add `--json` and return the envelope; `context` and `show` return text, which is what an agent reads. Values go after `--`, so a query never parses as a flag. A failed command sets `isError`.
