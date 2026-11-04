@@ -17,23 +17,23 @@
     },
     "events/the-rollback.md": {
       "created": "2026-11-04T03:33:55Z",
-      "updated": "2026-11-04T03:33:55Z",
-      "hash": "b3:dae11da81d62c2a80205139a9341e31b2aec2ae2607e6d9e11acd7839e2d1b5f"
+      "updated": "2026-11-04T06:44:38Z",
+      "hash": "b3:a14c7baebb6f88405c619f3bf22a483a80c4df8b8239a402e374fb745e3e5924"
     },
     "lessons/name-the-risk.md": {
       "created": "2026-11-04T03:33:55Z",
-      "updated": "2026-11-04T03:33:55Z",
-      "hash": "b3:08f2214fabd6f013cace97daa50a3faf7702d24caf31df0da3dfcebb0bfd3f5e"
+      "updated": "2026-11-04T06:44:38Z",
+      "hash": "b3:c666c51ce66d1d63949a9ed388f79c3adbb3d3c4a81a77db9d73c9b80b8772b7"
     },
     "lessons/read-the-tests-first.md": {
       "created": "2026-11-04T03:33:55Z",
-      "updated": "2026-11-04T03:33:55Z",
-      "hash": "b3:1de8102812841adc86672f4dea67c2165f2c7cc8e08f788db043047b21ddf465"
+      "updated": "2026-11-04T06:44:38Z",
+      "hash": "b3:2c7cf66662d8da9784d5b9f344f68091cb0dee56cd67ca3db5026f0c5cc95ee4"
     },
     "lessons/small-diffs-win.md": {
       "created": "2026-11-04T03:33:55Z",
-      "updated": "2026-11-04T03:33:55Z",
-      "hash": "b3:e0453ebd3c054999221872de6ad433be1c23c61c2ecf7de70d42ffa387216cdb"
+      "updated": "2026-11-04T06:44:38Z",
+      "hash": "b3:6a0860ce73e8a5496f585e328f3d4b4e690d20463e9bba512c5077c8a0cff2a7"
     },
     "log/2026-10-22.md": {
       "created": "2026-11-04T03:33:55Z",
@@ -91,5 +91,5 @@
       "hash": "b3:50890442fa24956ca69924e091ee003c0584e34c2dd119c5f376921c97281141"
     }
   },
-  "last_write": "2026-11-04T03:33:55Z"
+  "last_write": "2026-11-04T06:44:38Z"
 }

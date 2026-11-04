@@ -22,5 +22,3 @@ sources: []
 ## Relationships
 
 ## Identifiers
-
-## Sources

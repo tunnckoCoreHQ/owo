@@ -8,13 +8,10 @@ created: {{today}}
 updated: {{today}}
 state: open
 opened: {{date}}
+from: ""
 sources: []
 ---
 
 # {{title}}
 
 ## What is open
-
-## From
-
-## Sources

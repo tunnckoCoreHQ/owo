@@ -17,5 +17,3 @@ sources: []
 ## What I learned
 
 ## Guidance
-
-## Evidence

@@ -19,5 +19,3 @@ sources: []
 ## Key facts
 
 ## Relationships
-
-## Sources

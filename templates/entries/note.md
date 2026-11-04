@@ -18,5 +18,3 @@ sources: []
 ## What I did
 
 ## What I learned
-
-## Sources

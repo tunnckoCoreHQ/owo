@@ -7,8 +7,10 @@ status: canon
 created: 2026-11-04
 updated: 2026-11-04
 date: 2026-09-12
-places: ["[[Kiln Studio]]"]
-people: ["[[Ines]]"]
+places:
+  - "[[Kiln Studio]]"
+people:
+  - "[[Ines]]"
 era: "[[Studio Year]]"
 defining: true
 sources: []

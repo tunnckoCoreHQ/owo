@@ -293,7 +293,7 @@ fn add_creates_entries_at_deterministic_paths() {
     assert!(
         fs::read_to_string(dir.join("life/characters/mrs-petrova.md"))
             .unwrap()
-            .contains("aliases: [\"the neighbour\"]")
+            .contains("aliases:\n  - \"the neighbour\"")
     );
     owo(tmp.path())
         .args(["-i", "thea", "add", "event", "The Café Night"])

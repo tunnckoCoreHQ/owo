@@ -15,7 +15,7 @@ Input: a source file path.
    - `owo resolve <name>` or `owo search <words>` to find its home.
    - If the home exists, `owo show` it and merge the fact in place.
    - Otherwise `owo add <type> <title> [--date] [--project]` and fill the template.
-   - Add the source path and line range under `## Sources`.
+   - Add the source path, with its line range, to the entry's frontmatter `sources` list.
 4. Small things become one bullet in that day's log (`owo add log --date <day>`); events get one bullet linking them.
 5. Record disagreements with existing entries as conflicts (`owo add conflict`).
 6. Leave MEMORY.md and soul files to review.

@@ -1,7 +1,8 @@
 ---
 type: character
 title: Sam
-aliases: [Samuel]
+aliases:
+  - Samuel
 summary: My friend from the harbor; we sail on weekends.
 status: canon
 created: 2026-10-01

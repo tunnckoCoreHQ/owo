@@ -126,10 +126,9 @@ pub fn add(id: &Identity, req: &Request) -> Result<Added> {
         let list = req
             .aliases
             .iter()
-            .map(|a| format!("\"{}\"", templates::yaml_escape(a)))
-            .collect::<Vec<_>>()
-            .join(", ");
-        text = text.replacen("aliases: []", &format!("aliases: [{list}]"), 1);
+            .map(|a| format!("\n  - \"{}\"", templates::yaml_escape(a)))
+            .collect::<String>();
+        text = text.replacen("aliases: []", &format!("aliases:{list}"), 1);
     }
     if let (Some(kb), "project") = (req.kb, req.kind) {
         let kb = templates::yaml_escape(kb);

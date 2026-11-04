@@ -6,7 +6,8 @@ summary: Hold what you can steer.
 status: canon
 created: 2026-10-02
 updated: 2026-10-02
-evidence: ["[[First Sail]]"]
+evidence:
+  - "[[First Sail]]"
 sources: []
 ---
 

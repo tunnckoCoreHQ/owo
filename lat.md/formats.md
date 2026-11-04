@@ -12,7 +12,9 @@ An identity is `<root>/<slug>/` with `identity.json`, `soul/`, `life/` and `work
 
 ## Entry frontmatter
 
-Every life and work entry has YAML frontmatter with `type`, `title`, `aliases`, `summary`, `status`, `created`, `updated`, `sources`.
+Every life and work entry has YAML frontmatter with `type`, `title`, `aliases`, `summary`, `status`, `created`, `updated`, `sources`. Lists are block lists (`  - item`); an empty list is `[]`.
+
+Citations live only in frontmatter: `sources` (paths relative to `sources/`, optional `#L<a>-L<b>`, or plain text), lesson `evidence` and thread `from` are links. Bodies have no Sources, Evidence or From section.
 
 `type` must match the folder. `status` is `canon`, `disputed` or `superseded`. Dates are `YYYY-MM-DD`. Dated types (log, journal, writing, note) carry `date`, and the file name must start with it. Events need `date`; threads need `state: open|closed`; conflicts need `state: open|resolved`; location details need `parent`; notes need `project` equal to their project folder.
 

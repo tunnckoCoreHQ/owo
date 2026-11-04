@@ -51,3 +51,4 @@
 - `owo mcp` exposes every command as a tool, and `--remote [ADDR] [--port N]` serves it over HTTP at `/mcp` (port 4224 or the next free one), printing the URL.
 - Dependencies: `toml` 1.x; `serde_yaml` (archived) replaced by `serde-saphyr`, with frontmatter held as `serde_json` values.
 - Migrate drops v1 `index.md` files and maps other status values to canon; `dupes` ignores `## Sources`.
+- Citations live only in frontmatter: templates, design and skills drop the body `## Sources`, `## Evidence` and `## From` sections; migrate moves v1 `## Sources` into `sources` and `evidence`. Frontmatter lists are block lists. Exact paths with `.md` resolve.

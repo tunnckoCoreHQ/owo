@@ -16,5 +16,3 @@ sources: []
 ## Description
 
 ## Key facts
-
-## Sources

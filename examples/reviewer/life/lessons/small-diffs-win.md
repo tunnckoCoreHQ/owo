@@ -6,7 +6,8 @@ summary: "Small diffs get real reviews."
 status: canon
 created: 2026-11-04
 updated: 2026-11-04
-evidence: ["[[Cache key review]]"]
+evidence:
+  - "[[Cache key review]]"
 sources: []
 ---
 

@@ -189,7 +189,7 @@ Obsidian-compatible wiki-links:
 - Titles and aliases are unique across one identity. Lint enforces this.
 - Soul files link by name: `[[IDENTITY]]`, `[[SOUL]]`, `[[VOICE]]`, `[[LOOK]]`, `[[MEMORY]]`.
 - Links into a project KB use a prefix: `[[kb:<project>:<path>#<Section>]]`. The CLI resolves `<path>` against the project's KB root from `identity.json` or the project's `.owo.toml`.
-- Sources are cited by path relative to `sources/`, with an optional line range: `thea/2026-10-25_thea-joe-cafe.md#L120-L340`.
+- Sources are cited in the entry's frontmatter `sources`, by path relative to `sources/`, with an optional line range: `thea/2026-10-25_thea-joe-cafe.md#L120-L340`. Text sources without a file are listed as plain text.
 
 ### 4.3 Soul files
 
@@ -231,7 +231,8 @@ All life and work entries share a base schema:
 ---
 type: event
 title: The Café Night
-aliases: [the café]
+aliases:
+  - the café
 summary: How we met; first kiss on my doorstep.
 status: canon                    # canon | disputed | superseded
 superseded_by: null              # "[[Title]]" when superseded
@@ -279,10 +280,9 @@ Entries use the sections they need, in this order:
 ## Relationships
 ## Identifiers
 ## Guidance
-## Sources
 ```
 
-Events use `## What happened`, `## Key facts`, `## Lines` (exact quotes worth keeping), `## Sources`. Logs are bullet lists. Journal entries and the work README are free prose.
+Events use `## What happened`, `## Key facts`, `## Lines` (exact quotes worth keeping). Citations live in frontmatter (`sources`, and `evidence` for lessons), never in a body section. Logs are bullet lists. Journal entries and the work README are free prose.
 
 ### 4.6 Characters and identifiers
 
@@ -730,19 +730,19 @@ Built-in templates, filled with `{{title}}`, `{{slug}}`, `{{date}}`, `{{today}}`
 | `examples/*.md` | `new` | headings |
 | `state.json` (soul, life, work) | `new` | empty records |
 | `work/README.md` | `new` | Roles, How I work, Past work, Projects |
-| `character` | `add character` | Summary, Description, Key facts, Relationships, Identifiers, Sources |
+| `character` | `add character` | Summary, Description, Key facts, Relationships, Identifiers |
 | `location` | `add location` | folder with `overview.md` |
 | `location-detail` | `add location-detail --parent` | sibling file linking the parent |
-| `culture`, `faction`, `era` | `add` | Summary, Description, Key facts, Sources |
-| `event` | `add event --date` | What happened, Key facts, Lines, Sources |
-| `thread` | `add thread` | What is open, From, Sources |
+| `culture`, `faction`, `era` | `add` | Summary, Description, Key facts |
+| `event` | `add event --date` | What happened, Key facts, Lines |
+| `thread` | `add thread` | What is open (`from` in frontmatter) |
 | `conflict` | `add conflict` | Account A, Account B, Resolution |
-| `lesson` | `add lesson` | Summary, What I learned, Guidance, Evidence |
+| `lesson` | `add lesson` | Summary, What I learned, Guidance (`evidence` in frontmatter) |
 | `writing` | `add writing --date` | free body |
 | `log` | `add log [--date]` | title and bullets |
 | `journal` | `add journal --date` | free body |
 | `project` | `add project <slug> [--kb <path>]` | What I do here, Who I work with, Where things live |
-| `note` | `add note <title> --project <p> [--date]` | Summary, What I did, What I learned, Sources |
+| `note` | `add note <title> --project <p> [--date]` | Summary, What I did, What I learned |
 | `_index.md`, `timeline.md` | `index` | generated |
 
 ## 9. Skills
@@ -775,7 +775,7 @@ Use: a sync run, or importing a transcript, notes or documents.
 - Input: a source file path.
 - Read the core with `owo context` and the state with `owo state`.
 - For each durable fact: `owo resolve` its home, read it, merge, or `owo add` a new entry.
-- Cite the source path and line range under `## Sources`.
+- Cite the source path and line range in the entry's frontmatter `sources`.
 - Record disagreements as conflicts.
 - Finish with `owo stamp && owo index && owo lint --changed` and report changed paths or "no changes".
 

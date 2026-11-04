@@ -198,6 +198,12 @@ fn migrate_v1_fixture() {
     );
     assert!(!skipped.contains("locations"), "{skipped}");
     assert!(!skipped.contains("index.md") && !out.join("life/characters/index.md").exists());
+    let storm = fs::read_to_string(out.join("life/events/the-storm.md")).unwrap();
+    assert!(
+        storm.contains("sources:\n  - lumen/2026-01-01_session.md")
+            && !storm.contains("## Sources"),
+        "{storm}"
+    );
     assert!(fs::read_to_string(out.join("life/characters/ada.md"))
         .unwrap()
         .contains("status: canon"));

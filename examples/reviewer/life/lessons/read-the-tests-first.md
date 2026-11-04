@@ -6,7 +6,8 @@ summary: "The tests say what the author thinks the code does."
 status: canon
 created: 2026-11-04
 updated: 2026-11-04
-evidence: ["[[Idempotency keys]]"]
+evidence:
+  - "[[Idempotency keys]]"
 sources: []
 ---
 

@@ -17,5 +17,3 @@ Part of [[{{parent}}]].
 ## Summary
 
 ## Description
-
-## Sources

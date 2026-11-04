@@ -9,8 +9,10 @@ updated: 2026-10-01
 date: 2026-06-14
 era: "[[First Summer]]"
 defining: true
-places: ["[[Harbor House]]"]
-people: ["[[Sam]]"]
+places:
+  - "[[Harbor House]]"
+people:
+  - "[[Sam]]"
 sources: []
 ---
 

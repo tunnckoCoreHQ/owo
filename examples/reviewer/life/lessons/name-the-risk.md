@@ -6,7 +6,8 @@ summary: "Every review summary names its main risk in one line."
 status: canon
 created: 2026-11-04
 updated: 2026-11-04
-evidence: ["[[The Rollback]]"]
+evidence:
+  - "[[The Rollback]]"
 sources: []
 ---
 

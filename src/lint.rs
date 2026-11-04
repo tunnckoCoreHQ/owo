@@ -717,20 +717,6 @@ fn shingles(body: &str) -> BTreeSet<String> {
     words.windows(DUPE_WORDS).map(|w| w.join(" ")).collect()
 }
 
-/// The body without its `## Sources` section: the same citation in many files is not a copy.
-fn without_sources(body: &str) -> String {
-    let mut skipping = false;
-    body.lines()
-        .filter(|l| {
-            if let Some(h) = l.strip_prefix("## ") {
-                skipping = h.trim().eq_ignore_ascii_case("sources");
-            }
-            !skipping
-        })
-        .collect::<Vec<_>>()
-        .join("\n")
-}
-
 fn dupes(c: &mut Ctx) {
     let authored: Vec<&Entry> =
         c.id.entries
@@ -739,7 +725,7 @@ fn dupes(c: &mut Ctx) {
             .collect();
     let mut owners: HashMap<String, Vec<usize>> = HashMap::new();
     for (i, e) in authored.iter().enumerate() {
-        for s in shingles(&without_sources(e.body())) {
+        for s in shingles(e.body()) {
             owners.entry(s).or_default().push(i);
         }
     }

@@ -8,7 +8,8 @@ created: 2026-11-04
 updated: 2026-11-04
 date: 2026-10-24
 places: []
-people: ["[[Mina Okafor]]"]
+people:
+  - "[[Mina Okafor]]"
 defining: true
 sources: []
 ---

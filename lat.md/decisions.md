@@ -68,7 +68,7 @@ While a run is pending, new user turns count from its end, so the turns that fol
 
 `owo migrate v1` does only file moves and frontmatter fills; judgment work goes to a printed checklist.
 
-It builds a fresh identity with `owo new`, copies soul files (STYLE becomes VOICE), adds missing frontmatter fields to world files, splits `conflicts.md` by `##`, copies `sources/`, then indexes and stamps. It reports files with no home and prints the judgment work as a checklist.
+It builds a fresh identity with `owo new`, copies soul files (STYLE becomes VOICE), adds missing frontmatter fields to world files (a body `## Sources` section becomes `sources`, its links a lesson's `evidence`), splits `conflicts.md` by `##`, copies `sources/`, then indexes and stamps. It reports files with no home and prints the judgment work as a checklist.
 
 Migrate never overwrites: a file whose target already exists is reported as skipped. v1 `index.md` files are dropped, since owo generates its own, and a status outside canon, disputed and superseded becomes canon. An event file named only by a date takes its slug from its title.
 
