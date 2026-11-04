@@ -1026,7 +1026,7 @@ fn run(cli: &Cli, out: &Out) -> Result<i32> {
 enum ReviewAction {
     /// Record a finished review (dates and the MEMORY.md hash)
     Done {
-        /// Last log day covered (default: newest log date)
+        /// Last story day covered (default: newest log, event or journal date)
         #[arg(long)]
         through: Option<String>,
     },

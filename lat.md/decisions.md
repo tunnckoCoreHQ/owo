@@ -48,6 +48,8 @@ The project KB is a pointer for the agent to follow. `owo context` prints it whe
 
 Files count as changed when their stamp is newer than `last_reviewed`. Log days, events and journal count as unreviewed when their story date is after `reviewed_through`. Stamps track edits; story dates track the life.
 
+`owo review done` sets `reviewed_through` to the newest log, event or journal date, not today, because story time can run behind or ahead of real time.
+
 ## Lint reuses find
 
 Lint's link rules and orphan check call `find::raw_links` and `find::orphans`, so `owo links --orphans` and the `orphans` rule always agree.

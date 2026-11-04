@@ -329,6 +329,10 @@ fn review_packet_then_done() {
         "# Memory\n\n## Patterns\n\n- Pairing helps.\n",
     )
     .unwrap();
+    owo(tmp.path(), "reviewer")
+        .args(["add", "event", "Release Day", "--date", "2026-11-06"])
+        .assert()
+        .success();
     let lint = json(owo(tmp.path(), "reviewer").args(["lint", "--rule", "memory-review"]));
     assert_eq!(lint["warnings"].as_array().unwrap().len(), 1);
     owo(tmp.path(), "reviewer")
@@ -338,7 +342,10 @@ fn review_packet_then_done() {
     let lint = json(owo(tmp.path(), "reviewer").args(["lint", "--rule", "memory-review"]));
     assert_eq!(lint["warnings"].as_array().unwrap().len(), 0);
     let p = json(owo(tmp.path(), "reviewer").arg("review"));
-    assert_eq!(p["data"]["reviewed_through"], "2026-11-04");
+    assert_eq!(
+        p["data"]["reviewed_through"], "2026-11-06",
+        "newest story date"
+    );
 }
 
 #[test]

@@ -666,7 +666,7 @@ overlap = 2
 : Prints the review packet (6.4).
 
 `owo review done [--through <date>]`
-: Records `last_reviewed`, `reviewed_through` (default today) and `memory_hash`.
+: Records `last_reviewed`, `reviewed_through` and `memory_hash`. `reviewed_through` is a story date: it defaults to the newest log, event or journal date, so story time and real time can differ.
 
 `owo soul note <file> --change <text> --evidence <link>...`
 : Appends to `soul/state.json` → `history`.

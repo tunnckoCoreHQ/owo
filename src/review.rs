@@ -273,7 +273,7 @@ fn write_soul_state(id: &Identity, doc: &Value) -> Result<()> {
 }
 
 /// Records a review: last_reviewed = now, reviewed_through = `through` or the newest
-/// log date, memory_hash = current MEMORY.md hash.
+/// story date among logs, events and journal entries, memory_hash = current MEMORY.md hash.
 pub fn done(id: &Identity, through: Option<&str>) -> Result<Value> {
     let mut doc = id
         .read_json("soul/state.json")
@@ -287,7 +287,7 @@ pub fn done(id: &Identity, through: Option<&str>) -> Result<Value> {
         None => id
             .entries
             .iter()
-            .filter(|e| e.kind == Kind::Log)
+            .filter(|e| matches!(e.kind, Kind::Log | Kind::Event | Kind::Journal))
             .filter_map(|e| e.field_str("date"))
             .max(),
     };
