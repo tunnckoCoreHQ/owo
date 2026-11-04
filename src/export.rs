@@ -67,8 +67,10 @@ fn sections(id: &Identity, rel: &str) -> Vec<String> {
         .entry(rel)
         .map(|e| body_without(&e.text, &[]))
         .unwrap_or_default();
-    body.split("\n## ")
-        .map(|s| s.trim_start_matches("## "))
+    // Intro text before the first `## ` heading is not a greeting.
+    format!("\n{body}")
+        .split("\n## ")
+        .skip(1)
         .filter_map(|s| s.split_once('\n').map(|(_, rest)| rest.trim().to_string()))
         .filter(|s| !s.is_empty())
         .collect()
@@ -91,7 +93,12 @@ fn lore(e: &Entry, n: usize) -> Value {
     let mut keys = vec![title.clone()];
     keys.extend(e.aliases.iter().cloned());
     let summary = e.field_str("summary").unwrap_or_default();
-    let body = body_without(&e.text, &["Identifiers", "Sources"]);
+    // Summary plus `## Key facts` (design 10.3); entries without that section give their body.
+    let facts = markdown::section(e.body(), "Key facts").map(|(_, lines)| {
+        let lines: Vec<&str> = lines.iter().map(|(_, l)| *l).collect();
+        lines.join("\n").trim().to_string()
+    });
+    let body = facts.unwrap_or_else(|| body_without(&e.text, &["Identifiers", "Sources"]));
     let content = [summary, body]
         .into_iter()
         .filter(|s| !s.is_empty())

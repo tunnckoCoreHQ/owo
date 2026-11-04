@@ -63,10 +63,10 @@ The KB path comes from `project.md` `kb`, else `identity.json` `projects.<p>.kb`
 | `system_prompt` | IDENTITY "Who she/he/they is/are" section, then VOICE.md |
 | `personality` | SOUL.md body |
 | `scenario` | with `--project`: project.md summary and body |
-| `first_mes`, `alternate_greetings` | `soul/examples/greetings.md`, one per `##` |
+| `first_mes`, `alternate_greetings` | `soul/examples/greetings.md`, one per `##`; text before the first `##` is left out |
 | `mes_example` | `soul/examples/good.md`, prefixed `<START>` |
 | `tags`, `creator`, `character_version` | `soul/soul.json` |
-| `character_book` | MEMORY.md as a constant entry, then characters, locations, cultures, factions, eras, events, lessons, and the scoped project; keys are title plus aliases; `## Identifiers` and `## Sources` are left out |
+| `character_book` | MEMORY.md as a constant entry, then characters, locations, cultures, factions, eras, events, lessons, and the scoped project; keys are title plus aliases; content is the summary plus `## Key facts`, or the body without `## Identifiers` and `## Sources` when an entry has no key facts |
 
 V3 adds `nickname` (`identity.json` `nickname`), `assets` (default icon), `creation_date`, `modification_date`, `source`, `group_only_greetings`, `creator_notes_multilingual`.
 

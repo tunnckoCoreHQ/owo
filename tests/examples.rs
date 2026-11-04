@@ -493,3 +493,35 @@ fn review_lists_unstamped_files() {
         .assert()
         .code(2);
 }
+
+#[test]
+fn card_greetings_and_lore_content() {
+    let tmp = copy("thea");
+    let dir = tmp.path().join("thea");
+    fs::write(
+        dir.join("soul/examples/greetings.md"),
+        "# Greetings\n\nOne greeting per section.\nKeep them short.\n\n## Morning\n\nHello there.\n",
+    )
+    .unwrap();
+    let ines = dir.join("life/characters/ines.md");
+    let text = fs::read_to_string(&ines).unwrap();
+    fs::write(
+        &ines,
+        format!("{text}\n## Key facts\n\n- Fires on Fridays.\n"),
+    )
+    .unwrap();
+    let card = json(owo(tmp.path(), "thea").args(["export", "card"]));
+    let d = &card["data"]["data"];
+    assert_eq!(d["first_mes"], "Hello there.");
+    assert_eq!(d["alternate_greetings"], serde_json::json!([]));
+    let entry = d["character_book"]["entries"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|e| e["name"] == "Ines")
+        .unwrap();
+    assert_eq!(
+        entry["content"],
+        "Ceramicist who shares the studio and the kiln.\n\n- Fires on Fridays."
+    );
+}
