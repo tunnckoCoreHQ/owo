@@ -1,0 +1,9 @@
+{
+  "schema": "owo/1",
+  "slug": "{{slug}}",
+  "name": "{{name}}",
+  "accounts": [],
+  "budgets": {},
+  "review_every_days": 7,
+  "projects": {}
+}

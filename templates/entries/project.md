@@ -1,0 +1,21 @@
+---
+type: project
+title: "{{title_yaml}}"
+aliases: []
+summary: ""
+status: canon
+created: {{today}}
+updated: {{today}}
+kb: ""
+repo: ""
+started: {{date}}
+sources: []
+---
+
+# {{title}}
+
+## What I do here
+
+## Who I work with
+
+## Where things live
