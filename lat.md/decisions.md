@@ -71,3 +71,9 @@ A v1 location folder becomes `life/locations/<slug>/`: its `overview.md`, `index
 ## PNG cards without image crates
 
 Embedding a card only appends `tEXt` chunks before `IEND`, so `export.rs` walks PNG chunks with a small CRC32 and base64 instead of an image dependency.
+
+## Working project versus project filter
+
+The working project resolves from `--project`, `OWO_PROJECT`, then `.owo.toml`; `context`, `add note`, `state` and `sync` use it. `search` and `export card` narrow to a project only with an explicit `--project` flag.
+
+A filter hides results, so it comes from the command line and never from the environment. Inside a project checkout, `owo search` still finds life and soul entries, and `owo export card` still exports the whole identity.

@@ -561,7 +561,7 @@ The root resolves in this order:
 4. `root` in the user config `$XDG_CONFIG_HOME/owo/config.toml`;
 5. `$XDG_DATA_HOME/owo` (default `~/.local/share/owo`).
 
-The identity resolves from `-i`, then `OWO_IDENTITY`, then `identity` in `.owo.toml`, then the user config, then the only identity in the root when there is exactly one. The project resolves from `--project`, then `OWO_PROJECT`, then `.owo.toml`.
+The identity resolves from `-i`, then `OWO_IDENTITY`, then `identity` in `.owo.toml`, then the user config, then the only identity in the root when there is exactly one. The project resolves from `--project`, then `OWO_PROJECT`, then `.owo.toml`. `owo search` and `owo export card` treat `--project` as a filter and read it from the flag only, so a project checkout never hides life and soul results.
 
 ```toml
 # .owo.toml in a project repo

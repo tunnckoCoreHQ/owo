@@ -316,6 +316,16 @@ fn flags_list_search_state_add_kb() {
             .as_str()
             .unwrap()
             .starts_with("work/projects/ledger-api/")));
+    let v = json(
+        owo(&root)
+            .env("OWO_PROJECT", "ledger-api")
+            .args(["-i", "reviewer", "search", "rollback"]),
+    );
+    assert!(v["data"]["hits"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|h| h["path"] == "life/events/the-rollback.md"));
 
     let v = json(owo(&root).args([
         "-i",

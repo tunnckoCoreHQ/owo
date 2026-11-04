@@ -43,7 +43,7 @@ struct Cli {
     /// Identity slug (else OWO_IDENTITY, .owo.toml, user config, the only identity)
     #[arg(short = 'i', long, global = true)]
     identity: Option<String>,
-    /// Project slug (else OWO_PROJECT, .owo.toml)
+    /// Project slug (else OWO_PROJECT, .owo.toml); search and export card filter only on this flag
     #[arg(long, global = true)]
     project: Option<String>,
     /// Print the JSON envelope instead of text
