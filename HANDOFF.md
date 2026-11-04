@@ -59,8 +59,8 @@ After editing anything in `examples/`, run for each identity: `owo --root exampl
 | `search [--scope/--in --type --since --limit]`, `--project` flag as a filter | in-crate BM25, no cache; snippets from the body |
 | `review`, `review done [--through]` | `reviewed_through` defaults to the newest log, event or journal date |
 | `soul note`, `soul history` | evidence must resolve; distinct entries count; weak evidence warns |
-| `changes [--since]` | Git log, else stamps |
-| `sync start`, `sync done` | jsonl, claude-jsonl, opencode-json; slices in `<root>/sources/<slug>/`; session lock; a pending run is not restarted each turn |
+| `changes [--since]` | Git log plus uncommitted files, else stamps |
+| `sync start`, `sync done` | jsonl, claude-jsonl, opencode-json; slices in `<root>/sources/<slug>/`; session lock; a pending run is not restarted each turn; `done --until` bounded by the messages read |
 | `migrate v1` | locations, cultures, factions, eras, threads included; tested on `tests/fixtures/v1-lumen` (invented) |
 | `export card [--spec --scenario --png --out]`, `export soulspec`, `export skill` | `nickname` from `identity.json` |
 | `mcp` | stdio JSON-RPC; each tool runs the same binary; see `lat.md/decisions.md` |

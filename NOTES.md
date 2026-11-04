@@ -46,3 +46,4 @@
 - Card `nickname` comes from `identity.json`; recurring phrases must start and end with a content word.
 - `sync`: a session lock file, and a pending run is not started again on every turn.
 - `owo mcp`: stdio JSON-RPC server; each tool runs the same binary.
+- Second review: `git::dirty` now uses `git diff --relative HEAD` and `ls-files --others`, so `changes` and `lint --changed` see uncommitted files (new e2e test in a Git repo); `sync done` rejects an `--until` past the messages `sync start` read; the ingest prompt carries the absolute root and `--no-touch`, and `sync start --project` must name an existing project; the review packet lists unstamped files; `--days` is bounded; migrate never overwrites, names date-only events by title and keeps a conflict at the top of `conflicts.md`; card greetings skip intro text; lorebook content is the summary plus `## Key facts`.
