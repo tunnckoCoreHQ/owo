@@ -12,6 +12,7 @@ mod identity;
 mod index;
 mod lint;
 mod markdown;
+mod migrate;
 mod output;
 mod review;
 mod search;
@@ -200,6 +201,11 @@ enum Command {
     Sync {
         #[command(subcommand)]
         action: SyncAction,
+    },
+    /// Migrate an identity from an older layout
+    Migrate {
+        #[command(subcommand)]
+        from: MigrateFrom,
     },
     /// Show how root, identity and project resolve
     Config,
@@ -745,6 +751,26 @@ fn run(cli: &Cli, out: &Out) -> Result<i32> {
             }
             Ok(exit::OK)
         }
+        Command::Migrate {
+            from: MigrateFrom::V1 { path, out: dest },
+        } => {
+            let r = migrate::v1(path, dest)?;
+            if out.json {
+                Envelope::ok(serde_json::to_value(&r)?).print();
+            } else {
+                for (a, b) in &r.moved {
+                    out.say(format!("{a} -> {b}"));
+                }
+                for s in &r.skipped {
+                    println!("skipped {s}");
+                }
+                println!("\nChecklist for {}:", r.dir);
+                for c in &r.checklist {
+                    println!("- [ ] {c}");
+                }
+            }
+            Ok(exit::OK)
+        }
         Command::Review { action: None } => {
             let id = load(cli)?;
             let p = review::packet(&id);
@@ -946,6 +972,16 @@ enum SyncAction {
         session: String,
         #[arg(long)]
         until: usize,
+    },
+}
+
+#[derive(Subcommand)]
+enum MigrateFrom {
+    /// v1 identity folder (with references/) into <out> = <root>/<slug>
+    V1 {
+        path: PathBuf,
+        #[arg(long)]
+        out: PathBuf,
     },
 }
 
