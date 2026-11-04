@@ -384,23 +384,8 @@ fn soul_plain(c: &mut Ctx) {
     }
 }
 
-/// Every link in an entry: frontmatter values and body, with 1-based file lines.
 fn all_links(e: &Entry) -> Vec<(usize, markdown::Link)> {
-    let split = markdown::split(&e.text);
-    let mut out = vec![];
-    if let Some(fm) = split.frontmatter {
-        out.extend(
-            markdown::links_in_value(fm)
-                .into_iter()
-                .map(|l| (l.line + 2, l)),
-        );
-    }
-    out.extend(
-        markdown::links(split.body)
-            .into_iter()
-            .map(|l| (l.line + split.body_line, l)),
-    );
-    out
+    crate::find::raw_links(e)
 }
 
 fn links(c: &mut Ctx) {
@@ -734,42 +719,10 @@ fn dupes(c: &mut Ctx) {
 }
 
 fn orphans(c: &mut Ctx) {
-    let mut inbound = vec![0usize; c.id.entries.len()];
-    for (src, e) in
-        c.id.entries
-            .iter()
-            .enumerate()
-            .filter(|(_, e)| !e.is_generated())
-    {
-        for (_, link) in all_links(e) {
-            for hit in c.id.resolve_link(&c.keys, &link.target) {
-                if hit != src {
-                    inbound[hit] += 1;
-                }
-            }
-        }
-    }
-    let watched = [
-        Kind::Character,
-        Kind::Location,
-        Kind::LocationDetail,
-        Kind::Culture,
-        Kind::Faction,
-        Kind::Event,
-        Kind::Era,
-        Kind::Thread,
-        Kind::Conflict,
-        Kind::Lesson,
-        Kind::Writing,
-        Kind::Project,
-    ];
-    let found: Vec<Diagnostic> =
-        c.id.entries
-            .iter()
-            .enumerate()
-            .filter(|(i, e)| watched.contains(&e.kind) && inbound[*i] == 0)
-            .map(|(_, e)| warn("orphans", &e.rel, "zero inbound links"))
-            .collect();
+    let found: Vec<Diagnostic> = crate::find::orphans(c.id)
+        .into_iter()
+        .map(|i| warn("orphans", &c.id.entries[i].rel, "zero inbound links"))
+        .collect();
     c.out.extend(found);
 }
 

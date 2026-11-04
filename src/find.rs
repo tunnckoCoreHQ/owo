@@ -171,19 +171,30 @@ pub fn outlinks(id: &Identity, idx: usize) -> Vec<LinkRef> {
         .collect()
 }
 
-/// Every wiki-link in a file with its 1-based line, frontmatter included.
+/// Every wiki-link in a file with its 1-based line, frontmatter included,
+/// leaving out `kb:` links and empty targets.
 pub fn file_links(e: &Entry) -> Vec<(usize, markdown::Link)> {
+    let mut out = raw_links(e);
+    out.retain(|(_, l)| !l.target.is_empty() && !l.target.starts_with("kb:"));
+    out
+}
+
+/// Every wiki-link in a file with its 1-based line, frontmatter included.
+pub fn raw_links(e: &Entry) -> Vec<(usize, markdown::Link)> {
     let split = markdown::split(&e.text);
     let mut out = vec![];
     if let Some(fm) = split.frontmatter {
-        out.extend(markdown::links(fm).into_iter().map(|l| (l.line + 2, l)));
+        out.extend(
+            markdown::links_in_value(fm)
+                .into_iter()
+                .map(|l| (l.line + 2, l)),
+        );
     }
     out.extend(
         markdown::links(split.body)
             .into_iter()
             .map(|l| (l.line + split.body_line, l)),
     );
-    out.retain(|(_, l)| !l.target.is_empty() && !l.target.starts_with("kb:"));
     out
 }
 
