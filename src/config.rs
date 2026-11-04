@@ -190,7 +190,19 @@ pub fn resolve(inputs: &Inputs) -> Result<Resolved> {
         .or_else(|| inputs.env_project.clone())
         .or_else(|| project_cfg.as_ref().and_then(|(_, c)| c.project.clone()));
 
-    let kb = project_cfg.as_ref().and_then(|(_, c)| c.kb.clone());
+    let kb = project_cfg.as_ref().and_then(|(file, c)| {
+        let raw = PathBuf::from(c.kb.as_ref()?);
+        let base = file.parent().unwrap_or(Path::new("."));
+        Some(
+            if raw.is_absolute() {
+                raw
+            } else {
+                base.join(raw)
+            }
+            .display()
+            .to_string(),
+        )
+    });
     Ok(Resolved {
         root,
         root_source,

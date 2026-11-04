@@ -2,15 +2,20 @@
 
 mod add;
 mod config;
+mod context;
 mod create;
+mod find;
 mod identity;
 mod index;
 mod lint;
 mod markdown;
 mod output;
+mod review;
+mod search;
 mod slug;
 mod stamp;
 mod state;
+mod status;
 mod templates;
 
 use anyhow::Result;
@@ -99,6 +104,74 @@ enum Command {
     Templates {
         /// Template name to print (omit to list)
         name: Option<String>,
+    },
+    /// Resolve a name to an entry path the way links do
+    Resolve {
+        name: Vec<String>,
+        /// Limit to one entry type
+        #[arg(long = "type")]
+        kind: Option<String>,
+    },
+    /// Print an entry, or one section of it
+    Show {
+        name: Vec<String>,
+        #[arg(long)]
+        section: Option<String>,
+    },
+    /// Backlinks and outlinks of an entry, or every orphan
+    Links {
+        name: Vec<String>,
+        /// Only links pointing at the entry
+        #[arg(long = "in")]
+        inbound: bool,
+        /// Only links going out of the entry
+        #[arg(long = "out")]
+        outbound: bool,
+        /// List entries nothing links to
+        #[arg(long)]
+        orphans: bool,
+    },
+    /// The tiered load set: core files, the generated Now block, and requested tiers
+    Context {
+        /// Add soul/VOICE.md
+        #[arg(long)]
+        voice: bool,
+        /// Add soul/LOOK.md
+        #[arg(long)]
+        look: bool,
+        /// Add a resolvable entry (repeatable)
+        #[arg(long = "with")]
+        with: Vec<String>,
+        /// Recent project notes to include
+        #[arg(long, default_value_t = 3)]
+        notes: usize,
+        /// paths: the list; text: file contents concatenated
+        #[arg(long, default_value = "paths", value_parser = ["paths", "text"])]
+        format: String,
+        /// Leave work/state.json untouched
+        #[arg(long)]
+        no_touch: bool,
+    },
+    /// Derived current state: activity, recent days and events, open threads, review
+    State,
+    /// Files updated in the last N days
+    Recent {
+        #[arg(long, default_value_t = 7)]
+        days: i64,
+    },
+    /// BM25 search over titles, aliases, summaries and bodies
+    Search {
+        query: Vec<String>,
+        /// Limit to soul, life or work
+        #[arg(long)]
+        scope: Option<String>,
+        #[arg(long, default_value_t = 10)]
+        limit: usize,
+    },
+    /// Review bookkeeping
+    Review {
+        #[command(subcommand)]
+        action: ReviewAction,
     },
     /// Show how root, identity and project resolve
     Config,
@@ -379,6 +452,245 @@ fn run(cli: &Cli, out: &Out) -> Result<i32> {
             } else {
                 exit::OK
             })
+        }
+        Command::Resolve { name, kind } => {
+            let id = load(cli)?;
+            let name = name.join(" ");
+            match find::resolve(&id, &name, kind.as_deref()) {
+                find::Resolution::Found(i) => {
+                    let hit = find::Hit::of(&id.entries[i]);
+                    if out.json {
+                        Envelope::ok(serde_json::to_value(&hit)?).print();
+                    } else {
+                        println!("{}", hit.path);
+                    }
+                    Ok(exit::OK)
+                }
+                find::Resolution::Ambiguous(v) | find::Resolution::Missing(v) => {
+                    let hits: Vec<_> = v.iter().map(|i| find::Hit::of(&id.entries[*i])).collect();
+                    let msg = if hits.is_empty() {
+                        format!("{name:?} does not resolve")
+                    } else {
+                        format!("{name:?} does not resolve to one entry")
+                    };
+                    if out.json {
+                        Envelope {
+                            ok: false,
+                            data: json!({ "candidates": hits }),
+                            warnings: vec![],
+                            errors: vec![json!(msg)],
+                        }
+                        .print();
+                    } else {
+                        eprintln!("owo: {msg}");
+                        for h in &hits {
+                            eprintln!("  {}", h.render());
+                        }
+                    }
+                    Ok(exit::PROBLEMS)
+                }
+            }
+        }
+        Command::Show { name, section } => {
+            let id = load(cli)?;
+            let i = resolve_one(&id, &name.join(" "))?;
+            let text = find::show(&id.entries[i], section.as_deref()).ok_or_else(|| {
+                anyhow::anyhow!(
+                    "no section {:?} in {}",
+                    section.as_deref().unwrap_or(""),
+                    id.entries[i].rel
+                )
+            })?;
+            if out.json {
+                Envelope::ok(json!({ "path": id.entries[i].rel, "text": text })).print();
+            } else {
+                print!("{text}");
+            }
+            Ok(exit::OK)
+        }
+        Command::Links {
+            name,
+            inbound,
+            outbound,
+            orphans,
+        } => {
+            let id = load(cli)?;
+            if *orphans {
+                let hits: Vec<_> = find::orphans(&id)
+                    .into_iter()
+                    .map(|i| find::Hit::of(&id.entries[i]))
+                    .collect();
+                if out.json {
+                    Envelope::ok(json!({ "orphans": hits })).print();
+                } else {
+                    for h in &hits {
+                        println!("{}", h.render());
+                    }
+                }
+                return Ok(exit::OK);
+            }
+            let i = resolve_one(&id, &name.join(" "))?;
+            let both = !inbound && !outbound;
+            let back = if *inbound || both {
+                find::backlinks(&id, i)
+            } else {
+                vec![]
+            };
+            let fwd = if *outbound || both {
+                find::outlinks(&id, i)
+            } else {
+                vec![]
+            };
+            if out.json {
+                Envelope::ok(json!({ "path": id.entries[i].rel, "in": back, "out": fwd })).print();
+            } else {
+                for l in &back {
+                    println!("in  {}:{}  {}", l.path, l.line, l.text);
+                }
+                for l in &fwd {
+                    let to = if l.path.is_empty() {
+                        "(broken)".to_string()
+                    } else {
+                        l.path.clone()
+                    };
+                    println!("out [[{}]] -> {to}  (line {})", l.target, l.line);
+                }
+            }
+            Ok(exit::OK)
+        }
+        Command::Context {
+            voice,
+            look,
+            with,
+            notes,
+            format,
+            no_touch,
+        } => {
+            let r = resolved(cli)?;
+            let id = identity::Identity::load(&r.root, &need_identity(&r)?)?;
+            let req = context::Request {
+                voice: *voice,
+                look: *look,
+                project: r.project.as_deref(),
+                config_kb: r.kb.as_ref().map(PathBuf::from),
+                with,
+                notes: *notes,
+            };
+            let ctx = context::build(&id, &req)?;
+            if let (Some(p), false) = (r.project.as_deref(), *no_touch) {
+                context::touch_project(&id, p)?;
+            }
+            if out.json {
+                let warnings = ctx.warnings.iter().map(|w| json!(w)).collect();
+                Envelope {
+                    ok: true,
+                    data: serde_json::to_value(&ctx)?,
+                    warnings,
+                    errors: vec![],
+                }
+                .print();
+            } else {
+                for w in &ctx.warnings {
+                    eprintln!("warning: {w}");
+                }
+                print!(
+                    "{}",
+                    if format == "text" {
+                        context::render_text(&id, &ctx)
+                    } else {
+                        context::render_paths(&ctx)
+                    }
+                );
+            }
+            Ok(exit::OK)
+        }
+        Command::State => {
+            let id = load(cli)?;
+            let s = status::compute(&id, 14, 5);
+            if out.json {
+                Envelope::ok(serde_json::to_value(&s)?).print();
+            } else {
+                print!("{}", status::render(&s));
+            }
+            Ok(exit::OK)
+        }
+        Command::Recent { days } => {
+            let id = load(cli)?;
+            let list = status::recent(&id, *days);
+            if out.json {
+                Envelope::ok(json!({ "days": days, "files": list })).print();
+            } else {
+                for f in &list {
+                    println!("{}  {}", &f.updated[..10.min(f.updated.len())], f.path);
+                }
+            }
+            Ok(exit::OK)
+        }
+        Command::Search {
+            query,
+            scope,
+            limit,
+        } => {
+            let id = load(cli)?;
+            let hits = search::search(&id, &query.join(" "), scope.as_deref(), *limit);
+            if out.json {
+                Envelope::ok(json!({ "hits": hits })).print();
+            } else {
+                for h in &hits {
+                    println!("{:>6.2}  {}  {}", h.score, h.path, h.title);
+                    if let (Some(l), Some(s)) = (h.line, &h.snippet) {
+                        println!("        {l}: {s}");
+                    }
+                }
+            }
+            Ok(if hits.is_empty() {
+                exit::PROBLEMS
+            } else {
+                exit::OK
+            })
+        }
+        Command::Review {
+            action: ReviewAction::Done,
+        } => {
+            let id = load(cli)?;
+            let review = review::done(&id)?;
+            if out.json {
+                Envelope::ok(review).print();
+            } else {
+                out.say(format!(
+                    "review recorded through {}",
+                    review["reviewed_through"].as_str().unwrap_or("-")
+                ));
+            }
+            Ok(exit::OK)
+        }
+    }
+}
+
+#[derive(Subcommand)]
+enum ReviewAction {
+    /// Record a finished review (dates and the MEMORY.md hash)
+    Done,
+}
+
+fn load(cli: &Cli) -> Result<identity::Identity> {
+    let r = resolved(cli)?;
+    identity::Identity::load(&r.root, &need_identity(&r)?)
+}
+
+fn resolve_one(id: &identity::Identity, name: &str) -> Result<usize> {
+    match find::resolve(id, name, None) {
+        find::Resolution::Found(i) => Ok(i),
+        find::Resolution::Ambiguous(v) | find::Resolution::Missing(v) => {
+            let c: Vec<String> = v.iter().map(|i| id.entries[*i].rel.clone()).collect();
+            anyhow::bail!(
+                "{name:?} does not resolve to one entry{}",
+                if c.is_empty() {
+                    String::new()
+                } else {
+                    format!("; candidates: {}", c.join(", "))
+                }
+            )
         }
     }
 }
