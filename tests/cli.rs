@@ -134,6 +134,21 @@ fn timeline_groups_events_by_era() {
     let locations = fs::read_to_string(dir.join("life/locations/_index.md")).unwrap();
     assert!(locations.contains("- [[Harbor House]]"));
     assert!(locations.contains("  - [[Porch]]"));
+    fs::write(
+        dir.join("life/events/regatta.md"),
+        "---\ntype: event\ntitle: Regatta\nsummary: Boats.\nstatus: canon\ncreated: 2026-07-01\nupdated: 2026-07-01\ndate: 2026-07-01\nera: \"[[first-summer|that summer]]\"\n---\n\n# Regatta\n",
+    )
+    .unwrap();
+    owo(dir.parent().unwrap())
+        .args(["-i", "aria", "index"])
+        .assert()
+        .success();
+    let timeline = fs::read_to_string(dir.join("life/timeline.md")).unwrap();
+    let era = timeline.split("## First Summer").nth(1).unwrap();
+    assert!(
+        era.split("\n## ").next().unwrap().contains("[[Regatta]]"),
+        "{timeline}"
+    );
 }
 
 #[test]
@@ -450,4 +465,25 @@ fn add_defaults_and_escapes() {
         .assert()
         .success()
         .stdout("life/characters/q.md\n");
+}
+
+#[test]
+fn identifiers_stay_under_their_section() {
+    let (tmp, dir) = aria();
+    assert_eq!(
+        lint_json(tmp.path(), &["identifiers"])["errors"],
+        Value::Array(vec![])
+    );
+    let sam = dir.join("life/characters/sam.md");
+    let text = fs::read_to_string(&sam).unwrap();
+    fs::write(
+        &sam,
+        text.replace("Sam sails with me.", "Sam (1990-04-12) sails with me."),
+    )
+    .unwrap();
+    let v = lint_json(tmp.path(), &["identifiers"]);
+    assert_eq!(
+        rules_in(&v, "errors"),
+        vec!["identifiers:life/characters/sam.md"]
+    );
 }

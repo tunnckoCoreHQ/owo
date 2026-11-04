@@ -30,7 +30,7 @@ Each `state.json` has `files`: a map from scope-relative path to `{created, upda
 
 Generated files start with a marker comment and depend only on entry content, so regeneration is deterministic and comparable.
 
-Each life category `_index.md` lists `- [[Title]]: summary (aliases: ...)`; location details nest under their overview. `life/_index.md` lists categories with counts. `life/timeline.md` groups events under eras (by `era` link) sorted by `date`. `work/_index.md` lists the profile and projects with note counts.
+Each life category `_index.md` lists `- [[Title]]: summary (aliases: ...)`; location details nest under their overview. `life/_index.md` lists categories with counts. `life/timeline.md` groups events under eras sorted by `date`; `era` resolves like any link (title, alias, slug, `|label`). `work/_index.md` lists the profile and projects with note counts.
 
 ## Config resolution
 

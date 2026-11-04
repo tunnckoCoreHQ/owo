@@ -11,7 +11,7 @@ Each rule has a code usable with `--rule`.
 - `soul-plain` (error): soul Markdown has no frontmatter.
 - `links` (error): every wiki-link in body and frontmatter resolves; ambiguous links warn, and so does a `#Section` the target lacks. `kb:` links belong to the `kb` rule.
 - `unique` (error): titles and aliases are unique across the identity.
-- `identifiers` (error): values under any `## Identifiers` bullet (text after the first colon, 3+ characters) and `identity.json` account handles appear only in their home file.
+- `identifiers` (error): values under any `## Identifiers` bullet (text after the first colon, 3+ characters) appear only in that section, and `identity.json` account handles only in `identity.json`. Headings inside fenced code do not count.
 - `journal` (error): only journal entries link into `life/journal/`.
 - `supersede` (error): `superseded` entries have a resolving `superseded_by`; `disputed` entries are linked from an open conflict.
 - `generated` (error): generated files match `owo index`.

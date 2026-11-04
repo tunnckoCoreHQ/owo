@@ -111,6 +111,24 @@ fn timeline(identity: &Identity) -> String {
         l.replace_range(0..2, &format!("- {date}: "));
         l
     };
+    // Each event's era, resolved the way links resolve (title, alias, slug, `|label`).
+    let keys = identity.link_keys();
+    let era_of: Vec<Option<String>> = events
+        .iter()
+        .map(|ev| {
+            let value = ev.field_str("era")?;
+            let target = crate::markdown::links(&value)
+                .first()
+                .map(|l| l.target.clone())
+                .unwrap_or(value);
+            match identity.resolve_link(&keys, &target)[..] {
+                [i] if identity.entries[i].kind == Kind::Era => {
+                    Some(identity.entries[i].rel.clone())
+                }
+                _ => None,
+            }
+        })
+        .collect();
     let mut lines = vec![];
     let mut placed = vec![false; events.len()];
     let mut sorted_eras = eras.clone();
@@ -119,9 +137,7 @@ fn timeline(identity: &Identity) -> String {
         let title = era.title.clone().unwrap_or_else(|| era.stem_key());
         lines.push(format!("\n## {title}\n"));
         for (i, ev) in events.iter().enumerate() {
-            let tag = ev.field_str("era").unwrap_or_default();
-            let tag = tag.trim_start_matches("[[").trim_end_matches("]]");
-            if !placed[i] && (tag.eq_ignore_ascii_case(&title) || tag == era.stem_key()) {
+            if era_of[i].as_deref() == Some(era.rel.as_str()) {
                 placed[i] = true;
                 lines.push(event_line(ev));
             }

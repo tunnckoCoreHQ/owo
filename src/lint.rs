@@ -511,20 +511,24 @@ fn identifiers(c: &mut Ctx) {
     let values = identifier_values(c.id);
     let mut found = vec![];
     for e in &c.id.entries {
+        // In the home file, only the `## Identifiers` lines may hold the values.
+        let split = markdown::split(&e.text);
+        let home_lines: Vec<usize> = markdown::section(split.body, "Identifiers")
+            .map(|(_, lines)| lines.iter().map(|(i, _)| i + split.body_line).collect())
+            .unwrap_or_default();
         for (value, home) in &values {
-            if &e.rel == home {
+            let own = &e.rel == home;
+            if own && home == "identity.json" {
                 continue;
             }
             for (i, line) in e.text.lines().enumerate() {
-                if line.contains(value.as_str()) {
-                    found.push(
-                        err(
-                            "identifiers",
-                            &e.rel,
-                            format!("identifier {value:?} belongs only in {home}"),
-                        )
-                        .at(i + 1),
-                    );
+                if line.contains(value.as_str()) && !(own && home_lines.contains(&(i + 1))) {
+                    let msg = if own {
+                        format!("identifier {value:?} belongs only under ## Identifiers")
+                    } else {
+                        format!("identifier {value:?} belongs only in {home}")
+                    };
+                    found.push(err("identifiers", &e.rel, msg).at(i + 1));
                 }
             }
         }
