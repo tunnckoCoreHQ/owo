@@ -43,34 +43,49 @@ pub fn split(text: &str) -> Split<'_> {
     }
 }
 
-/// First `# ` heading in the body.
-pub fn first_heading(body: &str) -> Option<String> {
-    body.lines()
-        .find_map(|l| l.strip_prefix("# ").map(|h| h.trim().to_string()))
+/// Level and text of an ATX heading line (`# ` to `###### `).
+pub fn heading(line: &str) -> Option<(usize, &str)> {
+    let level = line.chars().take_while(|c| *c == '#').count();
+    let text = line[level..].strip_prefix(' ')?;
+    (1..=6).contains(&level).then(|| (level, text.trim()))
 }
 
-/// Lines of the `## <name>` section, without the heading, up to the next `#`/`##` heading.
-pub fn section<'a>(body: &'a str, name: &str) -> Option<Vec<(usize, &'a str)>> {
-    let mut found = None;
+/// Lines with their 0-based index, marking each as heading-capable (outside fenced code).
+fn unfenced(body: &str) -> impl Iterator<Item = (usize, &str, bool)> {
+    let mut fenced = false;
+    body.lines().enumerate().map(move |(i, line)| {
+        if line.trim_start().starts_with("```") {
+            fenced = !fenced;
+            return (i, line, false);
+        }
+        (i, line, !fenced)
+    })
+}
+
+/// First `# ` heading in the body, outside fenced code.
+pub fn first_heading(body: &str) -> Option<String> {
+    unfenced(body).find_map(|(_, l, open)| match heading(l).filter(|_| open) {
+        Some((1, h)) => Some(h.to_string()),
+        _ => None,
+    })
+}
+
+/// The section headed `<name>` at any level: its heading line and the lines below it with their
+/// 0-based index, up to the next heading of the same or a higher level. Headings inside fenced
+/// code do not count.
+pub fn section<'a>(body: &'a str, name: &str) -> Option<(&'a str, Vec<(usize, &'a str)>)> {
+    let mut found: Option<(usize, &str)> = None;
     let mut lines = vec![];
-    for (i, line) in body.lines().enumerate() {
-        if let Some(h) = line.strip_prefix("## ") {
-            if found.is_some() {
-                break;
-            }
-            if h.trim().eq_ignore_ascii_case(name) {
-                found = Some(i);
-            }
-            continue;
-        }
-        if line.starts_with("# ") && found.is_some() {
-            break;
-        }
-        if found.is_some() {
-            lines.push((i, line));
+    for (i, line, open) in unfenced(body) {
+        let h = heading(line).filter(|_| open);
+        match (found, h) {
+            (None, Some((l, text))) if text.eq_ignore_ascii_case(name) => found = Some((l, line)),
+            (Some((at, _)), Some((l, _))) if l <= at => break,
+            (Some(_), _) => lines.push((i, line)),
+            _ => {}
         }
     }
-    found.map(|_| lines)
+    found.map(|(_, h)| (h, lines))
 }
 
 /// A `[[target#section|label]]` link with its 0-based line in the body.
@@ -171,7 +186,8 @@ mod tests {
     #[test]
     fn reads_sections() {
         let body = "# Joe\n\n## Key facts\n- a\n\n## Identifiers\n- born: 1990-01-01\n- x: @joe\n\n## Sources\n";
-        let ids = section(body, "Identifiers").unwrap();
+        let (head, ids) = section(body, "Identifiers").unwrap();
+        assert_eq!(head, "## Identifiers");
         let values: Vec<&str> = ids
             .iter()
             .map(|(_, l)| *l)
@@ -181,6 +197,20 @@ mod tests {
         assert!(section(body, "Missing").is_none());
     }
 
+    #[test]
+    fn sections_at_any_level_skip_fences() {
+        let body = "# Ines\n\n## Summary\n```\n## Not a heading\n```\n### Coffee order\nflat white\n## Next\n";
+        let (_, summary) = section(body, "Summary").unwrap();
+        assert_eq!(summary.len(), 5, "fence and the ### subsection stay inside");
+        let (head, coffee) = section(body, "Coffee order").unwrap();
+        assert_eq!(head, "### Coffee order");
+        assert_eq!(coffee, vec![(7, "flat white")]);
+        assert!(section(body, "Not a heading").is_none());
+        assert_eq!(
+            first_heading("```\n# Code\n```\n# Real\n").as_deref(),
+            Some("Real")
+        );
+    }
     #[test]
     fn counts_words() {
         assert_eq!(

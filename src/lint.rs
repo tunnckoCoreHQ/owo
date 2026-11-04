@@ -476,7 +476,7 @@ fn unique(c: &mut Ctx) {
 fn identifier_values(id: &Identity) -> Vec<(String, String)> {
     let mut out = vec![];
     for e in id.entries.iter().filter(|e| !e.is_generated()) {
-        if let Some(lines) = markdown::section(e.body(), "Identifiers") {
+        if let Some((_, lines)) = markdown::section(e.body(), "Identifiers") {
             for (_, l) in lines {
                 let Some(item) = l.trim().strip_prefix("- ") else {
                     continue;

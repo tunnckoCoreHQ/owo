@@ -417,11 +417,7 @@ fn run(cli: &Cli, out: &Out) -> Result<i32> {
             let r = resolved(cli)?;
             let slug = need_identity(&r)?;
             let id = identity::Identity::load(&r.root, &slug)?;
-            let title = if title.is_empty() && kind == "log" {
-                "Day".to_string()
-            } else {
-                title.join(" ")
-            };
+            let title = title.join(" ");
             let req = add::Request {
                 kind,
                 title: &title,
@@ -573,27 +569,10 @@ fn run(cli: &Cli, out: &Out) -> Result<i32> {
                 let body = match &wanted {
                     None => text,
                     Some(s) => {
-                        let mut out = vec![];
-                        let mut level = 0;
-                        for line in text.lines() {
-                            let hashes = line.chars().take_while(|c| *c == '#').count();
-                            if level > 0 && hashes > 0 && hashes <= level {
-                                break;
-                            }
-                            if level == 0
-                                && hashes > 0
-                                && line[hashes..].trim().eq_ignore_ascii_case(s)
-                            {
-                                level = hashes;
-                            }
-                            if level > 0 {
-                                out.push(line);
-                            }
-                        }
-                        if out.is_empty() {
-                            anyhow::bail!("no section {s:?} in {file}");
-                        }
-                        format!("{}\n", out.join("\n"))
+                        let (head, lines) = markdown::section(&text, s)
+                            .ok_or_else(|| anyhow::anyhow!("no section {s:?} in {file}"))?;
+                        let lines: Vec<&str> = lines.iter().map(|(_, l)| *l).collect();
+                        format!("{head}\n{}\n", lines.join("\n").trim_end())
                     }
                 };
                 if out.json {

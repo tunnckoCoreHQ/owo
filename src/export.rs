@@ -49,7 +49,7 @@ fn text(id: &Identity, rel: &str) -> String {
 fn section(id: &Identity, rel: &str, name: &str) -> String {
     id.entry(rel)
         .and_then(|e| markdown::section(e.body(), name))
-        .map(|lines| {
+        .map(|(_, lines)| {
             lines
                 .iter()
                 .map(|(_, l)| *l)

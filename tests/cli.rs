@@ -408,3 +408,46 @@ fn templates_list_show_and_override() {
         .unwrap()
         .contains("Custom."));
 }
+
+#[test]
+fn add_defaults_and_escapes() {
+    let tmp = TempDir::new().unwrap();
+    owo(tmp.path()).args(["new", "Zed"]).assert().success();
+    let add = |args: &[&str]| {
+        owo(tmp.path())
+            .args(["-i", "zed", "add"])
+            .args(args)
+            .assert()
+    };
+    add(&["log", "--date", "2026-01-01"]).success();
+    add(&["log", "--date", "2026-01-02"]).success();
+    add(&["project", "API Server"]).success();
+    add(&[
+        "character",
+        "Q",
+        "--alias",
+        r"back\slash",
+        "--alias",
+        "say \"hi\"",
+    ])
+    .success();
+    add(&["character"]).failure();
+    let lint = owo(tmp.path())
+        .args([
+            "--json", "-i", "zed", "lint", "--rule", "unique", "--rule", "schema",
+        ])
+        .output()
+        .unwrap();
+    let v: Value = serde_json::from_slice(&lint.stdout).unwrap();
+    assert_eq!(v["errors"].as_array().unwrap().len(), 0, "{v}");
+    owo(tmp.path())
+        .args(["-i", "zed", "resolve", "api-server"])
+        .assert()
+        .success()
+        .stdout("work/projects/api-server/project.md\n");
+    owo(tmp.path())
+        .args(["-i", "zed", "resolve", r"back\slash"])
+        .assert()
+        .success()
+        .stdout("life/characters/q.md\n");
+}

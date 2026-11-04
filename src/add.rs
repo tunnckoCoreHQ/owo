@@ -49,12 +49,17 @@ pub fn add(id: &Identity, req: &Request) -> Result<Added> {
     if chrono::NaiveDate::parse_from_str(&date, "%Y-%m-%d").is_err() {
         bail!("--date {date:?} is not YYYY-MM-DD");
     }
-    let slug = slugify(req.title);
-    if slug.is_empty() && req.kind != "log" {
-        bail!("title {:?} has no slug characters", req.title);
+    // A log without a title is titled by its date, so titles stay unique.
+    let title = match req.title.trim() {
+        "" if req.kind == "log" => date.as_str(),
+        t => t,
+    };
+    let slug = slugify(title);
+    if slug.is_empty() {
+        bail!("title {title:?} has no slug characters; pass a title");
     }
     let mut values: BTreeMap<&str, String> = BTreeMap::new();
-    values.insert("title", req.title.trim().to_string());
+    values.insert("title", title.to_string());
     values.insert("today", today);
     values.insert("date", date.clone());
 
@@ -121,13 +126,13 @@ pub fn add(id: &Identity, req: &Request) -> Result<Added> {
         let list = req
             .aliases
             .iter()
-            .map(|a| format!("\"{}\"", a.replace('"', "\\\"")))
+            .map(|a| format!("\"{}\"", templates::yaml_escape(a)))
             .collect::<Vec<_>>()
             .join(", ");
         text = text.replacen("aliases: []", &format!("aliases: [{list}]"), 1);
     }
     if let (Some(kb), "project") = (req.kb, req.kind) {
-        let kb = kb.replace('"', "\\\"");
+        let kb = templates::yaml_escape(kb);
         text = text.replacen("kb: \"\"", &format!("kb: \"{kb}\""), 1);
     }
     fs::create_dir_all(path.parent().expect("has parent"))?;

@@ -95,10 +95,14 @@ pub fn fill(template: &str, values: &BTreeMap<&str, String>) -> String {
     let mut out = template.to_string();
     for (key, value) in values {
         out = out.replace(&format!("{{{{{key}}}}}"), value);
-        let escaped = value.replace('\\', "\\\\").replace('"', "\\\"");
-        out = out.replace(&format!("{{{{{key}_yaml}}}}"), &escaped);
+        out = out.replace(&format!("{{{{{key}_yaml}}}}"), &yaml_escape(value));
     }
     out
+}
+
+/// Escapes a value for a double-quoted YAML string.
+pub fn yaml_escape(value: &str) -> String {
+    value.replace('\\', "\\\\").replace('"', "\\\"")
 }
 
 #[cfg(test)]

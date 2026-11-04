@@ -124,10 +124,14 @@ impl Entry {
         }
     }
 
-    /// Slug-like key from the path: the folder name for `overview.md`, else the file stem.
+    /// Slug-like key from the path: the folder name for `overview.md` and `project.md`,
+    /// else the file stem.
     pub fn stem_key(&self) -> String {
         let path = Path::new(&self.rel);
-        if path.file_name().and_then(|f| f.to_str()) == Some("overview.md") {
+        if matches!(
+            path.file_name().and_then(|f| f.to_str()),
+            Some("overview.md" | "project.md")
+        ) {
             if let Some(parent) = path
                 .parent()
                 .and_then(|p| p.file_name())

@@ -107,14 +107,14 @@ pub fn resolve(id: &Identity, name: &str, kind: Option<&str>) -> Resolution {
     }
 }
 
-/// Text of one `## section` (case-insensitive), or the whole file.
+/// Text of one section (any heading level, case-insensitive), or the whole file.
 pub fn show(e: &Entry, section: Option<&str>) -> Option<String> {
     match section {
         None => Some(e.text.clone()),
         Some(name) => {
-            let lines = markdown::section(e.body(), name)?;
+            let (head, lines) = markdown::section(e.body(), name)?;
             let body: Vec<&str> = lines.iter().map(|(_, l)| *l).collect();
-            Some(format!("## {name}\n{}\n", body.join("\n").trim_end()))
+            Some(format!("{head}\n{}\n", body.join("\n").trim_end()))
         }
     }
 }
@@ -312,9 +312,7 @@ pub fn kb_link(id: &Identity, target: &str) -> Option<Result<KbLink, String>> {
         let text = std::fs::read_to_string(&file).unwrap_or_default();
         out.section_exists = match &out.section {
             None => true,
-            Some(s) => text.lines().any(|l| {
-                l.trim_start_matches('#').trim().eq_ignore_ascii_case(s) && l.starts_with('#')
-            }),
+            Some(s) => markdown::section(&text, s).is_some(),
         };
     }
     out.file = Some(file.display().to_string());
