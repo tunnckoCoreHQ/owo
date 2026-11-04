@@ -34,3 +34,15 @@
 - `export skill`, `export card --png/--scenario`.
 - Flags: `add --kb`, `search --type/--since/--in` plus `--project`, `state --days/--project`, `list` with name, last activity and projects.
 - Self-review: removed the `all_links` and `links_in_value` wrappers; the findings left open are listed in HANDOFF.md.
+
+## 2026-11-04 (phase 5: review pass and handoff items)
+
+- Review fixes: a log without a title is titled by its date; `project.md` resolves by its folder slug; sections match any heading level and skip fenced code (also for `show kb:` and the `kb` rule); the timeline resolves `era` like a link; identifier values may not leave their own `## Identifiers` section; stamp keeps CRLF line endings; soul evidence counts distinct entries; alias and `--kb` values escape backslashes; search snippets come from the body; `~/` expands in KB paths; `export card --json` prints the envelope.
+- Exit codes: a missing identity folder exits 3, an unknown `add` type exits 2, and a closed stdout ends quietly.
+- `migrate v1` maps location folders and loose location files (rooms become location details) and the cultures, factions, eras and threads folders.
+- `review done` defaults `reviewed_through` to the newest log, event or journal date; the design now says so.
+- `owo templates list|show`, with overrides by identity-relative path or `<type>.md`.
+- One rule for the project: the working project resolves from flag, env, `.owo.toml`; `search` and `export card` filter only on the flag.
+- Card `nickname` comes from `identity.json`; recurring phrases must start and end with a content word.
+- `sync`: a session lock file, and a pending run is not started again on every turn.
+- `owo mcp`: stdio JSON-RPC server; each tool runs the same binary.
