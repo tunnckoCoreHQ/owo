@@ -104,7 +104,12 @@ fn lore(e: &Entry, n: usize) -> Value {
     })
 }
 
-pub fn card(id: &Identity, spec: &str, project: Option<&str>) -> Result<Value> {
+pub fn card(
+    id: &Identity,
+    spec: &str,
+    project: Option<&str>,
+    scenario_from: Option<&str>,
+) -> Result<Value> {
     let name = id
         .manifest
         .as_ref()
@@ -155,14 +160,22 @@ pub fn card(id: &Identity, spec: &str, project: Option<&str>) -> Result<Value> {
         .trim()
         .to_string();
     }
+    if let Some(name) = scenario_from {
+        let i = match crate::find::resolve(id, name, None) {
+            crate::find::Resolution::Found(i) => i,
+            _ => bail!("--scenario {name:?} does not resolve to one entry"),
+        };
+        let e = &id.entries[i];
+        scenario = e
+            .field_str("summary")
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| body_without(&e.text, &["Sources", "Identifiers"]));
+    }
     for e in &id.entries {
         let include = match e.kind {
-            Kind::Project | Kind::Note => {
-                project_prefix
-                    .as_ref()
-                    .is_some_and(|p| e.rel.starts_with(p))
-                    && e.kind == Kind::Project
-            }
+            Kind::Project => project_prefix
+                .as_ref()
+                .is_some_and(|p| e.rel.starts_with(p)),
             k => order(k).is_some(),
         };
         if include {
@@ -344,4 +357,88 @@ Add `--look` when visuals matter.
     let path = dir.join("SKILL.md");
     fs::write(&path, text)?;
     Ok(path.display().to_string())
+}
+
+fn crc32(bytes: &[u8]) -> u32 {
+    let mut crc = 0xFFFF_FFFFu32;
+    for &b in bytes {
+        crc ^= u32::from(b);
+        for _ in 0..8 {
+            crc = if crc & 1 == 1 {
+                (crc >> 1) ^ 0xEDB8_8320
+            } else {
+                crc >> 1
+            };
+        }
+    }
+    !crc
+}
+
+fn base64(bytes: &[u8]) -> String {
+    const T: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
+    for chunk in bytes.chunks(3) {
+        let n = (u32::from(chunk[0]) << 16)
+            | (u32::from(*chunk.get(1).unwrap_or(&0)) << 8)
+            | u32::from(*chunk.get(2).unwrap_or(&0));
+        for i in 0..4 {
+            if i <= chunk.len() {
+                out.push(T[(n >> (18 - 6 * i) & 63) as usize] as char);
+            } else {
+                out.push('=');
+            }
+        }
+    }
+    out
+}
+
+/// Writes `png` with the card embedded as tEXt chunks: `chara` (V2 JSON) always,
+/// `ccv3` (V3 JSON) for V3 cards. Existing `chara`/`ccv3` chunks are replaced.
+pub fn embed_png(png: &[u8], cards: &[(&str, &Value)]) -> Result<Vec<u8>> {
+    const SIG: &[u8] = b"\x89PNG\r\n\x1a\n";
+    if !png.starts_with(SIG) {
+        bail!("not a PNG file");
+    }
+    let mut out = SIG.to_vec();
+    let mut pos = SIG.len();
+    while pos + 8 <= png.len() {
+        let len = u32::from_be_bytes(png[pos..pos + 4].try_into()?) as usize;
+        let kind = &png[pos + 4..pos + 8];
+        let end = pos + 12 + len;
+        if end > png.len() {
+            bail!("truncated PNG chunk");
+        }
+        let data = &png[pos + 8..pos + 8 + len];
+        let ours = kind == b"tEXt" && (data.starts_with(b"chara\0") || data.starts_with(b"ccv3\0"));
+        if kind == b"IEND" {
+            for (key, card) in cards {
+                let mut chunk = b"tEXt".to_vec();
+                chunk.extend_from_slice(key.as_bytes());
+                chunk.push(0);
+                chunk.extend_from_slice(base64(serde_json::to_string(card)?.as_bytes()).as_bytes());
+                out.extend_from_slice(&((chunk.len() - 4) as u32).to_be_bytes());
+                out.extend_from_slice(&chunk);
+                out.extend_from_slice(&crc32(&chunk).to_be_bytes());
+            }
+        }
+        if !ours {
+            out.extend_from_slice(&png[pos..end]);
+        }
+        pos = end;
+        if kind == b"IEND" {
+            return Ok(out);
+        }
+    }
+    bail!("PNG has no IEND chunk")
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn base64_and_crc() {
+        assert_eq!(super::base64(b"Man"), "TWFu");
+        assert_eq!(super::base64(b"Ma"), "TWE=");
+        assert_eq!(super::base64(b"M"), "TQ==");
+        assert_eq!(super::crc32(b"IEND"), 0xAE42_6082);
+    }
 }

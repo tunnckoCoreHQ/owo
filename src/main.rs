@@ -938,12 +938,28 @@ fn run(cli: &Cli, out: &Out) -> Result<i32> {
             Ok(exit::OK)
         }
         Command::Export {
-            format: ExportFormat::Card { spec, out: file },
+            format:
+                ExportFormat::Card {
+                    spec,
+                    out: file,
+                    png,
+                    scenario,
+                },
         } => {
             let id = load(cli)?;
-            let card = export::card(&id, spec, cli.project.as_deref())?;
+            let card = export::card(&id, spec, cli.project.as_deref(), scenario.as_deref())?;
             let text = serde_json::to_string_pretty(&card)?;
             match file {
+                Some(f) if png.is_some() => {
+                    let avatar = std::fs::read(png.as_ref().expect("checked"))?;
+                    let v2 = export::card(&id, "v2", cli.project.as_deref(), scenario.as_deref())?;
+                    let mut cards = vec![("chara", &v2)];
+                    if spec == "v3" {
+                        cards.push(("ccv3", &card));
+                    }
+                    std::fs::write(f, export::embed_png(&avatar, &cards)?)?;
+                    out.say(format!("wrote {}", f.display()));
+                }
                 Some(f) => {
                     std::fs::write(f, format!("{text}\n"))?;
                     out.say(format!("wrote {}", f.display()));
@@ -1036,6 +1052,12 @@ enum SoulAction {
 enum ExportFormat {
     /// Character Card JSON (V3 with V2-compatible fields, or V2)
     Card {
+        /// Embed the card in this PNG avatar (needs --out)
+        #[arg(long, requires = "out")]
+        png: Option<PathBuf>,
+        /// Event or location whose summary becomes the scenario
+        #[arg(long)]
+        scenario: Option<String>,
         #[arg(long, default_value = "v3", value_parser = ["v2", "v3"])]
         spec: String,
         /// Write to a file instead of stdout

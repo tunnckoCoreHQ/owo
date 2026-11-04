@@ -336,3 +336,84 @@ fn flags_list_search_state_add_kb() {
         .unwrap()
         .contains("kb: \"../kb/mural\""));
 }
+
+const PNG_1X1: &[u8] = &[
+    0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52,
+    0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x06, 0x00, 0x00, 0x00, 0x1F, 0x15, 0xC4,
+    0x89, 0x00, 0x00, 0x00, 0x0A, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9C, 0x63, 0x00, 0x01, 0x00, 0x00,
+    0x05, 0x00, 0x01, 0x0D, 0x0A, 0x2D, 0xB4, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4E, 0x44, 0xAE,
+    0x42, 0x60, 0x82,
+];
+
+fn chunks(png: &[u8]) -> Vec<(String, Vec<u8>)> {
+    let mut out = vec![];
+    let mut pos = 8;
+    while pos + 8 <= png.len() {
+        let len = u32::from_be_bytes(png[pos..pos + 4].try_into().unwrap()) as usize;
+        out.push((
+            String::from_utf8_lossy(&png[pos + 4..pos + 8]).into_owned(),
+            png[pos + 8..pos + 8 + len].to_vec(),
+        ));
+        pos += 12 + len;
+    }
+    out
+}
+
+#[test]
+fn card_png_and_scenario() {
+    let tmp = TempDir::new().unwrap();
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("examples");
+    let avatar = tmp.path().join("a.png");
+    fs::write(&avatar, PNG_1X1).unwrap();
+    let out = tmp.path().join("card.png");
+    owo(&root)
+        .args(["-i", "thea", "export", "card", "--png"])
+        .arg(&avatar)
+        .arg("--out")
+        .arg(&out)
+        .assert()
+        .success();
+    let png = fs::read(&out).unwrap();
+    let names: Vec<String> = chunks(&png)
+        .into_iter()
+        .map(|(k, d)| {
+            if k == "tEXt" {
+                format!(
+                    "tEXt:{}",
+                    String::from_utf8_lossy(&d[..d.iter().position(|b| *b == 0).unwrap()])
+                )
+            } else {
+                k
+            }
+        })
+        .collect();
+    assert_eq!(names, ["IHDR", "IDAT", "tEXt:chara", "tEXt:ccv3", "IEND"]);
+    // embedding again replaces the chunks
+    owo(&root)
+        .args(["-i", "thea", "export", "card", "--spec", "v2", "--png"])
+        .arg(&out)
+        .arg("--out")
+        .arg(&out)
+        .assert()
+        .success();
+    assert_eq!(
+        chunks(&fs::read(&out).unwrap())
+            .iter()
+            .filter(|(k, _)| k == "tEXt")
+            .count(),
+        1
+    );
+
+    let v: Value = serde_json::from_slice(
+        &owo(&root)
+            .args(["-i", "thea", "export", "card", "--scenario", "First Firing"])
+            .output()
+            .unwrap()
+            .stdout,
+    )
+    .unwrap();
+    assert_eq!(
+        v["data"]["scenario"],
+        "The first kiln load that came out whole."
+    );
+}
