@@ -23,3 +23,17 @@ Identifier values are matched as exact substrings across every file. The check i
 ## Templates in the binary
 
 Templates are compiled in with `include_str!` so the binary works with no install step; `<root>/.templates/` overrides them per root.
+
+## Search is in-crate BM25
+
+`owo search` is about 100 lines of BM25 in `search.rs` over a few hundred files, rebuilt per call. It adds no dependency and no cache, and an identity stays small enough that a scan takes milliseconds.
+
+Title and aliases count three times, summary twice, body once. Each hit reports the line with the most query terms. Tantivy fits if identities grow past a few thousand files.
+
+## KB pointer is always emitted
+
+The project KB is a pointer for the agent to follow. `owo context` prints it when the path is missing too, with a warning, so a misconfigured path shows up at load time.
+
+## Examples are built with owo
+
+`examples/thea` and `examples/reviewer` were scaffolded with `owo new` and `owo add`, filled by hand, then indexed, stamped and reviewed. `tests/examples.rs` checks they stay lint clean and current.

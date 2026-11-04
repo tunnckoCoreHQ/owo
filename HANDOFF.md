@@ -28,11 +28,13 @@ cargo test
 | `--json`, exit codes 0/1/2/3/4 | done |
 | `owo lint --changed` | todo |
 | `kb:` link resolution | todo (links are skipped) |
-| `owo resolve`, `owo show`, `owo links` | todo |
-| `owo search` (BM25, tantivy) | todo |
-| `owo context` (tiers, generated context block, work/state.json touch) | todo |
-| `owo state`, `owo recent`, `owo changes` | todo |
-| `owo review`, `owo review done`, `owo soul note`, `owo soul history` | todo |
+| `owo resolve`, `owo show`, `owo links [--orphans]` | done |
+| `owo search [--scope --limit]` | done, in-crate BM25 |
+| `owo context [--voice --look --with --notes --format --no-touch]` | done: tiers, Now block, project files, KB pointer, work/state.json touch |
+| `owo state`, `owo recent` | done |
+| `owo changes` | todo |
+| `owo review done` | done |
+| `owo review` packet, `owo soul note`, `owo soul history` | todo |
 | `owo sync start/done` | todo |
 | `owo export card/soulspec/skill` | todo |
 | `owo migrate v1` | todo |
@@ -41,14 +43,15 @@ cargo test
 
 ## Suggested next phase
 
-1. `resolve`, `show`, `links` (reuse `Identity::link_keys`).
-2. `context` with tiers and the generated "Now" block, and `state`.
-3. `review` packet, `review done`, `soul note/history`.
-4. `search` with tantivy, cache in `<root>/.owo/cache/<slug>/`.
+1. `owo review` packet (unreviewed logs, journal, notes since `reviewed_through`) and `soul note/history`.
+2. `owo changes`, `owo lint --changed`, `kb:` link resolution.
+3. Lint reuses `find::orphans` and `find::file_links` (lint still has its own copies).
+4. `sync start/done`, `export`, `migrate v1`, then the skills rewrite.
 
 ## Where things are
 
 - `src/`: one module per job, see `lat.md/architecture.md`.
 - `templates/`: embedded templates.
 - `tests/cli.rs`, `tests/fixtures/aria/`: end-to-end tests.
+- `examples/thea`, `examples/reviewer`: committed identities; `tests/examples.rs` runs e2e tests on them.
 - `lat.md/`: knowledge base. `NOTES.md`: dated progress log.

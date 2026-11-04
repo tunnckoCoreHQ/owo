@@ -15,6 +15,9 @@ Each module owns one job; `main.rs` parses arguments with clap and dispatches.
 - `index.rs` generates `_index.md` files and `life/timeline.md`.
 - `state.rs` and `stamp.rs` hash files and maintain the three `state.json` files.
 - `lint.rs` runs the rules in [[lint]].
+- `find.rs` resolves names, shows sections, and lists backlinks, outlinks and orphans.
+- `status.rs` derives current state and the Now block; `context.rs` builds the tiered load set.
+- `search.rs` is the BM25 ranker; `review.rs` records finished reviews.
 - `output.rs` defines diagnostics, the envelope and exit codes.
 
 ## Loading an identity
