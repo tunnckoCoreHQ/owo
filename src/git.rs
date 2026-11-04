@@ -44,27 +44,24 @@ pub fn numstat_since(dir: &Path, since: &str, rel: &str) -> Option<(usize, usize
 
 /// Paths (relative to `dir`) with uncommitted or untracked changes under `dir`.
 pub fn dirty(dir: &Path) -> Option<Vec<String>> {
-    let out = run(
+    // `diff --relative` and `ls-files` print paths relative to `dir`. Before the first
+    // commit there is no HEAD, and every tracked file counts as uncommitted.
+    let changed = run(
         dir,
-        &[
-            "status",
-            "--porcelain",
-            "--untracked-files=all",
-            "--relative",
-            "--",
-            ".",
-        ],
-    )?;
-    Some(
-        out.lines()
-            .filter_map(|l| l.get(3..))
-            .map(|p| {
-                p.rsplit(" -> ")
-                    .next()
-                    .unwrap_or(p)
-                    .trim_matches('"')
-                    .to_string()
-            })
-            .collect(),
+        &["diff", "--name-only", "--relative", "HEAD", "--", "."],
     )
+    .or_else(|| run(dir, &["ls-files", "--cached", "--", "."]))?;
+    let untracked = run(
+        dir,
+        &["ls-files", "--others", "--exclude-standard", "--", "."],
+    )?;
+    let mut out: Vec<String> = changed
+        .lines()
+        .chain(untracked.lines())
+        .map(|l| l.trim_matches('"').to_string())
+        .filter(|l| !l.is_empty())
+        .collect();
+    out.sort();
+    out.dedup();
+    Some(out)
 }

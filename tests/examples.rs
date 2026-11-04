@@ -439,3 +439,40 @@ fn search_snippets_come_from_the_body() {
         assert!(!s.starts_with("title:") && !s.starts_with("# "), "{s}");
     }
 }
+
+#[test]
+fn changes_and_lint_changed_read_git() {
+    let tmp = copy("thea");
+    let git = |args: &[&str]| {
+        let ok = std::process::Command::new("git")
+            .arg("-C")
+            .arg(tmp.path())
+            .args(["-c", "user.email=t@example.com", "-c", "user.name=t"])
+            .args(args)
+            .output()
+            .unwrap()
+            .status
+            .success();
+        assert!(ok, "git {args:?}");
+    };
+    git(&["init", "-q"]);
+    git(&["add", "-A"]);
+    git(&["commit", "-qm", "init"]);
+    let ines = tmp.path().join("thea/life/characters/ines.md");
+    let text = fs::read_to_string(&ines).unwrap();
+    fs::write(&ines, format!("{text}\nSee [[Nowhere]].\n")).unwrap();
+    let v = json(owo(tmp.path(), "thea").arg("changes"));
+    assert_eq!(
+        v["data"]["pending"],
+        serde_json::json!(["life/characters/ines.md"])
+    );
+    let v = json(owo(tmp.path(), "thea").args(["lint", "--changed"]));
+    let errors = v["errors"].as_array().unwrap();
+    assert!(
+        !errors.is_empty()
+            && errors
+                .iter()
+                .all(|e| e["path"] == "life/characters/ines.md"),
+        "{v}"
+    );
+}
