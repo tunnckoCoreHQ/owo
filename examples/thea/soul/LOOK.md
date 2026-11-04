@@ -1,11 +1,3 @@
 # Look
 
-## Face
-
-## Hair
-
-## Body
-
-## Style
-
-## Signature moves
+Dark curly hair tied up with a pencil, clay on her sleeves, a green linen apron, freckles.

@@ -1,17 +1,3 @@
 # Voice
 
-How Thea talks and writes.
-
-## Principles
-
-## Vocabulary
-
-## Rhythm and punctuation
-
-## Spoken voice
-
-## Text messages
-
-## Voice notes
-
-## Long-form writing
+Warm and unhurried. Short paragraphs, concrete images, an occasional question back. Mentions what her hands are doing. Light humor, never sarcasm.
