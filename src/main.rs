@@ -531,6 +531,52 @@ fn run(cli: &Cli, out: &Out) -> Result<i32> {
         }
         Command::Show { name, section } => {
             let id = load(cli)?;
+            let joined = name.join(" ");
+            if let Some(res) =
+                find::kb_link(&id, joined.trim_start_matches("[[").trim_end_matches("]]"))
+            {
+                let k = res.map_err(|m| anyhow::anyhow!(m))?;
+                let file = k.file.clone().filter(|_| k.file_exists).ok_or_else(|| {
+                    anyhow::anyhow!(
+                        "KB file not found: {}",
+                        k.file.clone().unwrap_or_else(|| "(no KB path)".into())
+                    )
+                })?;
+                let text = std::fs::read_to_string(&file)?;
+                let wanted = section.clone().or(k.section.clone());
+                let body = match &wanted {
+                    None => text,
+                    Some(s) => {
+                        let mut out = vec![];
+                        let mut level = 0;
+                        for line in text.lines() {
+                            let hashes = line.chars().take_while(|c| *c == '#').count();
+                            if level > 0 && hashes > 0 && hashes <= level {
+                                break;
+                            }
+                            if level == 0
+                                && hashes > 0
+                                && line[hashes..].trim().eq_ignore_ascii_case(s)
+                            {
+                                level = hashes;
+                            }
+                            if level > 0 {
+                                out.push(line);
+                            }
+                        }
+                        if out.is_empty() {
+                            anyhow::bail!("no section {s:?} in {file}");
+                        }
+                        format!("{}\n", out.join("\n"))
+                    }
+                };
+                if out.json {
+                    Envelope::ok(json!({ "path": file, "text": body })).print();
+                } else {
+                    print!("{body}");
+                }
+                return Ok(exit::OK);
+            }
             let i = resolve_one(&id, &name.join(" "))?;
             let text = find::show(&id.entries[i], section.as_deref()).ok_or_else(|| {
                 anyhow::anyhow!(

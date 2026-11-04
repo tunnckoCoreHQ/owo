@@ -28,6 +28,7 @@ pub const RULES: &[&str] = &[
     "orphans",
     "soul-evidence",
     "review-due",
+    "kb",
 ];
 
 /// Soft word budgets for soul files.
@@ -84,6 +85,7 @@ pub fn run(id: &Identity, opts: &Options) -> Vec<Diagnostic> {
         ("orphans", orphans),
         ("soul-evidence", soul_evidence),
         ("review-due", review_due),
+        ("kb", kb_links),
     ];
     for (name, check) in checks {
         if enabled(name) {
@@ -791,4 +793,45 @@ fn review_due(c: &mut Ctx) {
             m,
         ));
     }
+}
+
+/// `[[kb:<p>:<path>#<Section>]]` links: the project must exist; when its KB folder exists,
+/// the file and section must too. A KB that is not checked out is skipped.
+fn kb_links(c: &mut Ctx) {
+    let mut found = vec![];
+    for e in c.id.entries.iter().filter(|e| !e.is_generated()) {
+        for (line, link) in all_links(e) {
+            match crate::find::kb_link(c.id, &link.target) {
+                None => {}
+                Some(Err(msg)) => found.push(err("kb", &e.rel, msg).at(line)),
+                Some(Ok(k)) if !k.root_exists => {}
+                Some(Ok(k)) if !k.file_exists => found.push(
+                    warn(
+                        "kb",
+                        &e.rel,
+                        format!(
+                            "[[{}]]: {} not found",
+                            link.target,
+                            k.file.unwrap_or_default()
+                        ),
+                    )
+                    .at(line),
+                ),
+                Some(Ok(k)) if !k.section_exists => found.push(
+                    warn(
+                        "kb",
+                        &e.rel,
+                        format!(
+                            "[[{}]]: no section {:?}",
+                            link.target,
+                            k.section.unwrap_or_default()
+                        ),
+                    )
+                    .at(line),
+                ),
+                Some(Ok(_)) => {}
+            }
+        }
+    }
+    c.out.extend(found);
 }

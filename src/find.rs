@@ -254,3 +254,73 @@ mod tests {
         assert_eq!(levenshtein("", "abc"), 3);
     }
 }
+
+/// A `[[kb:<project>:<path>#<Section>]]` link resolved against the project KB.
+#[derive(Debug, Serialize)]
+pub struct KbLink {
+    pub project: String,
+    /// KB root folder, when the project has a KB path.
+    pub root: Option<String>,
+    pub root_exists: bool,
+    pub file: Option<String>,
+    pub file_exists: bool,
+    pub section: Option<String>,
+    pub section_exists: bool,
+}
+
+/// Parses and resolves a kb link target (without brackets). None when it is not a kb link.
+pub fn kb_link(id: &Identity, target: &str) -> Option<Result<KbLink, String>> {
+    let rest = target.strip_prefix("kb:")?;
+    let Some((project, path)) = rest.split_once(':') else {
+        return Some(Err(format!(
+            "[[{target}]] must be kb:<project>:<path>[#<Section>]"
+        )));
+    };
+    let (path, section) = match path.split_once('#') {
+        Some((p, s)) => (p, Some(s.to_string())),
+        None => (path, None),
+    };
+    if id
+        .entry(&format!("work/projects/{project}/project.md"))
+        .is_none()
+    {
+        return Some(Err(format!("[[{target}]]: no project {project:?}")));
+    }
+    let mut out = KbLink {
+        project: project.into(),
+        root: None,
+        root_exists: false,
+        file: None,
+        file_exists: false,
+        section,
+        section_exists: false,
+    };
+    let Some(kb) = crate::context::kb_path(id, project, None) else {
+        return Some(Ok(out));
+    };
+    let base = if kb.extension().is_some_and(|x| x == "md") {
+        kb.parent()
+            .map(std::path::Path::to_path_buf)
+            .unwrap_or(kb.clone())
+    } else {
+        kb.clone()
+    };
+    out.root_exists = base.is_dir();
+    out.root = Some(base.display().to_string());
+    let mut file = base.join(path);
+    if !file.is_file() && file.extension().is_none() {
+        file.set_extension("md");
+    }
+    out.file_exists = file.is_file();
+    if out.file_exists {
+        let text = std::fs::read_to_string(&file).unwrap_or_default();
+        out.section_exists = match &out.section {
+            None => true,
+            Some(s) => text.lines().any(|l| {
+                l.trim_start_matches('#').trim().eq_ignore_ascii_case(s) && l.starts_with('#')
+            }),
+        };
+    }
+    out.file = Some(file.display().to_string());
+    Some(Ok(out))
+}

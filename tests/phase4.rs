@@ -206,3 +206,43 @@ fn migrate_v1_fixture() {
         .assert()
         .code(1);
 }
+
+#[test]
+fn kb_links_lint_and_show() {
+    let tmp = copy_example("reviewer");
+    let lint = |t: &TempDir| json(owo(t.path()).args(["-i", "reviewer", "lint", "--rule", "kb"]));
+    assert_eq!(
+        lint(&tmp)["warnings"].as_array().unwrap().len(),
+        0,
+        "missing KB is skipped"
+    );
+    let kb = tmp.path().join("kb/ledger-api");
+    fs::create_dir_all(&kb).unwrap();
+    fs::write(
+        kb.join("lat.md"),
+        "# Ledger\n\n## Retries\n\nRetries carry an idempotency key.\n\n## Schema\n\nx\n",
+    )
+    .unwrap();
+    assert_eq!(lint(&tmp)["warnings"].as_array().unwrap().len(), 0);
+    let note = tmp
+        .path()
+        .join("reviewer/work/projects/ledger-api/notes/2026-10-23_idempotency-keys.md");
+    let text = fs::read_to_string(&note).unwrap();
+    fs::write(
+        &note,
+        format!("{text}See [[kb:ledger-api:lat.md#Nope]] and [[kb:nope:x.md]].\n"),
+    )
+    .unwrap();
+    let v = lint(&tmp);
+    assert_eq!(v["warnings"].as_array().unwrap().len(), 1, "{v}");
+    assert_eq!(v["errors"].as_array().unwrap().len(), 1, "{v}");
+    let out = owo(tmp.path())
+        .args(["-i", "reviewer", "show", "kb:ledger-api:lat.md#Retries"])
+        .output()
+        .unwrap();
+    let shown = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        shown.contains("idempotency key") && !shown.contains("## Schema"),
+        "{shown}"
+    );
+}

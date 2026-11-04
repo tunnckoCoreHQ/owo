@@ -18,8 +18,8 @@
     },
     "projects/ledger-api/notes/2026-10-23_idempotency-keys.md": {
       "created": "2026-11-04T03:33:55Z",
-      "updated": "2026-11-04T03:33:55Z",
-      "hash": "b3:833b7668c5a2db84a65640b7fe419551a366fdef7f9b4db6ce5140a8c7ef5d95"
+      "updated": "2026-11-04T03:46:34Z",
+      "hash": "b3:488db5dc6125bec1599e21b883400b7f631ab8e1915aa3a69bc52837f32bb260"
     },
     "projects/ledger-api/notes/2026-10-26_rollback-postmortem.md": {
       "created": "2026-11-04T03:33:55Z",
