@@ -132,25 +132,20 @@ fn check_session(session: &str) -> Result<()> {
 }
 
 /// Holds `<root>/.owo/sessions/<id>.lock` while one sync step reads and writes the bookmark,
-/// so parallel calls for one session run one after the other. The file holds a token, so a
-/// process whose lock was taken over does not delete the new owner's lock.
-struct Lock(PathBuf, String);
+/// so parallel calls for one session run one after the other.
+struct Lock(PathBuf);
 
 impl Lock {
     fn take(root: &Path, session: &str) -> Result<Lock> {
         let path = root.join(".owo/sessions").join(format!("{session}.lock"));
         fs::create_dir_all(path.parent().expect("has parent"))?;
-        let token = format!("{} {}", std::process::id(), crate::state::now());
         for _ in 0..100 {
             match fs::OpenOptions::new()
                 .write(true)
                 .create_new(true)
                 .open(&path)
             {
-                Ok(mut f) => {
-                    std::io::Write::write_all(&mut f, token.as_bytes())?;
-                    return Ok(Lock(path, token));
-                }
+                Ok(_) => return Ok(Lock(path)),
                 Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
                     // A lock older than a minute belongs to a process that ended without cleanup.
                     let stale = fs::metadata(&path)
@@ -174,9 +169,7 @@ impl Lock {
 
 impl Drop for Lock {
     fn drop(&mut self) {
-        if fs::read_to_string(&self.0).is_ok_and(|t| t == self.1) {
-            let _ = fs::remove_file(&self.0);
-        }
+        let _ = fs::remove_file(&self.0);
     }
 }
 

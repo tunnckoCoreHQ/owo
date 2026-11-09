@@ -59,8 +59,7 @@
 - Templates escape values: `{{name_json}}` in `identity.json` and `soul.json`, the note's `project` is quoted, and YAML escaping covers newline, carriage return and tab. `add --alias` and `--kb` fail when an override template has no line to fill.
 - The skill description is YAML-escaped as a whole. Exports nest LOOK headings under `## Look`.
 - `search` and `slug` with no result set `ok: false`; `search --scope` takes soul, life or work. An existing `add` path reports an `exists` error.
-- `context --project` replaces a `work/state.json` that is not an object. The MCP HTTP mode refuses bodies over 8MB. `kb:` paths may not use `..` or an absolute path. Git paths print unquoted (`core.quotepath=off`).
-- The sync lock holds a token, so a taken-over process leaves the new lock alone.
+- `context --project` replaces a `work/state.json` that is not an object. The MCP HTTP mode refuses bodies over 8MB. `kb:` paths may not use `..` or an absolute path, so the public MCP URL cannot read files outside a KB. Git paths print unquoted (`core.quotepath=off`).
 - Migrate: copies the whole `sources/` tree and skips existing targets; body citations join existing `sources` and `evidence`, and linked bullets stay as citations outside lessons; conflict files cite with the identity slug; an index in a location folder is dropped.
 - `review done` takes its default cursor from valid dates only; `soul note` counts `defining: true` only as a boolean, as lint does.
 - `dupes` shingles the whole body. Citations now live in frontmatter, so no body section needs skipping; this replaces the phase 5 note.
