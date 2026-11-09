@@ -59,7 +59,7 @@ The KB path comes from `project.md` `kb`, else `identity.json` `projects.<p>.kb`
 
 | Card field | Source |
 | :- | :- |
-| `description` | IDENTITY.md body, LOOK.md under `## Look` |
+| `description` | IDENTITY.md body, LOOK.md under `## Look` with its headings one level down |
 | `system_prompt` | IDENTITY "Who she/he/they is/are" section, then VOICE.md |
 | `personality` | SOUL.md body |
 | `scenario` | with `--project`: project.md summary and body |

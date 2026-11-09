@@ -71,7 +71,6 @@ This document is the design. File formats, JSON and command lines appear as shor
 
 ```text
 <root>/                         # --root, OWO_ROOT, .owo.toml, user config, or XDG default
-├── owo.toml                    # optional root config
 ├── .owo/                       # CLI working data: sync bookmarks
 │   └── sessions/<session>.json
 ├── .templates/                 # optional overrides for built-in templates
@@ -310,6 +309,7 @@ The identity's own accounts live in `identity.json` → `accounts`, under the sa
   ],
   "budgets": { "MEMORY.md": 1500 },
   "review_every_days": 7,
+  "sync_every": 6,
   "projects": {
     "api-server": { "kb": "~/code/api-server/lat.md" }
   }
@@ -502,8 +502,8 @@ Review runs on request. `owo state` shows when it is due (`review_every_days`, d
    - recompiles MEMORY.md: patterns, defining moments, lesson links, hints;
    - closes threads that resolved;
    - changes soul files when the evidence threshold holds (6.5).
-3. `owo review done` records `last_reviewed`, `reviewed_through` and the new `memory_hash`.
-4. `owo stamp && owo index && owo lint`.
+3. `owo stamp && owo index && owo lint`, so the review's own edits are stamped before the review closes.
+4. `owo review done` records `last_reviewed`, `reviewed_through` and the new `memory_hash`.
 
 ### 6.5 Soul evolution
 
@@ -568,19 +568,6 @@ The identity resolves from `-i`, then `OWO_IDENTITY`, then `identity` in `.owo.t
 identity = "thea"
 project = "api-server"
 kb = "lat.md"
-```
-
-```toml
-# <root>/owo.toml
-sources_dir = "sources"
-review_every_days = 7
-
-[budgets]
-"MEMORY.md" = 1500
-
-[sync]
-every = 6
-overlap = 2
 ```
 
 ### 7.3 Commands
@@ -705,10 +692,11 @@ overlap = 2
 
 `owo mcp`
 : Serves every command as an MCP tool, as a thin layer over the same binary. Over stdio by default; `owo mcp --remote [<addr>] [--port <n>]` serves HTTP at `/mcp` on port 4224 (or the next free one) and prints the URL.
+  The tools run commands; editing an entry's text needs file access, so a host with only the MCP tools can create entries but not fill them.
 
 ### 7.4 Build notes
 
-- Crates: `clap`, `serde`, `serde_json`, `serde-saphyr`, `walkdir`, `pulldown-cmark`, `blake3`, `deunicode`, `strsim`, `minijinja`, `png`.
+- Crates: `clap`, `serde`, `serde_json`, `serde-saphyr`, `toml`, `walkdir`, `regex`, `blake3`, `deunicode`, `chrono`, `anyhow`.
 - Templates are embedded with `include_str!` and can be overridden from `.templates/`.
 - Every command works on files. `.owo/` holds only sync bookmarks and prompts.
 - Tests use fixture identities under `tests/fixtures/`.
@@ -786,7 +774,7 @@ Use: compiling MEMORY and evolving the soul, on request when `owo state` shows r
 - Read the listed files.
 - Write lessons, recompile MEMORY.md, close threads.
 - Change soul files past the threshold in 6.5, each change recorded with `owo soul note`.
-- `owo review done`, then stamp, index, lint.
+- Stamp, index and lint, then `owo review done`.
 
 ## 10. Integration
 
@@ -811,15 +799,15 @@ Use: compiling MEMORY and evolving the soul, on request when `owo state` shows r
 | Card field | Source |
 | :- | :- |
 | `name`, `nickname` | `identity.json` `name` and `nickname` (V3 only; null when unset) |
-| `description` | IDENTITY.md, with LOOK.md appended |
-| `system_prompt` | IDENTITY.md "Who they are" section |
+| `description` | IDENTITY.md, then LOOK.md under `## Look` with its headings one level down |
+| `system_prompt` | IDENTITY.md "Who they are" section, then VOICE.md |
 | `personality` | SOUL.md |
-| `scenario` | `--scenario <event or location>` summary |
+| `scenario` | `--scenario <event or location>` summary; with `--project`, the project summary and body |
 | `first_mes`, `alternate_greetings` | `soul/examples/greetings.md`, one per `##` section |
 | `mes_example` | `soul/examples/good.md` |
 | `creator_notes` | generator line with schema and date |
 | `tags` | `soul.json` tags |
-| `character_book` | lorebook from life entries |
+| `character_book` | lorebook from life entries and the scoped project |
 
 Lorebook entries: `keys` from title and aliases; `content` from `summary` plus `## Key facts`; `insertion_order` by type (characters 20, locations 30, cultures and factions 40, events 50, lessons 60); `constant: true` for MEMORY.md; `enabled: true`; `use_regex: false`. Types included: character, location, location-detail, culture, faction, era, event, lesson. `--png` embeds the JSON in the avatar (`chara` chunk for V2, `ccv3` for V3).
 
@@ -868,12 +856,8 @@ Checklist: move MEMORY "Moments" into the event links under "Defining moments"; 
 
 ## 12. Open questions
 
-1. Threads: keep `life/threads/` for open loops, or keep them as log bullets until review?
-2. Event threshold: which happenings get an event file? Proposal: anything referenced from two places, any first, any scene with lines worth keeping.
-3. Sources location: `<root>/sources/<slug>/` or a separate private repo?
-4. T3 Code storage: files under its global directory, or database rows with an export for `owo`?
-5. Git commits: does `owo commit` exist, or do hosts and people commit?
-6. Card greetings: hand-written `greetings.md`, or generated from selected events?
-7. Search: BM25 first; add local embeddings later if keyword search misses?
-8. MCP mode: `owo mcp` ships with the first release.
-9. Soft budgets: are 800/800/1000/600/1500 right?
+1. Event threshold: which happenings get an event file? Proposal: anything referenced from two places, any first, any scene with lines worth keeping.
+2. T3 Code storage: files under its global directory, or database rows with an export for `owo`?
+3. Git commits: does `owo commit` exist, or do hosts and people commit?
+4. Card greetings: hand-written `greetings.md`, or generated from selected events?
+5. Soft budgets: are 800/800/1000/600/1500 right?

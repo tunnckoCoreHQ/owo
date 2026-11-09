@@ -55,7 +55,7 @@ Exact personal identifiers (birth dates, handles, emails, phone numbers, address
 
 ## Conflicts
 
-Create `life/conflicts/<slug>.md` (`owo add conflict`) with both accounts, sources and `state: open`, and set `status: disputed` on the affected entries. When settled, write the resolution, set `state: resolved`, and return the entries to `status: canon`. Replaced material that still matters keeps `status: superseded` and `superseded_by`.
+Create `life/conflicts/<slug>.md` (`owo add conflict`) with both accounts, sources and `state: open`, list the affected entries in `affects`, and set `status: disputed` on them. When settled, write the resolution, set `state: resolved`, and return the entries to `status: canon`. Replaced material that still matters keeps `status: superseded` and `superseded_by`.
 
 Source authority, highest first: the person's direct statement or correction, the primary transcript, repeated behaviour across sources, an earlier summary.
 

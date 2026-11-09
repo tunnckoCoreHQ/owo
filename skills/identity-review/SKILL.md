@@ -22,9 +22,8 @@ Rules for where facts live: [../identity/references/rules.md](../identity/refere
    owo soul note SOUL.md --change "<one line>" --evidence "[[Event]]" --evidence "[[Lesson]]"
    ```
 
-7. Close the review and check:
+7. Check, then close the review (stamp first, so the review's own edits do not show as changed next time):
 
 ```sh
-owo review done
-owo stamp && owo index && owo lint
+owo stamp && owo index && owo lint && owo review done
 ```
