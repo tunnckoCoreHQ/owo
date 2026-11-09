@@ -63,3 +63,13 @@
 - Migrate: copies the whole `sources/` tree and skips existing targets; body citations join existing `sources` and `evidence`, and linked bullets stay as citations outside lessons; conflict files cite with the identity slug; an index in a location folder is dropped.
 - `review done` takes its default cursor from valid dates only; `soul note` counts `defining: true` only as a boolean, as lint does.
 - `dupes` shingles the whole body. Citations now live in frontmatter, so no body section needs skipping; this replaces the phase 5 note.
+
+## 2026-11-09 (iteration from three reviews)
+
+- Search ranks an exact title or alias match first. `lint --changed` outside Git includes files stamped today. Recent events count back from the newest story date.
+- Indexes mark closed, resolved, disputed and superseded entries. Events get an `era` field.
+- Dupes warnings quote a shared passage. Paths resolve when absolute or relative to the working directory. `add` refuses `--parent` and `--kb` on other types. Empty `search` and `recent` say so. `sync start` names a pending run and fails on a transcript with no messages. The review packet leaves out log H1s.
+- The review skill and design stamp before `review done`. Ingest copies outside files into `sources/<slug>/` and uses `--no-touch`. Conflicts list `affects`. The design drops the root `owo.toml`, decided open questions and the old crate list.
+- Refactor: one envelope constructor, `need_project` (exit 3), `parse_day` for date flags (exit 2), one `write_json`, one `expand_home`, one lint rule table, `find::show_kb`, `export::write_card`. 107 fewer lines, same JSON output.
+- The sync lock token was dropped again: a lock older than a minute does not happen in practice.
+- HANDOFF.md now holds only the remaining work.

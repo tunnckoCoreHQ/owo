@@ -449,7 +449,7 @@ fn respond(id: &Value, method: &str, params: &Value, d: &Defaults) -> Option<Val
             "protocolVersion": params["protocolVersion"].as_str().unwrap_or(PROTOCOL),
             "capabilities": { "tools": {} },
             "serverInfo": { "name": "owo", "version": env!("CARGO_PKG_VERSION") },
-            "instructions": "owo manages one identity: soul/, life/ and work/. Start with `context`, read more with `resolve`, `search`, `show` and `links`, write new entries with `add`, then run `stamp`, `index` and `lint`.",
+            "instructions": "owo manages one identity: soul/, life/ and work/. Start with `context`, read more with `resolve`, `search`, `show` and `links`, create entries with `add` and fill or edit their text with your own file tools, then run `stamp`, `index` and `lint`.",
         })),
         "ping" => ok(json!({})),
         "tools/list" => ok(json!({
