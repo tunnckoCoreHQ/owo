@@ -585,6 +585,9 @@ kb = "lat.md"
 `owo add <type> <title> [--date YYYY-MM-DD] [--parent <location>] [--project <p>] [--alias <a>]...`
 : Creates one entry from its template at its deterministic path and prints the path. For `log`, it opens or creates the day's file. Exits 1 when the path exists and prints that path.
 
+`owo write <path> [--content <text>]`
+: Replaces the full text of one authored file under `soul/`, `life/` or `work/`, from `--content` or stdin, and prints the path. Refuses generated files and paths outside the identity.
+
 `owo templates [list | show <type>]`
 : Lists or prints templates, built in or overridden by `.templates/`. An override has the identity-relative path for identity files (`.templates/soul/IDENTITY.md`) and `<type>.md` for entries (`.templates/character.md`).
 
@@ -692,7 +695,7 @@ kb = "lat.md"
 
 `owo mcp`
 : Serves every command as an MCP tool, as a thin layer over the same binary. Over stdio by default; `owo mcp --remote [<addr>] [--port <n>]` serves HTTP at `/mcp` on port 4224 (or the next free one) and prints the URL.
-  Tools come from the clap definitions, so each command and flag is defined once. `owo write <path>` (the `write` tool) replaces an identity file's text, so a host with only the MCP tools can fill the entries it creates.
+  Tools come from the clap definitions, so each command and flag is defined once.
 
 ### 7.4 Build notes
 
