@@ -57,7 +57,8 @@ fn title_of(text: &str, stem: &str) -> String {
 }
 
 /// Splits a v1 body into its `## Sources` citations, the links among them, and the body
-/// without that section. `sources/<file>` paths become `<slug>/<file>`.
+/// without that section. `sources/<file>` paths become `<slug>/<file>`. A bullet with a link
+/// counts as both: its links (with `#section`) for a lesson's `evidence`, its text as a citation.
 fn take_sources(body: &str, slug: &str) -> (Vec<String>, Vec<String>, String) {
     let (mut cites, mut links, mut rest) = (vec![], vec![], vec![]);
     let mut inside = false;
@@ -76,10 +77,10 @@ fn take_sources(body: &str, slug: &str) -> (Vec<String>, Vec<String>, String) {
             continue;
         };
         let found = crate::markdown::links(item);
-        if !found.is_empty() {
-            links.extend(found.into_iter().map(|l| format!("[[{}]]", l.target)));
-            continue;
-        }
+        links.extend(found.iter().map(|l| match &l.section {
+            Some(s) => format!("[[{}#{s}]]", l.target),
+            None => format!("[[{}]]", l.target),
+        }));
         let item = item.replace('`', "");
         let item = item.trim_end_matches(['.', ' ']);
         let item = match item.strip_prefix("sources/") {
@@ -91,6 +92,22 @@ fn take_sources(body: &str, slug: &str) -> (Vec<String>, Vec<String>, String) {
         }
     }
     (cites, links, rest.join("\n"))
+}
+
+/// Appends `items` to the list at `key`, skipping ones it has. A missing key becomes a list,
+/// and a single string value becomes its first item.
+fn merge(map: &mut Fields, key: &str, items: Vec<String>) {
+    let mut list = match map.remove(key) {
+        Some(Value::Array(a)) => a,
+        Some(Value::String(s)) if !s.trim().is_empty() => vec![Value::from(s)],
+        _ => vec![],
+    };
+    for item in items.into_iter().map(Value::from) {
+        if !list.contains(&item) {
+            list.push(item);
+        }
+    }
+    map.insert(key.to_string(), Value::Array(list));
 }
 
 /// Adds the owo frontmatter fields a v1 file lacks; keeps every existing field.
@@ -132,7 +149,6 @@ fn normalize(
             set("places", json!([]));
             set("people", json!([]));
         }
-        "lesson" => set("evidence", json!(links)),
         "conflict" | "thread" => set("state", Value::from("open")),
         "location-detail" => set(
             "parent",
@@ -140,7 +156,16 @@ fn normalize(
         ),
         _ => {}
     }
-    set("sources", json!(cites));
+    // Body citations join any list the frontmatter already has. A lesson's linked bullets are its
+    // evidence, not citations.
+    let cites: Vec<String> = match kind {
+        "lesson" => {
+            merge(&mut map, "evidence", links);
+            cites.into_iter().filter(|c| !c.contains("[[")).collect()
+        }
+        _ => cites,
+    };
+    merge(&mut map, "sources", cites);
     map.insert("type".to_string(), Value::from(kind));
     // v1 status values such as "established" mean canon.
     if !matches!(
@@ -256,7 +281,10 @@ fn migrate_locations(
             "location",
             None,
         )?;
-        for p in inside.iter().filter(|p| Some(*p) != overview.as_ref()) {
+        // A v1 index that is not the overview is dropped, as everywhere else.
+        for p in inside.iter().filter(|p| {
+            Some(*p) != overview.as_ref() && !matches!(stem_of(p).as_str(), "index" | "_index")
+        }) {
             let text = fs::read_to_string(p)?;
             let to = format!("{base}/{}.md", slugify(&stem_of(p)));
             write(p, &text, to, "location-detail", Some(&title))?;
@@ -433,11 +461,15 @@ pub fn v1(src: &Path, out: &Path) -> Result<Report> {
     if let Ok(text) = fs::read_to_string(world.join("meta/conflicts.md")) {
         for block in format!("\n{text}").split("\n## ").skip(1) {
             let (title, body) = block.split_once('\n').unwrap_or((block, ""));
-            let slug = slugify(title);
-            if slug.is_empty() {
+            let name = slugify(title);
+            if name.is_empty() {
+                r.skipped.push(format!(
+                    "references/world/meta/conflicts.md ## {} (heading has no slug characters; move by hand)",
+                    title.trim()
+                ));
                 continue;
             }
-            let file = format!("life/conflicts/{slug}.md");
+            let file = format!("life/conflicts/{name}.md");
             if dir.join(&file).exists() {
                 r.skipped.push(format!(
                     "references/world/meta/conflicts.md ## {} (target {file} exists; merge by hand)",
@@ -452,7 +484,7 @@ pub fn v1(src: &Path, out: &Path) -> Result<Report> {
             );
             fs::write(
                 dir.join(&file),
-                normalize(&doc, "conflict", &slug, None, None, &today, &slug),
+                normalize(&doc, "conflict", &name, None, None, &today, &slug),
             )?;
             r.moved
                 .push(("references/world/meta/conflicts.md".into(), file));
@@ -462,18 +494,27 @@ pub fn v1(src: &Path, out: &Path) -> Result<Report> {
         r.skipped
             .push("references/world/meta/changelog.md (Git history is the change log)".into());
     }
-    let sources = md_files(&src.join("sources"));
-    if !sources.is_empty() {
-        let to = root.join("sources").join(&slug);
-        fs::create_dir_all(&to)?;
-        for p in sources {
-            let name = p.file_name().expect("file").to_owned();
-            fs::copy(&p, to.join(&name))?;
-            r.moved.push((
-                rel(&p),
-                format!("<root>/sources/{slug}/{}", name.to_string_lossy()),
+    let from = src.join("sources");
+    for e in walkdir::WalkDir::new(&from)
+        .sort_by_file_name()
+        .into_iter()
+        .flatten()
+        .filter(|e| e.file_type().is_file())
+    {
+        let name = e.path().strip_prefix(&from).expect("under sources");
+        let name = name.to_string_lossy().replace('\\', "/");
+        let target = root.join("sources").join(&slug).join(&name);
+        if target.exists() {
+            r.skipped.push(format!(
+                "{} (target <root>/sources/{slug}/{name} exists; merge by hand)",
+                rel(e.path())
             ));
+            continue;
         }
+        fs::create_dir_all(target.parent().expect("has parent"))?;
+        fs::copy(e.path(), &target)?;
+        r.moved
+            .push((rel(e.path()), format!("<root>/sources/{slug}/{name}")));
     }
     let known: Vec<String> = r.moved.iter().map(|(f, _)| f.clone()).collect();
     for e in walkdir::WalkDir::new(&refs)

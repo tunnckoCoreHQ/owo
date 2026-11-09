@@ -302,6 +302,7 @@ pub fn done(id: &Identity, through: Option<&str>) -> Result<Value> {
             .iter()
             .filter(|e| matches!(e.kind, Kind::Log | Kind::Event | Kind::Journal))
             .filter_map(|e| e.field_str("date"))
+            .filter(|d| chrono::NaiveDate::parse_from_str(d, "%Y-%m-%d").is_ok())
             .max(),
     };
     let memory = id
@@ -339,7 +340,7 @@ pub fn soul_note(id: &Identity, file: &str, change: &str, evidence: &[String]) -
             Resolution::Found(i) => {
                 let e = &id.entries[i];
                 defining |=
-                    e.kind == Kind::Event && e.field_str("defining").as_deref() == Some("true");
+                    e.kind == Kind::Event && e.field("defining") == Some(&Value::Bool(true));
                 if seen.insert(i) {
                     links.push(format!("[[{name}]]"));
                 }
