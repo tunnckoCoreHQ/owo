@@ -49,11 +49,8 @@ pub fn new_identity(root: &Path, name: &str, slug: &str) -> Result<Created> {
     files.extend(index::write(&identity)?);
     let identity = Identity::load(root, slug)?;
     for (rel, value) in state::initial(&identity, &state::now()) {
-        write(
-            &rel,
-            &format!("{}\n", serde_json::to_string_pretty(&value)?),
-            &mut files,
-        )?;
+        crate::identity::write_json(&dir.join(&rel), &value)?;
+        files.push(rel);
     }
     files.sort();
     Ok(Created {

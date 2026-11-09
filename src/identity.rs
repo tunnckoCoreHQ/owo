@@ -218,6 +218,17 @@ fn parse_entry(rel: String, text: String) -> Entry {
     entry
 }
 
+/// A JSON file, or None when it is missing or does not parse.
+pub fn read_json(path: &Path) -> Option<Json> {
+    serde_json::from_str(&fs::read_to_string(path).ok()?).ok()
+}
+
+/// Writes pretty JSON with a trailing newline.
+pub fn write_json(path: &Path, doc: &Json) -> Result<()> {
+    let text = format!("{}\n", serde_json::to_string_pretty(doc)?);
+    fs::write(path, text).with_context(|| format!("writing {}", path.display()))
+}
+
 impl Identity {
     pub fn load(root: &Path, slug: &str) -> Result<Self> {
         let dir = root.join(slug);
@@ -233,7 +244,9 @@ impl Identity {
         };
         let mut entries = vec![];
         for item in WalkDir::new(&dir).sort_by_file_name() {
-            let item = item.with_context(|| format!("walking {}", dir.display()))?;
+            let item = item
+                .map_err(std::io::Error::from)
+                .with_context(|| format!("walking {}", dir.display()))?;
             if !item.file_type().is_file()
                 || item.path().extension().and_then(|e| e.to_str()) != Some("md")
             {
@@ -259,7 +272,7 @@ impl Identity {
     }
 
     pub fn read_json(&self, rel: &str) -> Option<Json> {
-        serde_json::from_str(&fs::read_to_string(self.dir.join(rel)).ok()?).ok()
+        read_json(&self.dir.join(rel))
     }
 
     pub fn entry(&self, rel: &str) -> Option<&Entry> {

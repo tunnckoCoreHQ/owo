@@ -2,7 +2,7 @@
 //! Timestamps move only when a file's hash changed. Changed entries get today's
 //! `updated:` date in frontmatter; a changed soul file bumps the soul.json minor version.
 
-use crate::identity::{Identity, Kind};
+use crate::identity::{write_json, Identity, Kind};
 use crate::state::{self, hash, scope_of, SCOPES};
 use anyhow::{Context, Result};
 use regex::Regex;
@@ -132,10 +132,7 @@ pub fn run(id: &Identity, check: bool) -> Result<Report> {
         if scope == "life" && life_changed {
             doc["last_write"] = json!(at);
         }
-        fs::write(
-            id.dir.join(format!("{scope}/state.json")),
-            format!("{}\n", serde_json::to_string_pretty(&doc)?),
-        )?;
+        write_json(&id.dir.join(format!("{scope}/state.json")), &doc)?;
     }
     if soul_changed {
         bump_soul_version(id)?;
@@ -158,11 +155,7 @@ fn bump_soul_version(id: &Identity) -> Result<()> {
         parts.get(1).copied().unwrap_or(0),
     );
     soul["version"] = json!(format!("{major}.{}.0", minor + 1));
-    fs::write(
-        id.dir.join("soul/soul.json"),
-        format!("{}\n", serde_json::to_string_pretty(&soul)?),
-    )?;
-    Ok(())
+    write_json(&id.dir.join("soul/soul.json"), &soul)
 }
 
 #[cfg(test)]

@@ -2,13 +2,14 @@
 //! and the soul history: `owo soul note`, `owo soul history`.
 
 use crate::find::{resolve, Resolution};
-use crate::identity::{Identity, Kind};
-use crate::status::Link;
+use crate::identity::{write_json, Identity, Kind};
+use crate::state::parse_day;
+use crate::status::{join, Link};
 use anyhow::{bail, Context, Result};
+use chrono::NaiveDate;
 use serde::Serialize;
 use serde_json::{json, Value};
 use std::collections::{BTreeMap, BTreeSet};
-use std::fs;
 
 #[derive(Debug, Serialize)]
 pub struct Changed {
@@ -55,14 +56,6 @@ fn review_field(id: &Identity, key: &str) -> Option<String> {
         .pointer(&format!("/review/{key}"))?
         .as_str()
         .map(str::to_string)
-}
-
-fn link(e: &crate::identity::Entry) -> Link {
-    Link {
-        title: e.title.clone().unwrap_or_else(|| e.stem_key()),
-        path: e.rel.clone(),
-        date: e.field_str("date"),
-    }
 }
 
 /// Short function words; a recurring phrase may not start or end with one.
@@ -163,7 +156,7 @@ pub fn packet(id: &Identity) -> Packet {
     let open = |k: Kind| {
         of_kind(k)
             .filter(|e| e.field_str("state").as_deref() == Some("open"))
-            .map(link)
+            .map(Link::of)
             .collect()
     };
     let changed_paths: BTreeSet<&str> = changed.iter().map(|c| c.path.as_str()).collect();
@@ -180,11 +173,11 @@ pub fn packet(id: &Identity) -> Packet {
             && memory_hash != review_field(id, "memory_hash"),
         events: of_kind(Kind::Event)
             .filter(|e| after_through(&e.field_str("date")))
-            .map(link)
+            .map(Link::of)
             .collect(),
         lessons: of_kind(Kind::Lesson)
             .filter(|e| changed_paths.contains(e.rel.as_str()))
-            .map(link)
+            .map(Link::of)
             .collect(),
         journal: of_kind(Kind::Journal)
             .filter(|e| after_through(&e.field_str("date")))
@@ -200,14 +193,6 @@ pub fn packet(id: &Identity) -> Packet {
         changed,
         last_reviewed: last,
         reviewed_through: through,
-    }
-}
-
-fn names(links: &[Link]) -> String {
-    if links.is_empty() {
-        "none".into()
-    } else {
-        links.iter().map(Link::wiki).collect::<Vec<_>>().join(", ")
     }
 }
 
@@ -257,8 +242,8 @@ pub fn render(p: &Packet) -> String {
         };
         o.push_str(&format!("\n### {heading}\n\n{}\n", d.body));
     }
-    o.push_str(&format!("\n## Events in window\n\n{}\n", names(&p.events)));
-    o.push_str(&format!("\n## Lessons changed\n\n{}\n", names(&p.lessons)));
+    o.push_str(&format!("\n## Events in window\n\n{}\n", join(&p.events)));
+    o.push_str(&format!("\n## Lessons changed\n\n{}\n", join(&p.lessons)));
     o.push_str(&format!(
         "\n## Journal in window\n\n{}\n",
         if p.journal.is_empty() {
@@ -269,8 +254,8 @@ pub fn render(p: &Packet) -> String {
     ));
     o.push_str(&format!(
         "\n## Open\n\n- Threads: {}\n- Conflicts: {}\n",
-        names(&p.open_threads),
-        names(&p.open_conflicts)
+        join(&p.open_threads),
+        join(&p.open_conflicts)
     ));
     if !p.recurring.is_empty() {
         o.push_str("\n## Recurring phrases\n\n");
@@ -290,32 +275,20 @@ pub fn render(p: &Packet) -> String {
     o
 }
 
-fn write_soul_state(id: &Identity, doc: &Value) -> Result<()> {
-    fs::write(
-        id.dir.join("soul/state.json"),
-        format!("{}\n", serde_json::to_string_pretty(doc)?),
-    )?;
-    Ok(())
-}
-
 /// Records a review: last_reviewed = now, reviewed_through = `through` or the newest
 /// story date among logs, events and journal entries, memory_hash = current MEMORY.md hash.
-pub fn done(id: &Identity, through: Option<&str>) -> Result<Value> {
+pub fn done(id: &Identity, through: Option<NaiveDate>) -> Result<Value> {
     let mut doc = id
         .read_json("soul/state.json")
         .context("soul/state.json missing; run `owo stamp`")?;
     let through = match through {
-        Some(t) => {
-            chrono::NaiveDate::parse_from_str(t, "%Y-%m-%d")
-                .with_context(|| format!("--through {t:?} is not YYYY-MM-DD"))?;
-            Some(t.to_string())
-        }
+        Some(t) => Some(t.to_string()),
         None => id
             .entries
             .iter()
             .filter(|e| matches!(e.kind, Kind::Log | Kind::Event | Kind::Journal))
             .filter_map(|e| e.field_str("date"))
-            .filter(|d| chrono::NaiveDate::parse_from_str(d, "%Y-%m-%d").is_ok())
+            .filter(|d| parse_day(d).is_ok())
             .max(),
     };
     let memory = id
@@ -323,7 +296,7 @@ pub fn done(id: &Identity, through: Option<&str>) -> Result<Value> {
         .map(|e| crate::state::hash(&e.text));
     let review = json!({ "last_reviewed": crate::state::now(), "reviewed_through": through, "memory_hash": memory });
     doc["review"] = review.clone();
-    write_soul_state(id, &doc)?;
+    write_json(&id.dir.join("soul/state.json"), &doc)?;
     Ok(review)
 }
 
@@ -371,7 +344,7 @@ pub fn soul_note(id: &Identity, file: &str, change: &str, evidence: &[String]) -
         Some(h) => h.push(record.clone()),
         None => doc["history"] = json!([record.clone()]),
     }
-    write_soul_state(id, &doc)?;
+    write_json(&id.dir.join("soul/state.json"), &doc)?;
     Ok(Note { record, warning })
 }
 

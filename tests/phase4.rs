@@ -579,7 +579,7 @@ fn sync_done_and_prompt_guards() {
         "--project",
         "nope",
     ])
-    .code(1);
+    .code(3);
     sync(&[
         "start",
         "--session",

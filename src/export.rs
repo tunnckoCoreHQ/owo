@@ -155,10 +155,7 @@ pub fn card(
         "insertion_order": 10, "case_sensitive": false, "use_regex": false, "constant": true, "name": "Memory", "priority": 0, "comment": "soul/MEMORY.md"
     })];
     let project_prefix = project.map(|p| format!("work/projects/{p}/"));
-    if let Some(p) = project {
-        let Some(e) = id.entry(&format!("work/projects/{p}/project.md")) else {
-            bail!("project not found: work/projects/{p}/project.md")
-        };
+    if let Some(e) = project.and_then(|p| id.entry(&format!("work/projects/{p}/project.md"))) {
         scenario = format!(
             "{}\n\n{}",
             e.field_str("summary").unwrap_or_default(),
@@ -243,6 +240,30 @@ pub fn card(
     Ok(json!({ "spec": "chara_card_v3", "spec_version": "3.0", "data": data }))
 }
 
+/// Writes the card to `out`: JSON, or embedded in the `png` avatar (the V2 card as `chara`,
+/// plus the V3 card as `ccv3` for V3).
+pub fn write_card(
+    id: &Identity,
+    spec: &str,
+    project: Option<&str>,
+    scenario: Option<&str>,
+    out: &Path,
+    png: Option<&Path>,
+) -> Result<()> {
+    let main = card(id, spec, project, scenario)?;
+    let Some(png) = png else {
+        return crate::identity::write_json(out, &main);
+    };
+    let avatar = fs::read(png)?;
+    let v2 = card(id, "v2", project, scenario)?;
+    let mut cards = vec![("chara", &v2)];
+    if spec == "v3" {
+        cards.push(("ccv3", &main));
+    }
+    fs::write(out, embed_png(&avatar, &cards)?)?;
+    Ok(())
+}
+
 pub struct Report {
     pub files: Vec<String>,
     pub warnings: Vec<String>,
@@ -262,16 +283,13 @@ pub fn soulspec(id: &Identity, dir: &Path) -> Result<Report> {
     manifest["files"]["style"] = json!("STYLE.md");
     manifest["files"]["memory"] = json!("MEMORY.md");
     fs::create_dir_all(dir.join("examples"))?;
-    let mut files = vec![];
+    crate::identity::write_json(&dir.join("soul.json"), &manifest)?;
+    let mut files = vec!["soul.json".to_string()];
     let mut write = |rel: &str, body: String| -> Result<()> {
         fs::write(dir.join(rel), body)?;
         files.push(rel.to_string());
         Ok(())
     };
-    write(
-        "soul.json",
-        format!("{}\n", serde_json::to_string_pretty(&manifest)?),
-    )?;
     let read = |rel: &str| fs::read_to_string(soul.join(rel)).unwrap_or_default();
     write("SOUL.md", read("SOUL.md"))?;
     let look = text(id, "soul/LOOK.md");

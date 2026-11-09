@@ -1,7 +1,7 @@
 //! `owo migrate v1 <path> --out <root>/<slug>`: the mechanical part of moving a v1
 //! identity (a `references/` tree) into the owo layout. Prints a checklist for the rest.
 
-use crate::markdown::{parse_frontmatter, Fields};
+use crate::markdown::{first_heading, parse_frontmatter, Fields};
 use crate::slug::slugify;
 use anyhow::{bail, Context, Result};
 use serde::Serialize;
@@ -28,15 +28,7 @@ const SOUL: &[(&str, &str)] = &[
 
 fn date_prefix(stem: &str) -> Option<String> {
     let d = stem.get(..10)?;
-    chrono::NaiveDate::parse_from_str(d, "%Y-%m-%d")
-        .ok()
-        .map(|_| d.to_string())
-}
-
-fn first_heading(body: &str) -> Option<String> {
-    body.lines()
-        .find_map(|l| l.strip_prefix("# "))
-        .map(|s| s.trim().to_string())
+    crate::state::parse_day(d).ok().map(|_| d.to_string())
 }
 
 fn frontmatter(text: &str) -> Fields {
@@ -350,7 +342,7 @@ pub fn v1(src: &Path, out: &Path) -> Result<Report> {
         if let Some(h) = old.get("history").filter(|h| h.is_array()) {
             doc["history"] = h.clone();
         }
-        fs::write(&path, format!("{}\n", serde_json::to_string_pretty(&doc)?))?;
+        crate::identity::write_json(&path, &doc)?;
         r.moved.push((
             "references/soul/state.json".into(),
             "soul/state.json (history)".into(),
@@ -365,7 +357,7 @@ pub fn v1(src: &Path, out: &Path) -> Result<Report> {
         {
             doc["accounts"] = acc.clone();
         }
-        fs::write(&path, format!("{}\n", serde_json::to_string_pretty(&doc)?))?;
+        crate::identity::write_json(&path, &doc)?;
         if refs.join("manifest.json").is_file() {
             r.moved
                 .push(("references/manifest.json".into(), "identity.json".into()));
@@ -404,9 +396,10 @@ pub fn v1(src: &Path, out: &Path) -> Result<Report> {
             }
             let text = fs::read_to_string(&p)?;
             let date = date.or_else(|| {
-                let fm = crate::markdown::split(&text).frontmatter?;
-                let m = parse_frontmatter(fm).ok()?;
-                m.get("date").and_then(Value::as_str).map(str::to_string)
+                frontmatter(&text)
+                    .get("date")
+                    .and_then(Value::as_str)
+                    .map(str::to_string)
             });
             if *kind == "event" && date.is_none() {
                 r.skipped

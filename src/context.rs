@@ -4,7 +4,7 @@
 
 use crate::identity::{Identity, Kind};
 use crate::status;
-use anyhow::{bail, Result};
+use anyhow::Result;
 use serde::Serialize;
 use serde_json::json;
 use std::fs;
@@ -70,10 +70,7 @@ pub fn kb_path(id: &Identity, project: &str, config_kb: Option<&Path>) -> Option
     match from_manifest {
         Some(raw) => {
             let home = std::env::var_os("HOME").map(PathBuf::from);
-            let p = match (raw.strip_prefix("~/"), home) {
-                (Some(rest), Some(home)) => home.join(rest),
-                _ => PathBuf::from(raw),
-            };
+            let p = crate::config::expand_home(&raw, home.as_deref());
             Some(if p.is_absolute() { p } else { id.dir.join(p) })
         }
         None => config_kb.map(Path::to_path_buf),
@@ -114,9 +111,6 @@ pub fn build(id: &Identity, req: &Request) -> Result<Context> {
     let mut kb = None;
     if let Some(p) = req.project {
         let project_md = format!("work/projects/{p}/project.md");
-        if id.entry(&project_md).is_none() {
-            bail!("project not found: {project_md} (run `owo add project`)");
-        }
         items.push(item("project", "work/README.md", "work profile"));
         items.push(item("project", &project_md, "role on this project"));
         let prefix = format!("work/projects/{p}/notes/");
@@ -199,8 +193,7 @@ pub fn touch_project(id: &Identity, project: &str) -> Result<()> {
     }
     entry["last_touched"] = json!(at);
     entry["sessions"] = json!(entry.get("sessions").and_then(|v| v.as_u64()).unwrap_or(0) + 1);
-    fs::write(path, format!("{}\n", serde_json::to_string_pretty(&doc)?))?;
-    Ok(())
+    crate::identity::write_json(&path, &doc)
 }
 
 pub fn render_paths(c: &Context) -> String {

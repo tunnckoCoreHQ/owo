@@ -1,17 +1,19 @@
 //! `owo add`: creates one entry from its template at its deterministic path.
 
-use crate::identity::Identity;
+use crate::identity::{Identity, LIFE_CATEGORIES};
 use crate::slug::slugify;
 use crate::templates;
 use anyhow::{bail, Context, Result};
+use chrono::NaiveDate;
 use std::collections::BTreeMap;
 use std::fs;
 
 pub struct Request<'a> {
     pub kind: &'a str,
     pub title: &'a str,
-    pub date: Option<&'a str>,
+    pub date: Option<NaiveDate>,
     pub parent: Option<&'a str>,
+    /// Project slug for a note, already checked to exist
     pub project: Option<&'a str>,
     pub aliases: &'a [String],
     /// KB path for a project (`kb:` in project.md)
@@ -24,20 +26,10 @@ pub enum Added {
 }
 
 fn folder(kind: &str) -> Option<&'static str> {
-    Some(match kind {
-        "character" => "characters",
-        "culture" => "cultures",
-        "faction" => "factions",
-        "event" => "events",
-        "era" => "eras",
-        "thread" => "threads",
-        "conflict" => "conflicts",
-        "lesson" => "lessons",
-        "writing" => "writing",
-        "journal" => "journal",
-        "log" => "log",
-        _ => return None,
-    })
+    LIFE_CATEGORIES
+        .iter()
+        .find(|(_, k)| k.type_name() == Some(kind))
+        .map(|(dir, _)| *dir)
 }
 
 pub fn add(id: &Identity, req: &Request) -> Result<Added> {
@@ -53,11 +45,8 @@ pub fn add(id: &Identity, req: &Request) -> Result<Added> {
     let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
     let date = req
         .date
-        .map(str::to_string)
+        .map(|d| d.to_string())
         .unwrap_or_else(|| today.clone());
-    if chrono::NaiveDate::parse_from_str(&date, "%Y-%m-%d").is_err() {
-        bail!("--date {date:?} is not YYYY-MM-DD");
-    }
     // A log without a title is titled by its date, so titles stay unique.
     let title = match req.title.trim() {
         "" if req.kind == "log" => date.as_str(),
@@ -95,16 +84,7 @@ pub fn add(id: &Identity, req: &Request) -> Result<Added> {
         "project" => format!("work/projects/{slug}/project.md"),
         "note" => {
             let project = req.project.context("note needs --project <project>")?;
-            let project = slugify(project);
-            if id
-                .entry(&format!("work/projects/{project}/project.md"))
-                .is_none()
-            {
-                bail!(
-                    "project not found: work/projects/{project}/project.md (run `owo add project`)"
-                );
-            }
-            values.insert("project", project.clone());
+            values.insert("project", project.to_string());
             format!("work/projects/{project}/notes/{date}_{slug}.md")
         }
         "log" => format!("life/log/{date}.md"),

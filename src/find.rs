@@ -107,15 +107,18 @@ pub fn resolve(id: &Identity, name: &str, kind: Option<&str>) -> Resolution {
     }
 }
 
-/// Text of one section (any heading level, case-insensitive), or the whole file.
+/// One section with its heading line (any heading level, case-insensitive).
+fn section_text(body: &str, name: &str) -> Option<String> {
+    let (head, lines) = markdown::section(body, name)?;
+    let lines: Vec<&str> = lines.iter().map(|(_, l)| *l).collect();
+    Some(format!("{head}\n{}\n", lines.join("\n").trim_end()))
+}
+
+/// Text of one section, or the whole file.
 pub fn show(e: &Entry, section: Option<&str>) -> Option<String> {
     match section {
         None => Some(e.text.clone()),
-        Some(name) => {
-            let (head, lines) = markdown::section(e.body(), name)?;
-            let body: Vec<&str> = lines.iter().map(|(_, l)| *l).collect();
-            Some(format!("{head}\n{}\n", body.join("\n").trim_end()))
-        }
+        Some(name) => section_text(e.body(), name),
     }
 }
 
@@ -329,4 +332,29 @@ pub fn kb_link(id: &Identity, target: &str) -> Option<Result<KbLink, String>> {
     }
     out.file = Some(file.display().to_string());
     Some(Ok(out))
+}
+
+/// The KB file a kb link points at, as (path, text): the requested section, else the link's
+/// section, else the whole file. None when the target is not a kb link.
+pub fn show_kb(
+    id: &Identity,
+    target: &str,
+    section: Option<&str>,
+) -> Option<anyhow::Result<(String, String)>> {
+    let link = kb_link(id, target)?;
+    Some(link.map_err(anyhow::Error::msg).and_then(|k| {
+        let file = k.file.clone().filter(|_| k.file_exists).ok_or_else(|| {
+            anyhow::anyhow!(
+                "KB file not found: {}",
+                k.file.unwrap_or_else(|| "(no KB path)".into())
+            )
+        })?;
+        let text = std::fs::read_to_string(&file)?;
+        let body = match section.or(k.section.as_deref()) {
+            None => text,
+            Some(s) => section_text(&text, s)
+                .ok_or_else(|| anyhow::anyhow!("no section {s:?} in {file}"))?,
+        };
+        Ok((file, body))
+    }))
 }

@@ -95,17 +95,20 @@ impl Inputs {
     }
 
     fn expand(&self, value: &str, relative_to: &Path) -> PathBuf {
-        if let Some(rest) = value.strip_prefix("~/") {
-            if let Some(home) = &self.home {
-                return home.join(rest);
-            }
-        }
-        let path = PathBuf::from(value);
+        let path = expand_home(value, self.home.as_deref());
         if path.is_absolute() {
             path
         } else {
             relative_to.join(path)
         }
+    }
+}
+
+/// `~/<rest>` under `home`; any other value as written.
+pub fn expand_home(value: &str, home: Option<&Path>) -> PathBuf {
+    match (value.strip_prefix("~/"), home) {
+        (Some(rest), Some(home)) => home.join(rest),
+        _ => PathBuf::from(value),
     }
 }
 
@@ -191,17 +194,8 @@ pub fn resolve(inputs: &Inputs) -> Result<Resolved> {
         .or_else(|| project_cfg.as_ref().and_then(|(_, c)| c.project.clone()));
 
     let kb = project_cfg.as_ref().and_then(|(file, c)| {
-        let raw = PathBuf::from(c.kb.as_ref()?);
         let base = file.parent().unwrap_or(Path::new("."));
-        Some(
-            if raw.is_absolute() {
-                raw
-            } else {
-                base.join(raw)
-            }
-            .display()
-            .to_string(),
-        )
+        Some(inputs.expand(c.kb.as_ref()?, base).display().to_string())
     });
     Ok(Resolved {
         root,

@@ -25,10 +25,11 @@ mod sync;
 mod templates;
 
 use anyhow::Result;
+use chrono::NaiveDate;
 use clap::{CommandFactory, Parser, Subcommand};
 use output::{exit, Envelope, Level};
 use serde_json::json;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 #[derive(Parser)]
@@ -77,8 +78,8 @@ enum Command {
         /// Title (a log without one is titled by its date)
         title: Vec<String>,
         /// Date for dated entries (default: today)
-        #[arg(long)]
-        date: Option<String>,
+        #[arg(long, value_parser = state::parse_day)]
+        date: Option<NaiveDate>,
         /// Parent location for location-detail
         #[arg(long)]
         parent: Option<String>,
@@ -98,7 +99,7 @@ enum Command {
     /// Validate an identity
     Lint {
         /// Run only these rules (repeatable)
-        #[arg(long = "rule", value_parser = clap::builder::PossibleValuesParser::new(lint::RULES))]
+        #[arg(long = "rule", value_parser = clap::builder::PossibleValuesParser::new(lint::rules()))]
         rules: Vec<String>,
         /// Report only files changed since the last commit or stamp
         #[arg(long)]
@@ -185,8 +186,8 @@ enum Command {
         #[arg(long = "type")]
         types: Vec<String>,
         /// Only entries dated (or updated) on or after YYYY-MM-DD
-        #[arg(long)]
-        since: Option<String>,
+        #[arg(long, value_parser = state::parse_day)]
+        since: Option<NaiveDate>,
         #[arg(long, default_value_t = 10)]
         limit: usize,
     },
@@ -318,26 +319,37 @@ fn need_identity(r: &config::Resolved) -> Result<String> {
     Ok(slug)
 }
 
+/// Checks that the selected project is a slug with a `project.md` in the identity folder.
+fn need_project<'a>(dir: &Path, project: Option<&'a str>) -> Result<Option<&'a str>> {
+    let Some(p) = project else {
+        return Ok(None);
+    };
+    if !slug::is_slug(p) {
+        return Err(ConfigError(format!(
+            "invalid project {p:?}: use lowercase letters, digits and single hyphens"
+        ))
+        .into());
+    }
+    if !dir.join(format!("work/projects/{p}/project.md")).is_file() {
+        return Err(ConfigError(format!(
+            "project not found: work/projects/{p}/project.md (run `owo add project`)"
+        ))
+        .into());
+    }
+    Ok(Some(p))
+}
+
 fn run(cli: &Cli, out: &Out) -> Result<i32> {
     match &cli.command {
         Command::Slug { text } => {
             let value = slug::slugify(&text.join(" "));
+            let ok = !value.is_empty();
             if out.json {
-                Envelope {
-                    ok: !value.is_empty(),
-                    data: json!({ "slug": value }),
-                    warnings: vec![],
-                    errors: vec![],
-                }
-                .print();
+                Envelope::new(ok, json!({ "slug": value })).print();
             } else {
                 println!("{value}");
             }
-            Ok(if value.is_empty() {
-                exit::PROBLEMS
-            } else {
-                exit::OK
-            })
+            Ok(exit::of(ok))
         }
         Command::Templates { action } => templates_cmd(cli, action.as_ref(), out),
         Command::Mcp { remote, port } => {
@@ -411,9 +423,7 @@ fn run(cli: &Cli, out: &Out) -> Result<i32> {
             Ok(exit::OK)
         }
         Command::Lint { rules, changed } => {
-            let r = resolved(cli)?;
-            let slug = need_identity(&r)?;
-            let id = identity::Identity::load(&r.root, &slug)?;
+            let (_, id) = load(cli)?;
             let mut found = lint::run(
                 &id,
                 &lint::Options {
@@ -426,6 +436,8 @@ fn run(cli: &Cli, out: &Out) -> Result<i32> {
             }
             let errors = found.iter().filter(|d| d.level == Level::Error).count();
             let warnings = found.iter().filter(|d| d.level == Level::Warning).count();
+            let ok = errors == 0;
+            let slug = &id.slug;
             if out.json {
                 let split = |level: Level| {
                     found
@@ -434,13 +446,10 @@ fn run(cli: &Cli, out: &Out) -> Result<i32> {
                         .map(|d| serde_json::to_value(d).expect("serializes"))
                         .collect::<Vec<_>>()
                 };
-                let env = Envelope {
-                    ok: errors == 0,
-                    data: json!({ "identity": slug, "infos": split(Level::Info) }),
-                    warnings: split(Level::Warning),
-                    errors: split(Level::Error),
-                };
-                env.print();
+                Envelope::new(ok, json!({ "identity": slug, "infos": split(Level::Info) }))
+                    .with_warnings(split(Level::Warning))
+                    .with_errors(split(Level::Error))
+                    .print();
             } else {
                 for d in found
                     .iter()
@@ -450,7 +459,7 @@ fn run(cli: &Cli, out: &Out) -> Result<i32> {
                 }
                 out.say(format!("{slug}: {errors} errors, {warnings} warnings"));
             }
-            Ok(if errors > 0 { exit::PROBLEMS } else { exit::OK })
+            Ok(exit::of(ok))
         }
         Command::Add {
             kind,
@@ -460,9 +469,7 @@ fn run(cli: &Cli, out: &Out) -> Result<i32> {
             aliases,
             kb,
         } => {
-            let r = resolved(cli)?;
-            let slug = need_identity(&r)?;
-            let id = identity::Identity::load(&r.root, &slug)?;
+            let (r, id) = load(cli)?;
             let title = title.join(" ");
             if title.trim().is_empty() && kind != "log" {
                 Cli::command()
@@ -472,12 +479,18 @@ fn run(cli: &Cli, out: &Out) -> Result<i32> {
                     )
                     .exit();
             }
+            // Only a note lives under a project; other types ignore the working project.
+            let project = if kind == "note" {
+                need_project(&id.dir, r.project.as_deref())?
+            } else {
+                None
+            };
             let req = add::Request {
                 kind,
                 title: &title,
-                date: date.as_deref(),
+                date: *date,
                 parent: parent.as_deref(),
-                project: r.project.as_deref(),
+                project,
                 aliases,
                 kb: kb.as_deref(),
             };
@@ -487,38 +500,23 @@ fn run(cli: &Cli, out: &Out) -> Result<i32> {
             };
             let ok = created || kind == "log";
             if out.json {
-                let env = Envelope {
-                    ok,
-                    data: json!({ "path": path, "created": created }),
-                    warnings: vec![],
-                    errors: if ok {
-                        vec![]
-                    } else {
-                        vec![json!(format!("exists: {path}"))]
-                    },
-                };
-                env.print();
+                Envelope::new(ok, json!({ "path": path, "created": created }))
+                    .with_errors((!ok).then(|| format!("exists: {path}")))
+                    .print();
             } else if created {
                 println!("{path}");
             } else {
                 println!("exists {path}");
             }
-            Ok(if ok { exit::OK } else { exit::PROBLEMS })
+            Ok(exit::of(ok))
         }
         Command::Stamp { check } => {
-            let r = resolved(cli)?;
-            let slug = need_identity(&r)?;
-            let id = identity::Identity::load(&r.root, &slug)?;
+            let (_, id) = load(cli)?;
             let report = stamp::run(&id, *check)?;
             let clean = report.is_clean();
+            let ok = !*check || clean;
             if out.json {
-                let env = Envelope {
-                    ok: !*check || clean,
-                    data: serde_json::to_value(&report)?,
-                    warnings: vec![],
-                    errors: vec![],
-                };
-                env.print();
+                Envelope::new(ok, serde_json::to_value(&report)?).print();
             } else {
                 for (label, list) in [
                     ("added", &report.added),
@@ -533,30 +531,19 @@ fn run(cli: &Cli, out: &Out) -> Result<i32> {
                     out.say("state is up to date");
                 }
             }
-            Ok(if *check && !clean {
-                exit::PROBLEMS
-            } else {
-                exit::OK
-            })
+            Ok(exit::of(ok))
         }
         Command::Index { check } => {
-            let r = resolved(cli)?;
-            let slug = need_identity(&r)?;
-            let id = identity::Identity::load(&r.root, &slug)?;
+            let (_, id) = load(cli)?;
             let paths = if *check {
                 index::stale(&id)
             } else {
                 index::write(&id)?
             };
+            let ok = !*check || paths.is_empty();
             if out.json {
                 let key = if *check { "stale" } else { "written" };
-                let env = Envelope {
-                    ok: !*check || paths.is_empty(),
-                    data: json!({ key: paths }),
-                    warnings: vec![],
-                    errors: vec![],
-                };
-                env.print();
+                Envelope::new(ok, json!({ key: paths })).print();
             } else {
                 for p in &paths {
                     out.say(format!("{}{p}", if *check { "stale " } else { "wrote " }));
@@ -565,14 +552,10 @@ fn run(cli: &Cli, out: &Out) -> Result<i32> {
                     out.say("generated files are up to date");
                 }
             }
-            Ok(if *check && !paths.is_empty() {
-                exit::PROBLEMS
-            } else {
-                exit::OK
-            })
+            Ok(exit::of(ok))
         }
         Command::Resolve { name, kind } => {
-            let id = load(cli)?;
+            let (_, id) = load(cli)?;
             let name = name.join(" ");
             match find::resolve(&id, &name, kind.as_deref()) {
                 find::Resolution::Found(i) => {
@@ -592,13 +575,9 @@ fn run(cli: &Cli, out: &Out) -> Result<i32> {
                         format!("{name:?} does not resolve to one entry")
                     };
                     if out.json {
-                        Envelope {
-                            ok: false,
-                            data: json!({ "candidates": hits }),
-                            warnings: vec![],
-                            errors: vec![json!(msg)],
-                        }
-                        .print();
+                        Envelope::new(false, json!({ "candidates": hits }))
+                            .with_errors([msg])
+                            .print();
                     } else {
                         eprintln!("owo: {msg}");
                         for h in &hits {
@@ -610,29 +589,11 @@ fn run(cli: &Cli, out: &Out) -> Result<i32> {
             }
         }
         Command::Show { name, section } => {
-            let id = load(cli)?;
+            let (_, id) = load(cli)?;
             let joined = name.join(" ");
-            if let Some(res) =
-                find::kb_link(&id, joined.trim_start_matches("[[").trim_end_matches("]]"))
-            {
-                let k = res.map_err(|m| anyhow::anyhow!(m))?;
-                let file = k.file.clone().filter(|_| k.file_exists).ok_or_else(|| {
-                    anyhow::anyhow!(
-                        "KB file not found: {}",
-                        k.file.clone().unwrap_or_else(|| "(no KB path)".into())
-                    )
-                })?;
-                let text = std::fs::read_to_string(&file)?;
-                let wanted = section.clone().or(k.section.clone());
-                let body = match &wanted {
-                    None => text,
-                    Some(s) => {
-                        let (head, lines) = markdown::section(&text, s)
-                            .ok_or_else(|| anyhow::anyhow!("no section {s:?} in {file}"))?;
-                        let lines: Vec<&str> = lines.iter().map(|(_, l)| *l).collect();
-                        format!("{head}\n{}\n", lines.join("\n").trim_end())
-                    }
-                };
+            let target = joined.trim_start_matches("[[").trim_end_matches("]]");
+            if let Some(shown) = find::show_kb(&id, target, section.as_deref()) {
+                let (file, body) = shown?;
                 if out.json {
                     Envelope::ok(json!({ "path": file, "text": body })).print();
                 } else {
@@ -640,7 +601,7 @@ fn run(cli: &Cli, out: &Out) -> Result<i32> {
                 }
                 return Ok(exit::OK);
             }
-            let i = resolve_one(&id, &name.join(" "))?;
+            let i = resolve_one(&id, &joined)?;
             let text = find::show(&id.entries[i], section.as_deref()).ok_or_else(|| {
                 anyhow::anyhow!(
                     "no section {:?} in {}",
@@ -661,7 +622,7 @@ fn run(cli: &Cli, out: &Out) -> Result<i32> {
             outbound,
             orphans,
         } => {
-            let id = load(cli)?;
+            let (_, id) = load(cli)?;
             if *orphans {
                 let hits: Vec<_> = find::orphans(&id)
                     .into_iter()
@@ -713,29 +674,24 @@ fn run(cli: &Cli, out: &Out) -> Result<i32> {
             format,
             no_touch,
         } => {
-            let r = resolved(cli)?;
-            let id = identity::Identity::load(&r.root, &need_identity(&r)?)?;
+            let (r, id) = load(cli)?;
+            let project = need_project(&id.dir, r.project.as_deref())?;
             let req = context::Request {
                 voice: *voice,
                 look: *look,
-                project: r.project.as_deref(),
+                project,
                 config_kb: r.kb.as_ref().map(PathBuf::from),
                 with,
                 notes: *notes,
             };
             let ctx = context::build(&id, &req)?;
-            if let (Some(p), false) = (r.project.as_deref(), *no_touch) {
+            if let (Some(p), false) = (project, *no_touch) {
                 context::touch_project(&id, p)?;
             }
             if out.json {
-                let warnings = ctx.warnings.iter().map(|w| json!(w)).collect();
-                Envelope {
-                    ok: true,
-                    data: serde_json::to_value(&ctx)?,
-                    warnings,
-                    errors: vec![],
-                }
-                .print();
+                Envelope::ok(serde_json::to_value(&ctx)?)
+                    .with_warnings(ctx.warnings.clone())
+                    .print();
             } else {
                 for w in &ctx.warnings {
                     eprintln!("warning: {w}");
@@ -752,11 +708,10 @@ fn run(cli: &Cli, out: &Out) -> Result<i32> {
             Ok(exit::OK)
         }
         Command::State { days } => {
-            let r = resolved(cli)?;
-            let id = identity::Identity::load(&r.root, &need_identity(&r)?)?;
+            let (r, id) = load(cli)?;
             let mut s = status::compute(&id, *days, 5);
-            if let Some(p) = r.project.as_deref() {
-                s.project = Some(status::project(&id, p)?);
+            if let Some(p) = need_project(&id.dir, r.project.as_deref())? {
+                s.project = Some(status::project(&id, p));
             }
             if out.json {
                 Envelope::ok(serde_json::to_value(&s)?).print();
@@ -766,7 +721,7 @@ fn run(cli: &Cli, out: &Out) -> Result<i32> {
             Ok(exit::OK)
         }
         Command::Recent { days } => {
-            let id = load(cli)?;
+            let (_, id) = load(cli)?;
             let list = status::recent(&id, *days);
             if out.json {
                 Envelope::ok(json!({ "days": days, "files": list })).print();
@@ -787,7 +742,7 @@ fn run(cli: &Cli, out: &Out) -> Result<i32> {
             since,
             limit,
         } => {
-            let id = load(cli)?;
+            let (_, id) = load(cli)?;
             let hits = search::search(
                 &id,
                 &query.join(" "),
@@ -795,22 +750,15 @@ fn run(cli: &Cli, out: &Out) -> Result<i32> {
                     scope: scope.as_deref(),
                     types,
                     project: cli.project.as_deref(),
-                    since: since.as_deref(),
+                    since: since.map(|d| d.to_string()).as_deref(),
                 },
                 *limit,
             );
+            let ok = !hits.is_empty();
             if out.json {
-                Envelope {
-                    ok: !hits.is_empty(),
-                    data: json!({ "hits": hits }),
-                    warnings: vec![],
-                    errors: if hits.is_empty() {
-                        vec![json!("no hits")]
-                    } else {
-                        vec![]
-                    },
-                }
-                .print();
+                Envelope::new(ok, json!({ "hits": hits }))
+                    .with_errors((!ok).then_some("no hits"))
+                    .print();
             } else {
                 if hits.is_empty() {
                     eprintln!("owo: no hits");
@@ -822,11 +770,7 @@ fn run(cli: &Cli, out: &Out) -> Result<i32> {
                     }
                 }
             }
-            Ok(if hits.is_empty() {
-                exit::PROBLEMS
-            } else {
-                exit::OK
-            })
+            Ok(exit::of(ok))
         }
         Command::Sync {
             action:
@@ -840,13 +784,13 @@ fn run(cli: &Cli, out: &Out) -> Result<i32> {
         } => {
             let r = resolved(cli)?;
             let slug = need_identity(&r)?;
-            let id = identity::Identity::load(&r.root, &slug)?;
+            let dir = r.root.join(&slug);
+            let project = need_project(&dir, r.project.as_deref())?;
             let every = every
                 .or_else(|| {
-                    id.manifest
-                        .as_ref()
-                        .and_then(|m| m.get("sync_every"))
-                        .and_then(|v| v.as_u64())
+                    identity::read_json(&dir.join("identity.json"))?
+                        .get("sync_every")?
+                        .as_u64()
                         .map(|v| v as usize)
                 })
                 .unwrap_or(6)
@@ -859,7 +803,7 @@ fn run(cli: &Cli, out: &Out) -> Result<i32> {
                 format,
                 now: *now,
                 every,
-                project: r.project.as_deref(),
+                project,
             };
             let s = sync::start(&req)?;
             if out.json {
@@ -918,7 +862,7 @@ fn run(cli: &Cli, out: &Out) -> Result<i32> {
             Ok(exit::OK)
         }
         Command::Review { action: None } => {
-            let id = load(cli)?;
+            let (_, id) = load(cli)?;
             let p = review::packet(&id);
             if out.json {
                 Envelope::ok(serde_json::to_value(&p)?).print();
@@ -935,17 +879,12 @@ fn run(cli: &Cli, out: &Out) -> Result<i32> {
                     evidence,
                 },
         } => {
-            let id = load(cli)?;
+            let (_, id) = load(cli)?;
             let note = review::soul_note(&id, file, change, evidence)?;
             if out.json {
-                let warnings = note.warning.iter().map(|w| json!(w)).collect();
-                Envelope {
-                    ok: true,
-                    data: note.record,
-                    warnings,
-                    errors: vec![],
-                }
-                .print();
+                Envelope::ok(note.record)
+                    .with_warnings(note.warning)
+                    .print();
             } else {
                 if let Some(w) = &note.warning {
                     eprintln!("warning: {w}");
@@ -961,7 +900,7 @@ fn run(cli: &Cli, out: &Out) -> Result<i32> {
         Command::Soul {
             action: SoulAction::History { file },
         } => {
-            let id = load(cli)?;
+            let (_, id) = load(cli)?;
             let list = review::soul_history(&id, file.as_deref());
             if out.json {
                 Envelope::ok(json!({ "history": list })).print();
@@ -986,7 +925,7 @@ fn run(cli: &Cli, out: &Out) -> Result<i32> {
             Ok(exit::OK)
         }
         Command::Changes { since } => {
-            let id = load(cli)?;
+            let (_, id) = load(cli)?;
             let c = changes::changes(&id, since.as_deref());
             if out.json {
                 Envelope::ok(serde_json::to_value(&c)?).print();
@@ -1004,36 +943,30 @@ fn run(cli: &Cli, out: &Out) -> Result<i32> {
                     scenario,
                 },
         } => {
-            let id = load(cli)?;
-            let card = export::card(&id, spec, cli.project.as_deref(), scenario.as_deref())?;
-            let text = serde_json::to_string_pretty(&card)?;
-            match file {
-                Some(f) if png.is_some() => {
-                    let avatar = std::fs::read(png.as_ref().expect("checked"))?;
-                    let v2 = export::card(&id, "v2", cli.project.as_deref(), scenario.as_deref())?;
-                    let mut cards = vec![("chara", &v2)];
-                    if spec == "v3" {
-                        cards.push(("ccv3", &card));
-                    }
-                    std::fs::write(f, export::embed_png(&avatar, &cards)?)?;
-                }
-                Some(f) => std::fs::write(f, format!("{text}\n"))?,
-                None if out.json => Envelope::ok(card).print(),
-                None => println!("{text}"),
-            }
-            if let Some(f) = file {
+            let (_, id) = load(cli)?;
+            let project = need_project(&id.dir, cli.project.as_deref())?;
+            let scenario = scenario.as_deref();
+            let Some(f) = file else {
+                let card = export::card(&id, spec, project, scenario)?;
                 if out.json {
-                    Envelope::ok(json!({ "path": f })).print();
+                    Envelope::ok(card).print();
                 } else {
-                    out.say(format!("wrote {}", f.display()));
+                    println!("{}", serde_json::to_string_pretty(&card)?);
                 }
+                return Ok(exit::OK);
+            };
+            export::write_card(&id, spec, project, scenario, f, png.as_deref())?;
+            if out.json {
+                Envelope::ok(json!({ "path": f })).print();
+            } else {
+                out.say(format!("wrote {}", f.display()));
             }
             Ok(exit::OK)
         }
         Command::Export {
             format: ExportFormat::Skill { out: dir },
         } => {
-            let id = load(cli)?;
+            let (_, id) = load(cli)?;
             let path = export::skill(&id, dir)?;
             if out.json {
                 Envelope::ok(json!({ "path": path })).print();
@@ -1045,17 +978,12 @@ fn run(cli: &Cli, out: &Out) -> Result<i32> {
         Command::Export {
             format: ExportFormat::Soulspec { out: dir },
         } => {
-            let id = load(cli)?;
+            let (_, id) = load(cli)?;
             let report = export::soulspec(&id, dir)?;
             if out.json {
-                let warnings = report.warnings.iter().map(|w| json!(w)).collect();
-                Envelope {
-                    ok: true,
-                    data: json!({ "dir": dir, "files": report.files }),
-                    warnings,
-                    errors: vec![],
-                }
-                .print();
+                Envelope::ok(json!({ "dir": dir, "files": report.files }))
+                    .with_warnings(report.warnings)
+                    .print();
             } else {
                 for w in &report.warnings {
                     eprintln!("warning: {w}");
@@ -1069,8 +997,8 @@ fn run(cli: &Cli, out: &Out) -> Result<i32> {
         Command::Review {
             action: Some(ReviewAction::Done { through }),
         } => {
-            let id = load(cli)?;
-            let review = review::done(&id, through.as_deref())?;
+            let (_, id) = load(cli)?;
+            let review = review::done(&id, *through)?;
             if out.json {
                 Envelope::ok(review).print();
             } else {
@@ -1099,8 +1027,8 @@ enum ReviewAction {
     /// Record a finished review (dates and the MEMORY.md hash)
     Done {
         /// Last story day covered (default: newest log, event or journal date)
-        #[arg(long)]
-        through: Option<String>,
+        #[arg(long, value_parser = state::parse_day)]
+        through: Option<NaiveDate>,
     },
 }
 
@@ -1184,9 +1112,10 @@ enum MigrateFrom {
     },
 }
 
-fn load(cli: &Cli) -> Result<identity::Identity> {
+fn load(cli: &Cli) -> Result<(config::Resolved, identity::Identity)> {
     let r = resolved(cli)?;
-    identity::Identity::load(&r.root, &need_identity(&r)?)
+    let id = identity::Identity::load(&r.root, &need_identity(&r)?)?;
+    Ok((r, id))
 }
 
 fn resolve_one(id: &identity::Identity, name: &str) -> Result<usize> {

@@ -66,7 +66,7 @@ pub fn heading(line: &str) -> Option<(usize, &str)> {
     (1..=6).contains(&level).then(|| (level, text.trim()))
 }
 
-/// Lines with their 0-based index, marking each as heading-capable (outside fenced code).
+/// Lines with their 0-based index, marking each as outside fenced code (fence lines are not).
 fn unfenced(body: &str) -> impl Iterator<Item = (usize, &str, bool)> {
     let mut fenced = false;
     body.lines().enumerate().map(move |(i, line)| {
@@ -136,13 +136,8 @@ fn link_re() -> &'static Regex {
 /// Wiki-links in text, skipping fenced code blocks and inline code spans.
 pub fn links(text: &str) -> Vec<Link> {
     let mut out = vec![];
-    let mut fenced = false;
-    for (i, line) in text.lines().enumerate() {
-        if line.trim_start().starts_with("```") {
-            fenced = !fenced;
-            continue;
-        }
-        if fenced {
+    for (i, line, open) in unfenced(text) {
+        if !open {
             continue;
         }
         let cleaned = strip_inline_code(line);
@@ -176,16 +171,9 @@ fn strip_inline_code(line: &str) -> String {
 
 /// Word count of prose, skipping headings and fenced code.
 pub fn word_count(body: &str) -> usize {
-    let mut fenced = false;
-    body.lines()
-        .filter(|l| {
-            if l.trim_start().starts_with("```") {
-                fenced = !fenced;
-                return false;
-            }
-            !fenced && !l.starts_with('#')
-        })
-        .map(|l| l.split_whitespace().count())
+    unfenced(body)
+        .filter(|(_, l, open)| *open && !l.starts_with('#'))
+        .map(|(_, l, _)| l.split_whitespace().count())
         .sum()
 }
 

@@ -2,7 +2,7 @@
 //! Each tracks authored Markdown files by content hash with created/updated stamps.
 
 use crate::identity::{Identity, Kind};
-use chrono::{SecondsFormat, Utc};
+use chrono::{NaiveDate, SecondsFormat, Utc};
 use serde_json::{json, Map, Value};
 
 pub const SCOPES: &[&str] = &["soul", "life", "work"];
@@ -13,6 +13,19 @@ pub fn hash(text: &str) -> String {
 
 pub fn now() -> String {
     Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true)
+}
+
+/// A zero-padded `YYYY-MM-DD` day. Also the clap parser for date flags.
+pub fn parse_day(value: &str) -> Result<NaiveDate, String> {
+    let shaped = value.len() == 10
+        && value.bytes().enumerate().all(|(i, b)| match i {
+            4 | 7 => b == b'-',
+            _ => b.is_ascii_digit(),
+        });
+    match NaiveDate::parse_from_str(value, "%Y-%m-%d") {
+        Ok(day) if shaped => Ok(day),
+        _ => Err(format!("{value:?} is not a YYYY-MM-DD date")),
+    }
 }
 
 /// Splits `life/events/x.md` into (`life`, `events/x.md`).

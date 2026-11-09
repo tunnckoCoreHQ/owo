@@ -38,7 +38,7 @@ Each life category `_index.md` lists `- [[Title]] (marks): summary (aliases: ...
 
 Root resolves from `--root`, `OWO_ROOT`, `root` in the nearest `.owo.toml`, `root` in `$XDG_CONFIG_HOME/owo/config.toml`, then `$XDG_DATA_HOME/owo`.
 
-Identity resolves from `-i`, `OWO_IDENTITY`, `.owo.toml`, user config, then the only identity in the root. Project resolves from `--project`, `OWO_PROJECT`, `.owo.toml`; see [[decisions#Working project versus project filter]]. Relative `root` values resolve against the config file's folder; `~/` expands to `$HOME`.
+Identity resolves from `-i`, `OWO_IDENTITY`, `.owo.toml`, user config, then the only identity in the root. Project resolves from `--project`, `OWO_PROJECT`, `.owo.toml`; see [[decisions#Working project versus project filter]]. Relative `root` and `kb` values resolve against the config file's folder; `~/` expands to `$HOME`.
 
 ## Templates
 

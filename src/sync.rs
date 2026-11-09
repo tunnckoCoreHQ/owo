@@ -3,6 +3,7 @@
 //! slice to `<root>/sources/<slug>/` and an ingest prompt to `<root>/.owo/sessions/`.
 //! The host runs the ingest agent and then calls `done --until <n>` to move the bookmark.
 
+use crate::identity::{read_json, write_json};
 use anyhow::{bail, Context, Result};
 use serde::Serialize;
 use serde_json::{json, Value};
@@ -181,34 +182,18 @@ fn bookmark_path(root: &Path, session: &str) -> std::path::PathBuf {
 }
 
 fn read_bookmark(root: &Path, session: &str) -> Value {
-    fs::read_to_string(bookmark_path(root, session))
-        .ok()
-        .and_then(|t| serde_json::from_str(&t).ok())
-        .unwrap_or_else(|| json!({}))
+    read_json(&bookmark_path(root, session)).unwrap_or_else(|| json!({}))
 }
 
 fn write_bookmark(root: &Path, session: &str, doc: &Value) -> Result<()> {
     let path = bookmark_path(root, session);
     fs::create_dir_all(path.parent().expect("has parent"))?;
-    fs::write(path, format!("{}\n", serde_json::to_string_pretty(doc)?))?;
-    Ok(())
+    write_json(&path, doc)
 }
 
 pub fn start(req: &StartRequest) -> Result<Start> {
     check_session(req.session)?;
     let _lock = Lock::take(req.root, req.session)?;
-    if let Some(p) = req.project {
-        if !crate::slug::is_slug(p) {
-            bail!("invalid project {p:?}: use lowercase letters, digits and single hyphens");
-        }
-        let file = req
-            .root
-            .join(req.slug)
-            .join(format!("work/projects/{p}/project.md"));
-        if !file.is_file() {
-            bail!("project not found: work/projects/{p}/project.md (run `owo add project`)");
-        }
-    }
     let raw = fs::read_to_string(req.transcript)
         .with_context(|| format!("reading {}", req.transcript.display()))?;
     let messages = parse(&raw, req.format)?;

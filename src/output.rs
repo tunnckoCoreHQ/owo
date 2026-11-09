@@ -9,6 +9,15 @@ pub mod exit {
     pub const PROBLEMS: i32 = 1;
     pub const CONFIG: i32 = 3;
     pub const IO: i32 = 4;
+
+    /// OK when the command found nothing wrong, else PROBLEMS.
+    pub fn of(ok: bool) -> i32 {
+        if ok {
+            OK
+        } else {
+            PROBLEMS
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
@@ -75,22 +84,31 @@ pub struct Envelope {
 }
 
 impl Envelope {
-    pub fn ok(data: Value) -> Self {
+    pub fn new(ok: bool, data: Value) -> Self {
         Self {
-            ok: true,
+            ok,
             data,
             warnings: vec![],
             errors: vec![],
         }
     }
 
+    pub fn ok(data: Value) -> Self {
+        Self::new(true, data)
+    }
+
     pub fn fail(message: &str) -> Self {
-        Self {
-            ok: false,
-            data: Value::Null,
-            warnings: vec![],
-            errors: vec![Value::String(message.to_string())],
-        }
+        Self::new(false, Value::Null).with_errors([message])
+    }
+
+    pub fn with_warnings(mut self, items: impl IntoIterator<Item = impl Into<Value>>) -> Self {
+        self.warnings.extend(items.into_iter().map(Into::into));
+        self
+    }
+
+    pub fn with_errors(mut self, items: impl IntoIterator<Item = impl Into<Value>>) -> Self {
+        self.errors.extend(items.into_iter().map(Into::into));
+        self
     }
 
     pub fn print(&self) {

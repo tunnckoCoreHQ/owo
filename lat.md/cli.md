@@ -6,7 +6,7 @@ Commands implemented so far. Every command accepts `--root`, `-i/--identity`, `-
 
 With `--json` every command prints `{ "ok", "data", "warnings", "errors" }`; otherwise readable text.
 
-Exit codes: 0 success, 1 problems found (lint errors, exists, unknown template, stale check), 2 usage error (clap), 3 config error (no identity selected, identity folder missing), 4 I/O error. A closed stdout (`owo search x | head`) ends the process quietly.
+Exit codes: 0 success, 1 problems found (lint errors, exists, unknown template, stale check), 2 usage error (clap, including a date that is not YYYY-MM-DD), 3 config error (no identity selected, identity folder missing, project that is not a slug or has no `project.md`), 4 I/O error. A closed stdout (`owo search x | head`) ends the process quietly.
 
 ## Commands
 
@@ -40,7 +40,7 @@ The implemented command set; see `docs/design.md` section 7 for the full plan.
 - voice and look: `soul/VOICE.md` and `soul/LOOK.md` with `--voice` and `--look`.
 - project, with `--project <p>`: `work/README.md`, `project.md`, the newest N notes, and the KB pointer.
 
-The KB path comes from `project.md` `kb`, else `identity.json` `projects.<p>.kb` (both relative to the identity folder, with `~/` as the home folder), else `.owo.toml` `kb` (relative to that file). See [[decisions#KB pointer is always emitted]]. A project context records a session in `work/state.json` unless `--no-touch`.
+The KB path comes from `project.md` `kb`, else `identity.json` `projects.<p>.kb` (both relative to the identity folder, with `~/` as the home folder), else `.owo.toml` `kb` (relative to that file, with `~/` as the home folder). See [[decisions#KB pointer is always emitted]]. A project context records a session in `work/state.json` unless `--no-touch`.
 
 
 ## Review

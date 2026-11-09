@@ -4,7 +4,7 @@ owo is one Rust binary crate. Each command loads an identity folder into memory,
 
 ## Modules
 
-Each module owns one job; `main.rs` parses arguments with clap and dispatches.
+Each module owns one job; `main.rs` parses arguments with clap, checks the selected identity and project (exit 3), and dispatches.
 
 - `config.rs` resolves root, identity, project and KB. See [[formats#Config resolution]].
 - `identity.rs` walks one identity folder and parses every Markdown file into an `Entry` with a `Kind` decided by its path.
@@ -13,9 +13,9 @@ Each module owns one job; `main.rs` parses arguments with clap and dispatches.
 - `templates.rs` embeds every template with `include_str!` and fills `{{key}}` placeholders.
 - `create.rs` implements `owo new`; `add.rs` implements `owo add`.
 - `index.rs` generates `_index.md` files and `life/timeline.md`.
-- `state.rs` and `stamp.rs` hash files and maintain the three `state.json` files.
+- `state.rs` and `stamp.rs` hash files and maintain the three `state.json` files; `state::parse_day` is the one strict `YYYY-MM-DD` parser.
 - `lint.rs` runs the rules in [[lint]].
-- `find.rs` resolves names, shows sections, and lists backlinks, outlinks and orphans.
+- `find.rs` resolves names, shows sections and KB files, and lists backlinks, outlinks and orphans.
 - `status.rs` derives current state and the Now block; `context.rs` builds the tiered load set.
 - `search.rs` is the BM25 ranker; `review.rs` builds the review packet, records finished reviews, and keeps the soul history.
 - `git.rs` wraps the `git` binary; `changes.rs` implements `owo changes` and the changed-file set for `lint --changed`.

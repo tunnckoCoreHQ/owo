@@ -11,26 +11,6 @@ use serde_json::Value as Yaml;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fs;
 
-pub const RULES: &[&str] = &[
-    "tree",
-    "schema",
-    "soul-plain",
-    "links",
-    "unique",
-    "identifiers",
-    "journal",
-    "supersede",
-    "generated",
-    "memory-review",
-    "state",
-    "budget",
-    "dupes",
-    "orphans",
-    "soul-evidence",
-    "review-due",
-    "kb",
-];
-
 /// Soft word budgets for soul files.
 pub const BUDGETS: &[(&str, usize)] = &[
     ("IDENTITY.md", 800),
@@ -61,6 +41,32 @@ impl Ctx<'_> {
     }
 }
 
+/// Every rule, in run order.
+const CHECKS: &[(&str, Check)] = &[
+    ("tree", tree),
+    ("schema", schema),
+    ("soul-plain", soul_plain),
+    ("links", links),
+    ("unique", unique),
+    ("identifiers", identifiers),
+    ("journal", journal),
+    ("supersede", supersede),
+    ("generated", generated),
+    ("memory-review", memory_review),
+    ("state", state_rule),
+    ("budget", budget),
+    ("dupes", dupes),
+    ("orphans", orphans),
+    ("soul-evidence", soul_evidence),
+    ("review-due", review_due),
+    ("kb", kb_links),
+];
+
+/// Rule names for `--rule`.
+pub fn rules() -> impl Iterator<Item = &'static str> {
+    CHECKS.iter().map(|(name, _)| *name)
+}
+
 pub fn run(id: &Identity, opts: &Options) -> Vec<Diagnostic> {
     let mut ctx = Ctx {
         id,
@@ -68,26 +74,7 @@ pub fn run(id: &Identity, opts: &Options) -> Vec<Diagnostic> {
         out: vec![],
     };
     let enabled = |rule: &str| opts.rules.is_empty() || opts.rules.iter().any(|r| r == rule);
-    let checks: &[(&str, Check)] = &[
-        ("tree", tree),
-        ("schema", schema),
-        ("soul-plain", soul_plain),
-        ("links", links),
-        ("unique", unique),
-        ("identifiers", identifiers),
-        ("journal", journal),
-        ("supersede", supersede),
-        ("generated", generated),
-        ("memory-review", memory_review),
-        ("state", state_rule),
-        ("budget", budget),
-        ("dupes", dupes),
-        ("orphans", orphans),
-        ("soul-evidence", soul_evidence),
-        ("review-due", review_due),
-        ("kb", kb_links),
-    ];
-    for (name, check) in checks {
+    for (name, check) in CHECKS {
         if enabled(name) {
             check(&mut ctx);
         }
@@ -108,7 +95,7 @@ fn warn(rule: &str, path: &str, msg: impl Into<String>) -> Diagnostic {
 }
 
 fn parse_date(value: &str) -> Option<NaiveDate> {
-    NaiveDate::parse_from_str(value.trim(), "%Y-%m-%d").ok()
+    state::parse_day(value.trim()).ok()
 }
 
 fn tree(c: &mut Ctx) {
@@ -394,10 +381,7 @@ fn soul_plain(c: &mut Ctx) {
 fn links(c: &mut Ctx) {
     let mut found = vec![];
     for e in c.id.entries.iter().filter(|e| !e.is_generated()) {
-        for (line, link) in crate::find::raw_links(e) {
-            if link.target.starts_with("kb:") || link.target.is_empty() {
-                continue;
-            }
+        for (line, link) in crate::find::file_links(e) {
             let hits = c.id.resolve_link(&c.keys, &link.target);
             match hits.len() {
                 0 => found.push(

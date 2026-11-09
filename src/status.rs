@@ -15,7 +15,7 @@ pub struct Link {
 }
 
 impl Link {
-    fn of(e: &Entry) -> Self {
+    pub(crate) fn of(e: &Entry) -> Self {
         Self {
             title: e.title.clone().unwrap_or_else(|| e.stem_key()),
             path: e.rel.clone(),
@@ -67,13 +67,7 @@ pub struct ProjectState {
     pub notes: Vec<Link>,
 }
 
-pub fn project(id: &Identity, slug: &str) -> anyhow::Result<ProjectState> {
-    if id
-        .entry(&format!("work/projects/{slug}/project.md"))
-        .is_none()
-    {
-        anyhow::bail!("project not found: work/projects/{slug}/project.md");
-    }
+pub fn project(id: &Identity, slug: &str) -> ProjectState {
     let rec = id
         .read_json("work/state.json")
         .and_then(|d| d.get("projects")?.get(slug).cloned())
@@ -85,13 +79,13 @@ pub fn project(id: &Identity, slug: &str) -> anyhow::Result<ProjectState> {
         .filter(|e| e.kind == Kind::Note && e.rel.starts_with(&prefix))
         .collect();
     notes.sort_by(|a, b| b.rel.cmp(&a.rel));
-    Ok(ProjectState {
+    ProjectState {
         slug: slug.into(),
         first_touched: rec["first_touched"].as_str().map(str::to_string),
         last_touched: rec["last_touched"].as_str().map(str::to_string),
         sessions: rec["sessions"].as_u64().unwrap_or(0),
         notes: notes.into_iter().take(5).map(Link::of).collect(),
-    })
+    }
 }
 
 #[derive(Debug, Serialize)]
@@ -140,7 +134,7 @@ fn by_date_desc(id: &Identity, kind: Kind) -> Vec<&Entry> {
 }
 
 fn parse_date(s: &str) -> Option<NaiveDate> {
-    NaiveDate::parse_from_str(s.get(..10)?, "%Y-%m-%d").ok()
+    crate::state::parse_day(s.get(..10)?).ok()
 }
 
 /// Latest `updated` stamp per scope from the state files.
@@ -268,7 +262,7 @@ pub fn compute(id: &Identity, days: i64, logs: usize) -> State {
     }
 }
 
-fn join(links: &[Link]) -> String {
+pub(crate) fn join(links: &[Link]) -> String {
     if links.is_empty() {
         "none".into()
     } else {
