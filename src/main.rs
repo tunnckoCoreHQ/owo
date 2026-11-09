@@ -179,7 +179,7 @@ enum Command {
     Search {
         query: Vec<String>,
         /// Limit to soul, life or work
-        #[arg(long, visible_alias = "in")]
+        #[arg(long, visible_alias = "in", value_parser = ["soul", "life", "work"])]
         scope: Option<String>,
         /// Limit to entry types (repeatable)
         #[arg(long = "type")]
@@ -302,6 +302,12 @@ fn need_identity(r: &config::Resolved) -> Result<String> {
             r.root.display()
         ))
     })?;
+    if !slug::is_slug(&slug) {
+        return Err(ConfigError(format!(
+            "invalid identity {slug:?}: use lowercase letters, digits and single hyphens"
+        ))
+        .into());
+    }
     if !r.root.join(&slug).is_dir() {
         return Err(ConfigError(format!(
             "identity folder not found: {}; `owo list` shows the identities in this root",
@@ -317,7 +323,13 @@ fn run(cli: &Cli, out: &Out) -> Result<i32> {
         Command::Slug { text } => {
             let value = slug::slugify(&text.join(" "));
             if out.json {
-                Envelope::ok(json!({ "slug": value })).print();
+                Envelope {
+                    ok: !value.is_empty(),
+                    data: json!({ "slug": value }),
+                    warnings: vec![],
+                    errors: vec![],
+                }
+                .print();
             } else {
                 println!("{value}");
             }
@@ -479,7 +491,11 @@ fn run(cli: &Cli, out: &Out) -> Result<i32> {
                     ok,
                     data: json!({ "path": path, "created": created }),
                     warnings: vec![],
-                    errors: vec![],
+                    errors: if ok {
+                        vec![]
+                    } else {
+                        vec![json!(format!("exists: {path}"))]
+                    },
                 };
                 env.print();
             } else if created {
@@ -781,7 +797,13 @@ fn run(cli: &Cli, out: &Out) -> Result<i32> {
                 *limit,
             );
             if out.json {
-                Envelope::ok(json!({ "hits": hits })).print();
+                Envelope {
+                    ok: !hits.is_empty(),
+                    data: json!({ "hits": hits }),
+                    warnings: vec![],
+                    errors: vec![],
+                }
+                .print();
             } else {
                 for h in &hits {
                     println!("{:>6.2}  {}  {}", h.score, h.path, h.title);

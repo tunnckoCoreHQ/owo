@@ -187,6 +187,7 @@ pub fn touch_project(id: &Identity, project: &str) -> Result<()> {
     let path = id.dir.join("work/state.json");
     let mut doc = id
         .read_json("work/state.json")
+        .filter(|v| v.is_object())
         .unwrap_or_else(|| json!({ "projects": {}, "files": {} }));
     let at = crate::state::now();
     if !doc.get("projects").is_some_and(|v| v.is_object()) {

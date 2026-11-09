@@ -72,8 +72,7 @@ This document is the design. File formats, JSON and command lines appear as shor
 ```text
 <root>/                         # --root, OWO_ROOT, .owo.toml, user config, or XDG default
 ├── owo.toml                    # optional root config
-├── .owo/                       # CLI working data: search cache, sync bookmarks
-│   ├── cache/<slug>/
+├── .owo/                       # CLI working data: sync bookmarks
 │   └── sessions/<session>.json
 ├── .templates/                 # optional overrides for built-in templates
 ├── sources/                    # raw source material, outside every identity
@@ -611,7 +610,7 @@ overlap = 2
 : Matches exact title, alias, slug and path. Prints path, title and summary. On a miss it prints up to 5 fuzzy suggestions and exits 1. On ambiguity it prints every match and exits 1.
 
 `owo search <query> [--type <t>]... [--in soul|life|work] [--project <p>] [--since <date>] [--limit 10]`
-: BM25 search over titles, aliases, summaries and bodies; title and alias hits rank higher. Results carry path, title, summary, score and the best line. The index lives in `.owo/cache/<slug>/` and rebuilds from content hashes.
+: BM25 search over titles, aliases, summaries and bodies; title and alias hits rank higher. Results carry path, title, summary, score and the best line. The index is built in memory on each call. No hits exits 1.
 
 `owo links <name> [--in | --out]`
 : Backlinks and outgoing links, with the line each sits on.
@@ -709,9 +708,9 @@ overlap = 2
 
 ### 7.4 Build notes
 
-- Crates: `clap`, `serde`, `serde_json`, `serde-saphyr`, `walkdir`, `pulldown-cmark`, `tantivy`, `blake3`, `deunicode`, `strsim`, `minijinja`, `png`.
+- Crates: `clap`, `serde`, `serde_json`, `serde-saphyr`, `walkdir`, `pulldown-cmark`, `blake3`, `deunicode`, `strsim`, `minijinja`, `png`.
 - Templates are embedded with `include_str!` and can be overridden from `.templates/`.
-- Every command works on files. `.owo/` is a cache that can be deleted at any time.
+- Every command works on files. `.owo/` holds only sync bookmarks and prompts.
 - Tests use fixture identities under `tests/fixtures/`.
 
 ## 8. Templates

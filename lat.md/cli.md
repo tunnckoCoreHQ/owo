@@ -13,7 +13,7 @@ Exit codes: 0 success, 1 problems found (lint errors, exists, unknown template, 
 The implemented command set; see `docs/design.md` section 7 for the full plan.
 
 - `owo new <name> [--slug]` creates an identity from templates, writes indexes and state files. Exits 1 when the folder exists.
-- `owo add <type> <title> [--date] [--parent] [--alias]... [--kb]` creates one entry at its deterministic path. Uses `--project` for notes. A second `add log` for the same day succeeds and prints `exists <path>`.
+- `owo add <type> <title> [--date] [--parent] [--alias]... [--kb]` creates one entry at its deterministic path. Uses `--project` for notes. A second `add log` for the same day succeeds and prints `exists <path>`; for other types an existing path exits 1 with an `exists` error.
 - `owo lint [--rule <code>]...` runs [[lint]] rules. Exits 1 when any error is found.
 - `owo index [--check]` writes generated files, or reports stale ones and exits 1.
 - `owo stamp [--check]` refreshes state files from hashes; see [[decisions#Stamp touches frontmatter]].
@@ -22,7 +22,7 @@ The implemented command set; see `docs/design.md` section 7 for the full plan.
 - `owo links <name> [--in] [--out]` lists backlinks and outlinks; `owo links --orphans` lists unlinked entries.
 - `owo context [--voice] [--look] [--with <name>]... [--notes N] [--format paths|text] [--no-touch]` prints the load set; see [[cli#Context]].
 - `owo state [--days N]` prints the derived Now block, plus sessions and recent notes with `--project`; `owo recent [--days N]` lists recently stamped files.
-- `owo search <query> [--scope|--in soul|life|work] [--type <t>]... [--since <date>] [--limit N]` ranks entries with BM25; see [[decisions#Search is in-crate BM25]].
+- `owo search <query> [--scope|--in soul|life|work] [--type <t>]... [--since <date>] [--limit N]` ranks entries with BM25; no hits gives `ok: false` and exit 1. See [[decisions#Search is in-crate BM25]].
 - `owo review` prints the review packet; see [[cli#Review]]. `owo review done [--through <date>]` records a finished review: `last_reviewed`, `reviewed_through` (default: newest log, event or journal date) and the MEMORY.md hash.
 - `owo soul note <file> --change <text> --evidence <name>...` appends to `soul/state.json` `history`. Evidence must resolve; fewer than two links and no defining event gives a warning. `owo soul history [file]` prints the trail.
 - `owo changes [--since]` lists changes by day; see [[decisions#Changes read Git, else stamps]]. `owo lint --changed` keeps diagnostics for changed files only.

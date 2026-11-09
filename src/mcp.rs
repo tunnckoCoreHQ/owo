@@ -500,6 +500,8 @@ pub fn serve(d: &Defaults) -> Result<()> {
 }
 
 pub const DEFAULT_PORT: u16 = 4224;
+/// Largest request body the HTTP mode reads; a tool call is a few kilobytes.
+pub const MAX_BODY: usize = 8 << 20;
 
 /// Serves MCP over HTTP at `http://<addr>:<port>/mcp` (Streamable HTTP with JSON replies).
 /// Without `port` it takes 4224, or the next free port up to 4323. Prints the URL, then
@@ -542,6 +544,7 @@ fn http_request(stream: TcpStream, d: &Defaults) -> std::io::Result<()> {
     let (method, path) = (parts.next().unwrap_or(""), parts.next().unwrap_or(""));
     let path = path.split('?').next().unwrap_or("");
     let (status, body) = match (method, path) {
+        ("POST", "/mcp") if length > MAX_BODY => ("413 Payload Too Large", String::new()),
         ("POST", "/mcp") => {
             let mut body = vec![0; length];
             reader.read_exact(&mut body)?;

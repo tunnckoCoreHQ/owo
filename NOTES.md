@@ -52,3 +52,15 @@
 - Dependencies: `toml` 1.x; `serde_yaml` (archived) replaced by `serde-saphyr`, with frontmatter held as `serde_json` values.
 - Migrate drops v1 `index.md` files and maps other status values to canon; `dupes` ignores `## Sources`.
 - Citations live only in frontmatter: templates, design and skills drop the body `## Sources`, `## Evidence` and `## From` sections; migrate moves v1 `## Sources` into `sources` and `evidence`. Frontmatter lists are block lists. Exact paths with `.md` resolve.
+
+## 2026-11-09 (third review)
+
+- `-i` must be a slug (exit 3), so `-i ../x` cannot leave the root. `sync start --project` must be a slug too.
+- Templates escape values: `{{name_json}}` in `identity.json` and `soul.json`, the note's `project` is quoted, and YAML escaping covers newline, carriage return and tab. `add --alias` and `--kb` fail when an override template has no line to fill.
+- The skill description is YAML-escaped as a whole. Exports nest LOOK headings under `## Look`.
+- `search` and `slug` with no result set `ok: false`; `search --scope` takes soul, life or work. An existing `add` path reports an `exists` error.
+- `context --project` replaces a `work/state.json` that is not an object. The MCP HTTP mode refuses bodies over 8MB. `kb:` paths may not use `..` or an absolute path. Git paths print unquoted (`core.quotepath=off`).
+- The sync lock holds a token, so a taken-over process leaves the new lock alone.
+- Migrate: copies the whole `sources/` tree and skips existing targets; body citations join existing `sources` and `evidence`, and linked bullets stay as citations outside lessons; conflict files cite with the identity slug; an index in a location folder is dropped.
+- `review done` takes its default cursor from valid dates only; `soul note` counts `defining: true` only as a boolean, as lint does.
+- `dupes` shingles the whole body. Citations now live in frontmatter, so no body section needs skipping; this replaces the phase 5 note.

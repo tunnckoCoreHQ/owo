@@ -276,6 +276,18 @@ pub fn kb_link(id: &Identity, target: &str) -> Option<Result<KbLink, String>> {
         Some((p, s)) => (p, Some(s.to_string())),
         None => (path, None),
     };
+    if std::path::Path::new(path).components().any(|c| {
+        matches!(
+            c,
+            std::path::Component::ParentDir
+                | std::path::Component::RootDir
+                | std::path::Component::Prefix(_)
+        )
+    }) {
+        return Some(Err(format!(
+            "[[{target}]]: the path must stay inside the KB (no `..` or absolute path)"
+        )));
+    }
     if id
         .entry(&format!("work/projects/{project}/project.md"))
         .is_none()

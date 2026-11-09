@@ -8,6 +8,8 @@ pub fn run(dir: &Path, args: &[&str]) -> Option<String> {
     let out = Command::new("git")
         .arg("-C")
         .arg(dir)
+        // Print non-ASCII paths as they are, not octal-quoted.
+        .args(["-c", "core.quotepath=off"])
         .args(args)
         .output()
         .ok()?;
