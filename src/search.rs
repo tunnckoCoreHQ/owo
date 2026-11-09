@@ -44,6 +44,9 @@ pub struct Hit {
     pub score: f64,
     pub line: Option<usize>,
     pub snippet: Option<String>,
+    /// The query is the title or an alias; such hits rank first.
+    #[serde(skip)]
+    exact: bool,
 }
 
 /// Which entries a search looks at.
@@ -115,6 +118,7 @@ pub fn search(id: &Identity, query: &str, filter: &Filter, limit: usize) -> Vec<
             score += idf * tf * (K1 + 1.0) / (tf + K1 * (1.0 - B + B * len / avg));
         }
         if score > 0.0 {
+            let names: Vec<&String> = e.title.iter().chain(&e.aliases).collect();
             // The best line comes from the body (the title is shown already), else from
             // the frontmatter when only the summary or aliases match.
             let body_line = crate::markdown::split(&e.text).body_line;
@@ -134,10 +138,15 @@ pub fn search(id: &Identity, query: &str, filter: &Filter, limit: usize) -> Vec<
                 score: (score * 1000.0).round() / 1000.0,
                 line: best.map(|(_, i, _)| i + 1),
                 snippet: best.map(|(_, _, l)| l.trim().chars().take(160).collect()),
+                exact: names.iter().any(|n| tokens(n) == q),
             });
         }
     }
-    hits.sort_by(|a, b| b.score.total_cmp(&a.score).then(a.path.cmp(&b.path)));
+    hits.sort_by(|a, b| {
+        (b.exact.cmp(&a.exact))
+            .then(b.score.total_cmp(&a.score))
+            .then(a.path.cmp(&b.path))
+    });
     hits.truncate(limit);
     hits
 }

@@ -172,7 +172,16 @@ pub fn last_project(id: &Identity) -> Option<(String, String)> {
 
 pub fn compute(id: &Identity, days: i64, logs: usize) -> State {
     let today = Utc::now().date_naive();
-    let since = today - Duration::days(days);
+    // Recent events count back from the newest story date, since story time can run behind or
+    // ahead of real time.
+    let newest = id
+        .entries
+        .iter()
+        .filter(|e| matches!(e.kind, Kind::Log | Kind::Event))
+        .filter_map(|e| parse_date(&e.field_str("date")?))
+        .max()
+        .unwrap_or(today);
+    let since = newest - Duration::days(days);
     let soul = id.read_json("soul/state.json");
     let every = id
         .manifest

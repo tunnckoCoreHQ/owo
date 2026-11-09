@@ -19,6 +19,17 @@ fn heading(category: &str) -> String {
 fn line(e: &Entry) -> String {
     let title = e.title.clone().unwrap_or_else(|| e.stem_key());
     let mut out = format!("- [[{title}]]");
+    // A closed thread, resolved conflict or non-canon entry says so, so it does not read as current.
+    let marks: Vec<String> = [
+        e.field_str("state").filter(|s| s != "open"),
+        e.field_str("status").filter(|s| s != "canon"),
+    ]
+    .into_iter()
+    .flatten()
+    .collect();
+    if !marks.is_empty() {
+        out.push_str(&format!(" ({})", marks.join(", ")));
+    }
     if let Some(s) = e.field_str("summary").filter(|s| !s.trim().is_empty()) {
         out.push_str(&format!(": {}", s.trim()));
     }

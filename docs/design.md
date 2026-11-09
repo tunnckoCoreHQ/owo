@@ -390,7 +390,7 @@ The identity's own accounts live in `identity.json` → `accounts`, under the sa
 `owo state` derives the current state from the state files and frontmatter dates:
 
 - last activity and last active project;
-- recent events (event `date` in the last 14 days);
+- recent events (event `date` within 14 days of the newest log or event date, since story time can run behind or ahead of real time);
 - recent daily logs;
 - open threads and open conflicts;
 - review status: days since `last_reviewed`, unreviewed log days, MEMORY outside-review flag;
@@ -638,7 +638,7 @@ overlap = 2
 : Refreshes state files from content hashes, updates `updated` in changed entries, bumps the `soul.json` minor version when a soul file changed. `--check` reports drift and exits 1.
 
 `owo index [--check]`
-: Regenerates every `_index.md` and `life/timeline.md`. Indexes list link, aliases and summary per entry. The timeline groups events by era and sorts by `date`. `--check` exits 1 when a generated file differs.
+: Regenerates every `_index.md` and `life/timeline.md`. Indexes list link, state or status marks (closed, resolved, disputed, superseded), aliases and summary per entry. The timeline groups events by era and sorts by `date`. `--check` exits 1 when a generated file differs.
 
 `owo lint [--changed] [--rule <code>]...`
 : Validates an identity. Rules:

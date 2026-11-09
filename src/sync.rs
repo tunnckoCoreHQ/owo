@@ -106,6 +106,9 @@ pub struct Start {
     pub source: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub prompt: Option<String>,
+    /// The prompt of a run that started earlier and has no `sync done` yet.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pending: Option<String>,
 }
 
 pub struct StartRequest<'a> {
@@ -209,6 +212,13 @@ pub fn start(req: &StartRequest) -> Result<Start> {
     let raw = fs::read_to_string(req.transcript)
         .with_context(|| format!("reading {}", req.transcript.display()))?;
     let messages = parse(&raw, req.format)?;
+    if messages.is_empty() && !raw.trim().is_empty() {
+        bail!(
+            "no user or assistant messages in {} as {}; check --format",
+            req.transcript.display(),
+            req.format
+        );
+    }
     let mut doc = read_bookmark(req.root, req.session);
     let done = doc["until"].as_u64().unwrap_or(0) as usize;
     let done = done.min(messages.len());
@@ -241,6 +251,7 @@ pub fn start(req: &StartRequest) -> Result<Start> {
         until,
         source: None,
         prompt: None,
+        pending: None,
     };
     doc["session"] = json!(req.session);
     doc["identity"] = json!(req.slug);
@@ -250,13 +261,16 @@ pub fn start(req: &StartRequest) -> Result<Start> {
     if doc.get("until").is_none() {
         doc["until"] = json!(0);
     }
+    if !due {
+        out.pending = doc["pending"]["prompt"].as_str().map(str::to_string);
+    }
     if due {
         let date = crate::state::now()[..10].to_string();
         let source = format!(
             "sources/{}/{date}_{}_{from}-{until}.md",
             req.slug, req.session
         );
-        let mut body = format!("# Session {} ({from}-{until})\n\nIdentity: {}. Transcript: {}. Messages {from} to {until}; messages before {done} were synced already.\n", req.session, req.slug, req.transcript.display());
+        let mut body = format!("# Session {} ({from}-{until})\n\nIdentity: {}. Transcript: {}. Messages {from} to {until}.{}\n", req.session, req.slug, req.transcript.display(), if done == 0 { String::new() } else { format!(" Messages before {done} were synced already.") });
         for (i, m) in messages[from..until].iter().enumerate() {
             body.push_str(&format!("\n## {} {}\n\n{}\n", from + i, m.role, m.text));
         }
@@ -271,8 +285,9 @@ pub fn start(req: &StartRequest) -> Result<Start> {
         let root = fs::canonicalize(req.root).unwrap_or_else(|_| req.root.to_path_buf());
         let quoted = format!("'{}'", root.display().to_string().replace('\'', "'\\''"));
         let text = format!(
-            "Use the identity-ingest skill for identity `{slug}`{proj}.\n\nSource: `{source}` (relative to the identities root `{root}`). Messages before {done} were ingested in an earlier run; the first part is overlap for context.\n\n1. `{owo} context --format text --no-touch{project}` and `{owo} state`.\n2. Route each durable fact in the source to its home; add `{cite}#L<a>-L<b>` to each entry's frontmatter `sources`.\n3. Finish with `{owo} stamp && {owo} index && {owo} lint --changed`.\n4. Report changed paths or \"no changes\".\n\nWhen it succeeds the host runs `owo --root {quoted} sync done --session {session} --until {until}`.\n",
+            "Use the identity-ingest skill for identity `{slug}`{proj}.\n\nSource: `{source}` (relative to the identities root `{root}`).{earlier}\n\n1. `{owo} context --format text --no-touch{project}` and `{owo} state`.\n2. Route each durable fact in the source to its home; add `{cite}#L<a>-L<b>` to each entry's frontmatter `sources`.\n3. Finish with `{owo} stamp && {owo} index && {owo} lint --changed`.\n4. Report changed paths or \"no changes\".\n\nWhen it succeeds the host runs `owo --root {quoted} sync done --session {session} --until {until}`.\n",
             slug = req.slug,
+            earlier = if done == 0 { String::new() } else { format!(" Messages before {done} were ingested in an earlier run; the first part is overlap for context.") },
             root = root.display(),
             owo = format!("owo --root {quoted} -i {}", req.slug),
             proj = req.project.map(|p| format!(" on project `{p}`")).unwrap_or_default(),

@@ -771,6 +771,9 @@ fn run(cli: &Cli, out: &Out) -> Result<i32> {
             if out.json {
                 Envelope::ok(json!({ "days": days, "files": list })).print();
             } else {
+                if list.is_empty() {
+                    eprintln!("owo: nothing stamped in the last {days} days");
+                }
                 for f in &list {
                     println!("{}  {}", &f.updated[..10.min(f.updated.len())], f.path);
                 }
@@ -801,10 +804,17 @@ fn run(cli: &Cli, out: &Out) -> Result<i32> {
                     ok: !hits.is_empty(),
                     data: json!({ "hits": hits }),
                     warnings: vec![],
-                    errors: vec![],
+                    errors: if hits.is_empty() {
+                        vec![json!("no hits")]
+                    } else {
+                        vec![]
+                    },
                 }
                 .print();
             } else {
+                if hits.is_empty() {
+                    eprintln!("owo: no hits");
+                }
                 for h in &hits {
                     println!("{:>6.2}  {}  {}", h.score, h.path, h.title);
                     if let (Some(l), Some(s)) = (h.line, &h.snippet) {
@@ -864,8 +874,13 @@ fn run(cli: &Cli, out: &Out) -> Result<i32> {
                 );
             } else {
                 out.say(format!(
-                    "not due: {} new user turns (every {})",
-                    s.new_user_turns, s.every
+                    "not due: {} new user turns (every {}){}",
+                    s.new_user_turns,
+                    s.every,
+                    s.pending
+                        .as_deref()
+                        .map(|p| format!("; a run is pending ({p}) until `sync done`"))
+                        .unwrap_or_default()
                 ));
             }
             Ok(exit::OK)

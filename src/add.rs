@@ -41,6 +41,15 @@ fn folder(kind: &str) -> Option<&'static str> {
 }
 
 pub fn add(id: &Identity, req: &Request) -> Result<Added> {
+    if req.parent.is_some() && req.kind != "location-detail" {
+        bail!(
+            "--parent is for location-detail; a {} has no parent",
+            req.kind
+        );
+    }
+    if req.kb.is_some() && req.kind != "project" {
+        bail!("--kb is for project; a {} has no KB", req.kind);
+    }
     let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
     let date = req
         .date

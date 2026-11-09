@@ -18,7 +18,7 @@ Each rule has a code usable with `--rule`.
 - `memory-review` (warning): MEMORY.md hash equals `review.memory_hash`.
 - `state` (warning): state files match content hashes.
 - `budget` (warning): soul word counts within soft budgets (IDENTITY 800, SOUL 800, VOICE 1000, LOOK 600, MEMORY 1500), overridable in `identity.json`.
-- `dupes` (warning): shared 12-word passages between authored files.
+- `dupes` (warning): shared 12-word passages between authored files; the message quotes one shared passage.
 - `orphans` (warning): entries with zero inbound links; logs, journal, notes and soul files are exempt.
 - `soul-evidence` (warning): each soul history record cites two resolving links or one `defining: true` event.
 - `review-due` (info): never reviewed, or `review_every_days` passed.

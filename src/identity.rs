@@ -307,6 +307,22 @@ impl Identity {
     /// Resolves a link target to entry indexes. Tries the raw key (a path may end in `.md`),
     /// then its slug.
     pub fn resolve_link(&self, keys: &BTreeMap<String, Vec<usize>>, target: &str) -> Vec<usize> {
+        // A file path inside the identity folder (absolute, or relative to the working directory)
+        // resolves like its identity-relative path.
+        let looks_like_path = target.contains('/') || target.ends_with(".md");
+        let inside = looks_like_path
+            .then(|| fs::canonicalize(target.trim()).ok())
+            .flatten()
+            .and_then(|p| {
+                let dir = fs::canonicalize(&self.dir).ok()?;
+                Some(
+                    p.strip_prefix(dir)
+                        .ok()?
+                        .to_string_lossy()
+                        .replace('\\', "/"),
+                )
+            });
+        let target = inside.as_deref().unwrap_or(target);
         let raw = target.trim().to_lowercase();
         let raw = raw.strip_suffix(".md").unwrap_or(&raw).to_string();
         if let Some(hit) = keys.get(&raw) {

@@ -7,6 +7,7 @@ status: canon
 created: {{today}}
 updated: {{today}}
 date: {{date}}
+era: ""
 places: []
 people: []
 sources: []

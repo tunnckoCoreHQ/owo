@@ -147,7 +147,15 @@ pub fn packet(id: &Identity) -> Packet {
             path: e.rel.clone(),
             date: e.field_str("date").unwrap_or_default(),
             title: e.title.clone().unwrap_or_default(),
-            body: e.body().trim().to_string(),
+            // The `###` heading carries the title, so the H1 is left out.
+            body: e
+                .body()
+                .lines()
+                .filter(|l| !l.starts_with("# "))
+                .collect::<Vec<_>>()
+                .join("\n")
+                .trim()
+                .to_string(),
         })
         .collect();
     days.sort_by(|a, b| a.date.cmp(&b.date));
@@ -242,7 +250,12 @@ pub fn render(p: &Packet) -> String {
         p.unreviewed_days.len()
     ));
     for d in &p.unreviewed_days {
-        o.push_str(&format!("\n### {} {}\n\n{}\n", d.date, d.title, d.body));
+        let heading = if d.title == d.date {
+            d.date.clone()
+        } else {
+            format!("{} {}", d.date, d.title)
+        };
+        o.push_str(&format!("\n### {heading}\n\n{}\n", d.body));
     }
     o.push_str(&format!("\n## Events in window\n\n{}\n", names(&p.events)));
     o.push_str(&format!("\n## Lessons changed\n\n{}\n", names(&p.lessons)));

@@ -13,11 +13,11 @@ Exit codes: 0 success, 1 problems found (lint errors, exists, unknown template, 
 The implemented command set; see `docs/design.md` section 7 for the full plan.
 
 - `owo new <name> [--slug]` creates an identity from templates, writes indexes and state files. Exits 1 when the folder exists.
-- `owo add <type> <title> [--date] [--parent] [--alias]... [--kb]` creates one entry at its deterministic path. Uses `--project` for notes. A second `add log` for the same day succeeds and prints `exists <path>`; for other types an existing path exits 1 with an `exists` error.
+- `owo add <type> <title> [--date] [--parent] [--alias]... [--kb]` creates one entry at its deterministic path. Uses `--project` for notes; `--parent` is only for location-detail and `--kb` only for project. A second `add log` for the same day succeeds and prints `exists <path>`; for other types an existing path exits 1 with an `exists` error.
 - `owo lint [--rule <code>]...` runs [[lint]] rules. Exits 1 when any error is found.
 - `owo index [--check]` writes generated files, or reports stale ones and exits 1.
 - `owo stamp [--check]` refreshes state files from hashes; see [[decisions#Stamp touches frontmatter]].
-- `owo resolve <name> [--type]` prints the path a name resolves to; on a miss it exits 1 with up to five candidates.
+- `owo resolve <name> [--type]` prints the path a name resolves to (a file path works too, absolute or relative to the working directory); on a miss it exits 1 with up to five candidates.
 - `owo show <name> [--section]` prints an entry or one `## ` section.
 - `owo links <name> [--in] [--out]` lists backlinks and outlinks; `owo links --orphans` lists unlinked entries.
 - `owo context [--voice] [--look] [--with <name>]... [--notes N] [--format paths|text] [--no-touch]` prints the load set; see [[cli#Context]].
@@ -82,4 +82,4 @@ Host-agnostic session sync: the host calls `sync start` after each turn and `syn
 
 `owo sync start --session <id> --transcript <path> [--format jsonl|claude-jsonl|opencode-json] [--every N] [--now]` parses user and assistant text, reads the bookmark in `<root>/.owo/sessions/<id>.json`, and counts new user turns. A run is due at `--every` turns (default `identity.json` `sync_every`, else 6), or at any new turn with `--now`.
 
-When due it writes the slice, with two earlier user turns as overlap, to `<root>/sources/<slug>/<date>_<session>_<from>-<until>.md`, and the ingest prompt to `.owo/sessions/<id>.prompt.md`. `owo sync done --session <id> --until <n>` moves the bookmark forward; `--until` may not pass the message count the last `sync start` read. The prompt names the absolute root and runs `context --no-touch`, so ingest runs do not count as project sessions. `--project` must name an existing project.
+When due it writes the slice, with two earlier user turns as overlap, to `<root>/sources/<slug>/<date>_<session>_<from>-<until>.md`, and the ingest prompt to `.owo/sessions/<id>.prompt.md`. `owo sync done --session <id> --until <n>` moves the bookmark forward; `--until` may not pass the message count the last `sync start` read. The prompt names the absolute root and runs `context --no-touch`, so ingest runs do not count as project sessions. `--project` must name an existing project. A file with no user or assistant messages for the chosen format fails. While a run is pending, a not-due `sync start` names its prompt.

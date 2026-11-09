@@ -119,8 +119,25 @@ pub fn render(c: &Changes) -> String {
 }
 
 /// Files changed since the last commit or stamp: uncommitted Git paths plus stamp drift.
+/// Outside Git, files stamped today count too, so a session that ends with `stamp` still checks
+/// its own edits.
 pub fn changed_paths(id: &Identity) -> Vec<String> {
-    let mut out = crate::git::dirty(&id.dir).unwrap_or_default();
+    let mut out = crate::git::dirty(&id.dir).unwrap_or_else(|| {
+        let today = crate::state::now()[..10].to_string();
+        ["soul", "life", "work"]
+            .iter()
+            .filter_map(|scope| Some((scope, id.read_json(&format!("{scope}/state.json"))?)))
+            .flat_map(|(scope, doc)| {
+                doc["files"]
+                    .as_object()
+                    .into_iter()
+                    .flatten()
+                    .filter(|(_, v)| v["updated"].as_str().is_some_and(|u| u.starts_with(&today)))
+                    .map(|(rel, _)| format!("{scope}/{rel}"))
+                    .collect::<Vec<_>>()
+            })
+            .collect()
+    });
     if let Ok(r) = crate::stamp::run(id, true) {
         out.extend(r.added.into_iter().chain(r.changed));
     }

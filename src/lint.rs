@@ -729,16 +729,27 @@ fn dupes(c: &mut Ctx) {
             owners.entry(s).or_default().push(i);
         }
     }
-    let mut pairs: BTreeMap<(usize, usize), usize> = BTreeMap::new();
-    for files in owners.values().filter(|f| f.len() > 1) {
+    // Per file pair: how many windows they share, and the first shared one to quote.
+    let mut pairs: BTreeMap<(usize, usize), (usize, &str)> = BTreeMap::new();
+    for (s, files) in owners.iter().filter(|(_, f)| f.len() > 1) {
         for (a, x) in files.iter().enumerate() {
             for y in &files[a + 1..] {
-                *pairs.entry((*x, *y)).or_default() += 1;
+                let pair = pairs.entry((*x, *y)).or_insert((0, s));
+                pair.0 += 1;
+                pair.1 = pair.1.min(s);
             }
         }
     }
-    for ((a, b), n) in pairs {
-        c.push(warn("dupes", &authored[a].rel, format!("shares a passage of {} or more words with {} ({n} overlapping windows); keep it in one home and link", DUPE_WORDS, authored[b].rel)));
+    for ((a, b), (n, passage)) in pairs {
+        let windows = if n == 1 { "window" } else { "windows" };
+        c.push(warn(
+            "dupes",
+            &authored[a].rel,
+            format!(
+                "shares text with {} (\"{passage}\", {n} overlapping {DUPE_WORDS}-word {windows}); keep it in one home and link",
+                authored[b].rel
+            ),
+        ));
     }
 }
 

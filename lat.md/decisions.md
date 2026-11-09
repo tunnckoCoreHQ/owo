@@ -28,7 +28,7 @@ Templates are compiled in with `include_str!` so the binary works with no instal
 
 `owo search` is about 100 lines of BM25 in `search.rs` over a few hundred files, rebuilt per call. It adds no dependency and no cache, and an identity stays small enough that a scan takes milliseconds.
 
-Title and aliases count three times, summary twice, body once. Each hit reports the body line with the most query terms (top-level headings skipped), else the best frontmatter line. Tantivy fits if identities grow past a few thousand files.
+Title and aliases count three times, summary twice, body once. A query equal to a title or alias ranks that entry first. Each hit reports the body line with the most query terms (top-level headings skipped), else the best frontmatter line. Tantivy fits if identities grow past a few thousand files.
 
 ## KB pointer is always emitted
 
@@ -42,7 +42,7 @@ The project KB is a pointer for the agent to follow. `owo context` prints it whe
 
 `owo changes` reads `git log --name-status` for the identity folder when it sits in a repo, and lists uncommitted paths separately. Outside a repo it groups state-file `updated` stamps by day, so the command always answers.
 
-`lint --changed` keeps diagnostics whose path is uncommitted in Git or drifts from its stamp (`stamp --check`). The full lint still runs; only the report is filtered.
+`lint --changed` keeps diagnostics whose path is uncommitted in Git or drifts from its stamp (`stamp --check`). Outside Git, files stamped today count too, so a session that ends with `stamp` still checks its own edits. The full lint still runs; only the report is filtered.
 
 ## Review window uses two cursors
 
