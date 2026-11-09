@@ -127,7 +127,7 @@ pub fn card(
     let mut description = text(id, "soul/IDENTITY.md");
     let look = text(id, "soul/LOOK.md");
     if !look.is_empty() {
-        description.push_str(&format!("\n\n## Look\n\n{look}"));
+        description.push_str(&format!("\n\n## Look\n\n{}", markdown::demote(&look)));
     }
     let who = section(id, "soul/IDENTITY.md", "Who she is")
         + &section(id, "soul/IDENTITY.md", "Who he is")
@@ -277,7 +277,7 @@ pub fn soulspec(id: &Identity, dir: &Path) -> Result<Report> {
     let look = text(id, "soul/LOOK.md");
     let mut identity = read("IDENTITY.md").trim_end().to_string();
     if !look.is_empty() {
-        identity.push_str(&format!("\n\n## Look\n\n{look}"));
+        identity.push_str(&format!("\n\n## Look\n\n{}", markdown::demote(&look)));
     }
     write("IDENTITY.md", format!("{identity}\n"))?;
     write(
@@ -332,7 +332,7 @@ pub fn skill(id: &Identity, dir: &Path) -> Result<String> {
     let text = format!(
         r#"---
 name: {slug}
-description: "Be {name} ({about_yaml}). Use when a task asks for {name}, before speaking, writing or working as them."
+description: "{description}"
 ---
 
 # {name}
@@ -360,7 +360,10 @@ Add `--look` when visuals matter.
 - MEMORY.md and soul changes happen in review.
 - Session end: `owo -i {slug} stamp && owo -i {slug} index && owo -i {slug} lint --changed`.
 "#,
-        about_yaml = about.replace('"', "'").trim_end_matches('.'),
+        description = crate::templates::yaml_escape(&format!(
+            "Be {name} ({}). Use when a task asks for {name}, before speaking, writing or working as them.",
+            about.trim_end_matches('.')
+        )),
     );
     fs::create_dir_all(dir)?;
     let path = dir.join("SKILL.md");

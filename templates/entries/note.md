@@ -7,7 +7,7 @@ status: canon
 created: {{today}}
 updated: {{today}}
 date: {{date}}
-project: {{project}}
+project: "{{project_yaml}}"
 sources: []
 ---
 

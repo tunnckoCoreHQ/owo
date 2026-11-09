@@ -123,6 +123,12 @@ pub fn add(id: &Identity, req: &Request) -> Result<Added> {
         &values,
     );
     if !req.aliases.is_empty() {
+        if !text.contains("aliases: []") {
+            bail!(
+                "the {} template has no `aliases: []` line for --alias",
+                req.kind
+            );
+        }
         let list = req
             .aliases
             .iter()
@@ -131,6 +137,9 @@ pub fn add(id: &Identity, req: &Request) -> Result<Added> {
         text = text.replacen("aliases: []", &format!("aliases:{list}"), 1);
     }
     if let (Some(kb), "project") = (req.kb, req.kind) {
+        if !text.contains("kb: \"\"") {
+            bail!("the project template has no `kb: \"\"` line for --kb");
+        }
         let kb = templates::yaml_escape(kb);
         text = text.replacen("kb: \"\"", &format!("kb: \"{kb}\""), 1);
     }

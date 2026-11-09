@@ -78,6 +78,19 @@ fn unfenced(body: &str) -> impl Iterator<Item = (usize, &str, bool)> {
     })
 }
 
+/// The body with every heading outside fenced code one level deeper (`##` becomes `###`).
+pub fn demote(body: &str) -> String {
+    unfenced(body)
+        .map(
+            |(_, l, open)| match heading(l).filter(|(n, _)| open && *n < 6) {
+                Some(_) => format!("#{l}"),
+                None => l.to_string(),
+            },
+        )
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
 /// First `# ` heading in the body, outside fenced code.
 pub fn first_heading(body: &str) -> Option<String> {
     unfenced(body).find_map(|(_, l, open)| match heading(l).filter(|_| open) {

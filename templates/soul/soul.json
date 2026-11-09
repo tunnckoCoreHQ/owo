@@ -1,14 +1,14 @@
 {
   "specVersion": "0.5",
   "name": "{{slug}}",
-  "displayName": "{{name}}",
+  "displayName": "{{name_json}}",
   "version": "0.1.0",
-  "description": "{{name}}.",
+  "description": "{{name_json}}.",
   "author": { "name": "" },
   "license": "UNLICENSED",
   "tags": [],
   "category": "",
   "files": { "soul": "SOUL.md", "identity": "IDENTITY.md", "style": "VOICE.md" },
   "examples": { "good": "examples/good.md", "bad": "examples/bad.md" },
-  "disclosure": { "summary": "{{name}}." }
+  "disclosure": { "summary": "{{name_json}}." }
 }

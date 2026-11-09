@@ -90,19 +90,27 @@ pub fn get(root: &Path, name: &str, builtin: &str) -> String {
         .unwrap_or_else(|| builtin.to_string())
 }
 
-/// Replaces `{{key}}` placeholders. Keys ending in `_yaml` get double-quote escaping.
+/// Replaces `{{key}}` placeholders. Keys ending in `_yaml` get double-quote YAML escaping, keys
+/// ending in `_json` JSON string escaping.
 pub fn fill(template: &str, values: &BTreeMap<&str, String>) -> String {
     let mut out = template.to_string();
     for (key, value) in values {
         out = out.replace(&format!("{{{{{key}}}}}"), value);
         out = out.replace(&format!("{{{{{key}_yaml}}}}"), &yaml_escape(value));
+        let json = serde_json::to_string(value).expect("a string serializes");
+        out = out.replace(&format!("{{{{{key}_json}}}}"), &json[1..json.len() - 1]);
     }
     out
 }
 
 /// Escapes a value for a double-quoted YAML string.
 pub fn yaml_escape(value: &str) -> String {
-    value.replace('\\', "\\\\").replace('"', "\\\"")
+    value
+        .replace('\\', "\\\\")
+        .replace('"', "\\\"")
+        .replace('\n', "\\n")
+        .replace('\r', "\\r")
+        .replace('\t', "\\t")
 }
 
 #[cfg(test)]

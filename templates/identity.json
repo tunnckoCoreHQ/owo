@@ -1,7 +1,7 @@
 {
   "schema": "owo/1",
   "slug": "{{slug}}",
-  "name": "{{name}}",
+  "name": "{{name_json}}",
   "accounts": [],
   "budgets": {},
   "review_every_days": 7,
