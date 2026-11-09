@@ -73,3 +73,10 @@
 - Refactor: one envelope constructor, `need_project` (exit 3), `parse_day` for date flags (exit 2), one `write_json`, one `expand_home`, one lint rule table, `find::show_kb`, `export::write_card`. 107 fewer lines, same JSON output.
 - The sync lock token was dropped again: a lock older than a minute does not happen in practice.
 - HANDOFF.md now holds only the remaining work.
+
+## 2026-11-09 (MCP from clap, write, cleanup)
+
+- MCP tools are read from the clap definitions: one definition per command and flag, with help text, types and allowed values. Sync and migrate flags got help text.
+- `owo write <path> [--content]` replaces one authored file, so a host with only MCP tools can fill entries. It refuses generated files and paths outside soul/, life/ and work/.
+- `soul note` refuses a change already recorded for that file. `export card` warns when `first_mes` or `mes_example` is empty. The log template has no empty bullet, and blank logs are not recent or unreviewed days.
+- HANDOFF.md is gone: nothing is left open. Remote MCP stays without authentication by decision.

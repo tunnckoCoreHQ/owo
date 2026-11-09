@@ -197,7 +197,11 @@ pub fn compute(id: &Identity, days: i64, logs: usize) -> State {
         .as_deref()
         .and_then(|t| DateTime::parse_from_rfc3339(t).ok())
         .map(|t| (Utc::now() - t.with_timezone(&Utc)).num_days());
-    let log_entries = by_date_desc(id, Kind::Log);
+    // A log with nothing written yet is not a day that happened.
+    let log_entries: Vec<&Entry> = by_date_desc(id, Kind::Log)
+        .into_iter()
+        .filter(|e| !e.is_blank())
+        .collect();
     let unreviewed = log_entries
         .iter()
         .filter(|e| {

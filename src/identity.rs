@@ -148,6 +148,14 @@ impl Entry {
     pub fn is_generated(&self) -> bool {
         self.kind == Kind::Generated
     }
+
+    /// True when the body holds only its title, blank lines or empty bullets, as a fresh log does.
+    pub fn is_blank(&self) -> bool {
+        self.body().lines().all(|l| {
+            let t = l.trim();
+            t.is_empty() || t == "-" || t.starts_with("# ")
+        })
+    }
 }
 
 pub struct Identity {
@@ -158,7 +166,7 @@ pub struct Identity {
     pub entries: Vec<Entry>,
 }
 
-fn classify(rel: &str) -> Kind {
+pub fn classify(rel: &str) -> Kind {
     let parts: Vec<&str> = rel.split('/').collect();
     let name = *parts.last().unwrap_or(&"");
     if name == "_index.md" || rel == "life/timeline.md" {

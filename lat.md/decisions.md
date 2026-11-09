@@ -88,6 +88,8 @@ A filter hides results, so it comes from the command line and never from the env
 
 `owo mcp` is a newline-delimited JSON-RPC loop in `mcp.rs` with no MCP crate. Each tool call runs the same `owo` binary with the matching command line and returns its output, so a tool and a command always behave alike.
 
+The tool list is read from the clap definitions (`Cli::command()`): each subcommand is a tool, each flag a parameter with its help text, type and allowed values, so a new flag needs no MCP change.
+
 Most tools add `--json` and return the envelope; `context` and `show` return text, which is what an agent reads. Values go after `--`, so a query never parses as a flag. A failed command sets `isError`.
 
 The `--remote` mode is a small HTTP/1.1 loop over `std::net`: one request at a time, `POST /mcp` with a JSON reply, 202 for notifications, 405 for other methods. It has no authentication, so whoever reaches the URL can read and write the identity.

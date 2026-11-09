@@ -28,7 +28,7 @@ owo context --format text [--voice] [--look] [--project <p>]
 ## Write
 
 - New entries go through `owo add <type> <title>`, which picks the path and template. Fill the template's sections.
-- Existing entries are edited in place. Resolve first so a fact lands in its one home.
+- Existing entries are edited in place, with file tools or `owo write <path>` (the full new text). Resolve first so a fact lands in its one home.
 - Small things go in today's log: `owo add log` (it prints `exists <path>` when today's log is there).
 - MEMORY.md and soul changes belong to the `identity-review` skill.
 

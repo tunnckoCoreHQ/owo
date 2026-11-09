@@ -22,7 +22,7 @@ Each module owns one job; `main.rs` parses arguments with clap, checks the selec
 - `export.rs` writes character cards (JSON or PNG), SoulSpec packages and skill wrappers.
 - `sync.rs` parses transcripts and writes session slices; `migrate.rs` converts v1 identities.
 - `output.rs` defines diagnostics, the envelope and exit codes.
-- `mcp.rs` serves the MCP tools over stdio; see [[decisions#MCP runs the CLI]].
+- `mcp.rs` serves the MCP tools over stdio or HTTP, built from the clap definitions; see [[decisions#MCP runs the CLI]].
 
 ## Loading an identity
 

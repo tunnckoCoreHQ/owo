@@ -70,6 +70,14 @@ enum Command {
     },
     /// List identities in the root
     List,
+    /// Write the full text of one identity file (create or replace)
+    Write {
+        /// Identity-relative path under soul/, life/ or work/, ending in .md
+        path: String,
+        /// The file text; read from stdin when left out
+        #[arg(long, allow_hyphen_values = true)]
+        content: Option<String>,
+    },
     /// Create an entry from its template at its deterministic path
     Add {
         /// Entry type
@@ -460,6 +468,20 @@ fn run(cli: &Cli, out: &Out) -> Result<i32> {
                 out.say(format!("{slug}: {errors} errors, {warnings} warnings"));
             }
             Ok(exit::of(ok))
+        }
+        Command::Write { path, content } => {
+            let (_, id) = load(cli)?;
+            let text = match content {
+                Some(c) => c.clone(),
+                None => std::io::read_to_string(std::io::stdin())?,
+            };
+            let created = add::write(&id, path, &text)?;
+            if out.json {
+                Envelope::ok(json!({ "path": path, "created": created })).print();
+            } else {
+                println!("{path}");
+            }
+            Ok(exit::OK)
         }
         Command::Add {
             kind,
@@ -946,10 +968,25 @@ fn run(cli: &Cli, out: &Out) -> Result<i32> {
             let (_, id) = load(cli)?;
             let project = need_project(&id.dir, cli.project.as_deref())?;
             let scenario = scenario.as_deref();
+            let card = export::card(&id, spec, project, scenario)?;
+            // A card without a greeting or an example message opens on nothing.
+            let warnings: Vec<serde_json::Value> = ["first_mes", "mes_example"]
+                .iter()
+                .filter(|k| {
+                    card["data"][**k]
+                        .as_str()
+                        .is_none_or(|s| s.trim().is_empty())
+                })
+                .map(|k| json!(format!("{k} is empty; fill soul/examples/")))
+                .collect();
+            if !out.json {
+                for w in &warnings {
+                    eprintln!("owo: warning: {}", w.as_str().unwrap_or_default());
+                }
+            }
             let Some(f) = file else {
-                let card = export::card(&id, spec, project, scenario)?;
                 if out.json {
-                    Envelope::ok(card).print();
+                    Envelope::ok(card).with_warnings(warnings).print();
                 } else {
                     println!("{}", serde_json::to_string_pretty(&card)?);
                 }
@@ -957,7 +994,9 @@ fn run(cli: &Cli, out: &Out) -> Result<i32> {
             };
             export::write_card(&id, spec, project, scenario, f, png.as_deref())?;
             if out.json {
-                Envelope::ok(json!({ "path": f })).print();
+                Envelope::ok(json!({ "path": f }))
+                    .with_warnings(warnings)
+                    .print();
             } else {
                 out.say(format!("wrote {}", f.display()));
             }
@@ -1080,10 +1119,13 @@ enum ExportFormat {
 enum SyncAction {
     /// Read the transcript and, when a run is due, write the slice and the ingest prompt
     Start {
+        /// Session id from the host (letters, digits, -, _ or .)
         #[arg(long)]
         session: String,
+        /// Transcript file the host keeps for this session
         #[arg(long)]
         transcript: PathBuf,
+        /// Transcript format; jsonl lines are {"role": ..., "text": ...}
         #[arg(long, default_value = "jsonl", value_parser = clap::builder::PossibleValuesParser::new(sync::FORMATS))]
         format: String,
         /// Take any new turns now (session end)
@@ -1095,8 +1137,10 @@ enum SyncAction {
     },
     /// Move the bookmark after a successful ingest run
     Done {
+        /// Session id given to sync start
         #[arg(long)]
         session: String,
+        /// Message index the ingest run reached (the until from sync start)
         #[arg(long)]
         until: usize,
     },
@@ -1106,8 +1150,10 @@ enum SyncAction {
 enum MigrateFrom {
     /// v1 identity folder (with references/) into <out> = <root>/<slug>
     V1 {
+        /// The v1 identity folder
         path: PathBuf,
         #[arg(long)]
+        /// New identity folder, <root>/<slug>
         out: PathBuf,
     },
 }

@@ -692,7 +692,7 @@ kb = "lat.md"
 
 `owo mcp`
 : Serves every command as an MCP tool, as a thin layer over the same binary. Over stdio by default; `owo mcp --remote [<addr>] [--port <n>]` serves HTTP at `/mcp` on port 4224 (or the next free one) and prints the URL.
-  The tools run commands; editing an entry's text needs file access, so a host with only the MCP tools can create entries but not fill them.
+  Tools come from the clap definitions, so each command and flag is defined once. `owo write <path>` (the `write` tool) replaces an identity file's text, so a host with only the MCP tools can fill the entries it creates.
 
 ### 7.4 Build notes
 

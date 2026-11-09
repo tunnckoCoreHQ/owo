@@ -329,6 +329,9 @@ fn review_packet_then_done() {
         .args(["add", "log", "Pairing", "--date", "2026-11-04"])
         .assert()
         .success();
+    let log = tmp.path().join("reviewer/life/log/2026-11-04.md");
+    let text = fs::read_to_string(&log).unwrap();
+    fs::write(&log, format!("{text}- Paired on the parser.\n")).unwrap();
     let p = json(owo(tmp.path(), "reviewer").arg("review"));
     let days = p["data"]["unreviewed_days"].as_array().unwrap();
     assert_eq!(days.len(), 1);

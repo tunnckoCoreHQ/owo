@@ -11,4 +11,3 @@ owo -i thea index && owo -i thea stamp && owo -i thea lint
 
 - Design: [docs/design.md](docs/design.md)
 - Knowledge base: [lat.md/](lat.md/lat.md)
-- Status and next steps: [HANDOFF.md](HANDOFF.md)

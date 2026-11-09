@@ -135,7 +135,7 @@ pub fn packet(id: &Identity) -> Packet {
     let mut days: Vec<Day> = id
         .entries
         .iter()
-        .filter(|e| e.kind == Kind::Log && after_through(&e.field_str("date")))
+        .filter(|e| e.kind == Kind::Log && !e.is_blank() && after_through(&e.field_str("date")))
         .map(|e| Day {
             path: e.rel.clone(),
             date: e.field_str("date").unwrap_or_default(),
@@ -339,6 +339,13 @@ pub fn soul_note(id: &Identity, file: &str, change: &str, evidence: &[String]) -
     let mut doc = id
         .read_json("soul/state.json")
         .context("soul/state.json missing; run `owo stamp`")?;
+    let recorded = doc["history"].as_array().is_some_and(|h| {
+        h.iter()
+            .any(|r| r["file"] == file && r["change"] == change.trim())
+    });
+    if recorded {
+        bail!("{file} already records {:?}", change.trim());
+    }
     let record = json!({ "at": crate::state::now(), "file": file, "change": change.trim(), "evidence": links });
     match doc.get_mut("history").and_then(Value::as_array_mut) {
         Some(h) => h.push(record.clone()),
