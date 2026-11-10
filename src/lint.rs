@@ -7,7 +7,6 @@ use crate::slug::is_slug;
 use crate::{index, state};
 use chrono::NaiveDate;
 use serde_json::Value as Json;
-use serde_json::Value as Yaml;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fs;
 
@@ -226,8 +225,8 @@ fn check_entry_schema(e: &Entry, out: &mut Vec<Diagnostic>) {
     }
     for key in ["aliases", "sources"] {
         match e.field(key) {
-            None | Some(Yaml::Null) => {}
-            Some(Yaml::Array(items)) if items.iter().all(|i| i.is_string()) => {}
+            None | Some(Json::Null) => {}
+            Some(Json::Array(items)) if items.iter().all(|i| i.is_string()) => {}
             Some(_) => out.push(err(rel, format!("{key} must be a list of strings"))),
         }
     }
@@ -643,7 +642,7 @@ fn soul_evidence(id: &Identity, out: &mut Vec<Diagnostic>) {
             .unwrap_or_default();
         let defining = evidence.iter().any(|&i| {
             let e = &id.entries[i];
-            e.kind == Kind::Event && matches!(e.field("defining"), Some(Yaml::Bool(true)))
+            e.kind == Kind::Event && matches!(e.field("defining"), Some(Json::Bool(true)))
         });
         if evidence.len() < 2 && !defining {
             out.push(warn(
