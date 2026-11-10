@@ -95,22 +95,14 @@ fn sync_cmd(
     out: &Out,
     session: &str,
     now: bool,
-    every: Option<usize>,
+    every: usize,
     step: impl FnOnce(&sync::StartRequest) -> Result<sync::Start>,
 ) -> Result<i32> {
     let r = resolved(cli)?;
     let slug = need_identity(&r)?;
     let dir = r.root.join(&slug);
     let project = need_project(&dir, r.project.as_deref())?;
-    let every = every
-        .or_else(|| {
-            identity::read_json(&dir.join("identity.json"))?
-                .get("sync_every")?
-                .as_u64()
-                .map(|v| v as usize)
-        })
-        .unwrap_or(6)
-        .max(1);
+    let every = every.max(1);
     let s = step(&sync::StartRequest {
         root: &r.root,
         slug: &slug,

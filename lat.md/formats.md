@@ -83,7 +83,7 @@ The tool manifest, read by the CLI.
 - `schema` (`owo/1`), `slug`, `name`, and optional `nickname` (card export).
 - `accounts`: the identity's own accounts as `{kind, handle}`. Handles appear only here.
 - `budgets`: soul file word budgets that override the defaults in [[lint]].
-- `review_every_days` (default 7) and `sync_every` (default 6).
+- `review_every_days` (default 7).
 
 `soul/soul.json` is the SoulSpec v0.5 manifest. `owo stamp` bumps its minor version when a soul file changes.
 

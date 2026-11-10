@@ -309,9 +309,9 @@ pub enum SyncAction {
         /// Take any new turns now (session end)
         #[arg(long)]
         now: bool,
-        /// New user turns per run (default: identity.json sync_every, else 6)
-        #[arg(long)]
-        every: Option<usize>,
+        /// New user turns per run
+        #[arg(long, default_value_t = 6)]
+        every: usize,
     },
     /// Store turns sent by the host, then run sync start on them (for hosts without a local transcript)
     Push {
@@ -324,9 +324,9 @@ pub enum SyncAction {
         /// Take any new turns now (session end)
         #[arg(long)]
         now: bool,
-        /// New user turns per run (default: identity.json sync_every, else 6)
-        #[arg(long)]
-        every: Option<usize>,
+        /// New user turns per run
+        #[arg(long, default_value_t = 6)]
+        every: usize,
     },
     /// Move the bookmark after a successful ingest run
     Done {

@@ -81,7 +81,7 @@ V3 adds `nickname` (`identity.json` `nickname`), `assets` (default icon), `creat
 
 Host-agnostic session sync: the host calls `sync start` after each turn and `sync done` after a successful ingest run.
 
-`owo sync start --session <session_id> --transcript <path> [--format jsonl|claude-jsonl|opencode-json] [--every N] [--now]` parses user and assistant text, reads the bookmark in `<root>/.owo/sessions/<session_id>.json`, and counts new user turns. A run is due at `--every` turns (default `identity.json` `sync_every`, else 6), or at any new turn with `--now`.
+`owo sync start --session <session_id> --transcript <path> [--format jsonl|claude-jsonl|opencode-json] [--every N] [--now]` parses user and assistant text, reads the bookmark in `<root>/.owo/sessions/<session_id>.json`, and counts new user turns. A run is due at `--every` turns (default 6), or at any new turn with `--now`.
 
 When due it writes the slice, with two earlier user turns as overlap, to `<root>/sources/<slug>/<date>_<session_id>_<from>-<until>.md`, and the ingest prompt to `.owo/sessions/<session_id>.prompt.md`. `owo sync done --session <session_id> --until <n>` moves the bookmark forward; `--until` may not pass the message count the last `sync start` read. The prompt names the absolute root. `--project` must name an existing project. A file with no user or assistant messages for the chosen format fails. While a run is pending, a not-due `sync start` names its prompt.
 
