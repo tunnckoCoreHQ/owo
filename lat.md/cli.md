@@ -1,6 +1,6 @@
 # CLI
 
-Commands implemented so far. Every command accepts `--root`, `-i/--identity`, `--project`, `--json` and `--quiet`.
+Every command accepts `--root`, `-i/--identity`, `--project`, `--json` and `--quiet`.
 
 ## Output
 
@@ -10,7 +10,7 @@ Exit codes: 0 success, 1 problems found (lint errors, exists, unknown template, 
 
 ## Commands
 
-The implemented command set; see `docs/design.md` section 7 for the full plan.
+Each command with its flags and exit behavior.
 
 - `owo new <name> [--slug]` creates an identity from templates, writes indexes and state files. Exits 1 when the folder exists.
 - `owo add <type> <title> [--date] [--parent] [--alias]... [--kb]` creates one entry at its deterministic path; `--date` and the `created` and `updated` fields default to the local day. Uses `--project` for notes; `--parent` is only for location-detail and `--kb` only for project. A second `add log` for the same day succeeds and prints `exists <path>`; for other types an existing path exits 1 with an `exists` error.
@@ -19,7 +19,7 @@ The implemented command set; see `docs/design.md` section 7 for the full plan.
 - `owo index [--check]` writes generated files, or reports stale ones and exits 1.
 - `owo stamp [--check]` refreshes state files from hashes; see [[decisions#Stamp touches frontmatter]].
 - `owo resolve <name> [--type]` prints the path a name resolves to (a file path works too, absolute or relative to the working directory); on a miss it exits 1 with up to five candidates.
-- `owo show <name> [--section]` prints an entry or one `## ` section.
+- `owo show <name> [--section]` prints an entry or one section at any heading level; a `kb:<p>:<path>` name prints a file from the project KB.
 - `owo links <name> [--in] [--out]` lists backlinks and outlinks; `owo links --orphans` lists unlinked entries.
 - `owo context [--voice] [--look] [--with <name>]... [--notes N] [--format paths|text] [--no-touch]` prints the load set; see [[cli#Context]].
 - `owo state [--days N]` prints the derived Now block, plus sessions and recent notes with `--project`; `owo recent [--days N]` lists recently stamped files.

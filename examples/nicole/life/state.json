@@ -1,65 +1,52 @@
 {
   "files": {
     "characters/ines.md": {
-      "created": "2026-11-04T03:34:43Z",
       "updated": "2026-11-04T03:34:43Z",
       "hash": "b3:f142f789d2ef4f1b60e5f8b114a0a97bb90d60e01889e97e8be253c297402048"
     },
     "characters/joe.md": {
-      "created": "2026-11-04T03:34:43Z",
       "updated": "2026-11-10T02:05:52Z",
       "hash": "b3:0d21cf39d0079eddca45cfc4460e1c8cf5b56b8b3e530918881fed3729bbc2d5"
     },
     "eras/studio-year.md": {
-      "created": "2026-11-04T03:34:43Z",
       "updated": "2026-11-10T02:05:52Z",
       "hash": "b3:8e764bc4f80becee8ef19132de7617de21858abf1f7b324b6528c46362b587f6"
     },
     "events/first-firing.md": {
-      "created": "2026-11-04T03:34:43Z",
       "updated": "2026-11-04T06:44:38Z",
       "hash": "b3:8fb270a4c8cbf5d3d2f253fdbe1646f638133e0937c9a20cb7d99546798c880f"
     },
     "journal/2026-10-31_rain-on-the-roof.md": {
-      "created": "2026-11-04T03:34:43Z",
       "updated": "2026-11-04T03:34:43Z",
       "hash": "b3:00f0a2e96965f533cd7bfe2af22fe8d401e473af73876c953908d0b1a8767d17"
     },
     "lessons/let-it-dry.md": {
-      "created": "2026-11-04T03:34:43Z",
       "updated": "2026-11-04T06:44:38Z",
       "hash": "b3:b68a7da8b68637b490c162048f2398a80370fce09ad479cc2fca56ae1b1089a2"
     },
     "locations/kiln-studio/overview.md": {
-      "created": "2026-11-04T03:34:43Z",
       "updated": "2026-11-04T03:34:43Z",
       "hash": "b3:a04b4b1ca4513e1a902876b9af9f0d683575029558e37213197dce000f3de55d"
     },
     "log/2026-10-28.md": {
-      "created": "2026-11-04T03:34:43Z",
       "updated": "2026-11-04T03:34:43Z",
       "hash": "b3:1b2414b3437dd6c689907194aaa3d84381f914c9fb5bc9584ab4f182c9e643d0"
     },
     "log/2026-10-30.md": {
-      "created": "2026-11-04T03:34:43Z",
       "updated": "2026-11-04T03:34:43Z",
       "hash": "b3:aff07df381a081e5c47f8ff06359594a3e0867e0353377a0d04d52567040e5a3"
     },
     "log/2026-10-31.md": {
-      "created": "2026-11-04T03:34:43Z",
       "updated": "2026-11-04T03:34:48Z",
       "hash": "b3:f8b0da5bea40b8c1cf13f6bcb9ac67226ffb71996183b1e2ac4453c831130996"
     },
     "log/2026-11-02.md": {
-      "created": "2026-11-04T03:34:43Z",
       "updated": "2026-11-04T03:34:43Z",
       "hash": "b3:9126793a0bf3e39ce06dd5a69aec6fd0d37b2f391d058b52a6bbfff1c0a4e0fa"
     },
     "threads/the-blue-glaze.md": {
-      "created": "2026-11-04T03:34:43Z",
       "updated": "2026-11-04T03:34:43Z",
       "hash": "b3:3ae9e297a7835d625795982dc634a0ee7b4e0d7eb84a34dedeebc44202a86212"
     }
-  },
-  "last_write": "2026-11-10T02:05:52Z"
+  }
 }

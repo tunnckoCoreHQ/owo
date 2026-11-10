@@ -2,42 +2,34 @@
   "projects": {},
   "files": {
     "README.md": {
-      "created": "2026-11-04T03:32:32Z",
       "updated": "2026-11-04T03:34:02Z",
       "hash": "b3:a169bcb6358f28cee949ba8a524ca186e7663a8eac719aafc0be900f76afa623"
     },
     "projects/build-cache/notes/2026-10-29_cache-key-review.md": {
-      "created": "2026-11-04T03:33:55Z",
       "updated": "2026-11-04T03:33:55Z",
       "hash": "b3:9e175c4edda884b05b07e7d559ee82162cee26e2582e279dc850d0d37ababdf3"
     },
     "projects/build-cache/project.md": {
-      "created": "2026-11-04T03:33:55Z",
       "updated": "2026-11-04T03:33:55Z",
       "hash": "b3:bda5d2203e8f3eb6cee2b6892413e0f791b3461677feb40ff4ab2a0770da0224"
     },
     "projects/ledger-api/notes/2026-10-23_idempotency-keys.md": {
-      "created": "2026-11-04T03:33:55Z",
       "updated": "2026-11-04T03:46:34Z",
       "hash": "b3:488db5dc6125bec1599e21b883400b7f631ab8e1915aa3a69bc52837f32bb260"
     },
     "projects/ledger-api/notes/2026-10-26_rollback-postmortem.md": {
-      "created": "2026-11-04T03:33:55Z",
       "updated": "2026-11-04T03:33:55Z",
       "hash": "b3:5e48561ca4f7fc31f2dd8af9275f55791dc645cc6c6d724c5df53648ed20665c"
     },
     "projects/ledger-api/project.md": {
-      "created": "2026-11-04T03:33:55Z",
       "updated": "2026-11-04T03:33:55Z",
       "hash": "b3:0b64d19f0a6192452b614a1d253ac0312f60f495b90cb72aff8e315e25af7079"
     },
     "projects/mobile-sync/notes/2026-11-02_conflict-merge-rules.md": {
-      "created": "2026-11-04T03:33:55Z",
       "updated": "2026-11-04T03:33:55Z",
       "hash": "b3:4f7ab4de063d00da7b65a3945a8a3d52c6a9847f264f18274721ee19b6486932"
     },
     "projects/mobile-sync/project.md": {
-      "created": "2026-11-04T03:33:55Z",
       "updated": "2026-11-04T03:33:55Z",
       "hash": "b3:4470c1393c19ebd8589183b97dbcc2d877b593e58ec3f0d90298d7717f903220"
     }

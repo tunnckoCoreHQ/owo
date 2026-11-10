@@ -1,42 +1,34 @@
 {
   "files": {
     "IDENTITY.md": {
-      "created": "2026-11-04T03:32:32Z",
       "updated": "2026-11-04T04:42:21Z",
       "hash": "b3:9ffef54b15828bd228bb9c5739782d4404f78201c7dc2da7e542eeb04d9adbaf"
     },
     "LOOK.md": {
-      "created": "2026-11-04T03:32:32Z",
       "updated": "2026-11-04T03:34:43Z",
       "hash": "b3:3c8e681a743474bbc2398ba49839b2910b34f7abc53d55e5afb69d0f49876d11"
     },
     "MEMORY.md": {
-      "created": "2026-11-04T03:32:32Z",
       "updated": "2026-11-04T03:34:43Z",
       "hash": "b3:a7e30fb34bdb4120361a29087604db0cbdadd8793e21637ac6afaec31323596b"
     },
     "SOUL.md": {
-      "created": "2026-11-04T03:32:32Z",
       "updated": "2026-11-04T04:42:21Z",
       "hash": "b3:36e7fb5203fec78c9aec7c7a60af4a8f5304afce10ca3ff01d930a0063476f11"
     },
     "VOICE.md": {
-      "created": "2026-11-04T03:32:32Z",
       "updated": "2026-11-04T03:34:43Z",
       "hash": "b3:e70f58fffd99e36c9ab7a55493406be54c6b63eabaa6d62a5fc38b0221e17033"
     },
     "examples/bad.md": {
-      "created": "2026-11-04T03:32:32Z",
       "updated": "2026-11-04T03:39:53Z",
       "hash": "b3:afa6f13b5d449b1002e30f0a68c00e7b88c42eb709b9855d2a74b16d6afff1d9"
     },
     "examples/good.md": {
-      "created": "2026-11-04T03:32:32Z",
       "updated": "2026-11-04T03:39:53Z",
       "hash": "b3:248cdbf66424529a7c7b2a83d3293a37c55ccd44eaa991b202b7f93b0e323a8b"
     },
     "examples/greetings.md": {
-      "created": "2026-11-04T03:32:32Z",
       "updated": "2026-11-04T03:39:53Z",
       "hash": "b3:e041c75841d33a6252266d52e2f3f836b57756489a30a464c1ef66d67c753b16"
     }
