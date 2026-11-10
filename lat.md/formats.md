@@ -91,7 +91,7 @@ The tool manifest, read by the CLI.
 
 Each `state.json` has `files`: a map from scope-relative path to `{updated, hash}`. Stamps are RFC 3339 UTC and move only when the hash changes. Hashes are `b3:<blake3 hex>` of the file text.
 
-`soul/state.json` adds `history` and `review`. Each history record is `{at, file, change, evidence}`, appended by `owo soul note`. The `review` object holds `last_reviewed`, `reviewed_through` and `memory_hash`; when MEMORY.md's hash differs from `memory_hash`, lint warns that MEMORY changed outside a review. `work/state.json` adds `projects`: per project `first_touched`, `last_touched` and `sessions`.
+`soul/state.json` adds `history` and `review`. Each history record is `{at, file, change, evidence}`, appended by `owo soul note`. The `review` object holds `last_reviewed`, `reviewed_through` and `memory_hash`; when MEMORY.md's hash differs from `memory_hash`, lint warns that MEMORY changed outside a review.
 
 Commands write JSON files through a temporary file and a rename. A command that rewrites a state file or `soul/soul.json` exits 1 when the file exists but does not parse or is not an object, so a broken file is never replaced with an empty one.
 

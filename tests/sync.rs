@@ -193,7 +193,8 @@ fn sync_done_and_prompt_guards() {
     .success();
     let prompt = fs::read_to_string(tmp.path().join(".owo/sessions/s3.prompt.md")).unwrap();
     assert!(
-        prompt.contains("--root '") && prompt.contains("--no-touch --project ledger-api"),
+        prompt.contains("--root '")
+            && prompt.contains("context --format text --project ledger-api"),
         "{prompt}"
     );
     sync(&["done", "--session", "s3", "--until", "500"]).code(1);

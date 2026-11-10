@@ -81,7 +81,7 @@ pub fn initial(identity: &Identity, at: &str) -> Vec<(String, Value)> {
         "review": { "last_reviewed": null, "reviewed_through": null, "memory_hash": memory_hash }
     });
     let life = json!({ "files": take(&mut files, "life") });
-    let work = json!({ "projects": {}, "files": take(&mut files, "work") });
+    let work = json!({ "files": take(&mut files, "work") });
     vec![
         ("soul/state.json".into(), soul),
         ("life/state.json".into(), life),

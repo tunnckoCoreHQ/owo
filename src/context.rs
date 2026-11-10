@@ -6,7 +6,6 @@ use crate::identity::Identity;
 use crate::status;
 use anyhow::Result;
 use serde::Serialize;
-use serde_json::json;
 use std::fs;
 
 pub struct Request<'a> {
@@ -95,28 +94,6 @@ pub fn build(id: &Identity, req: &Request) -> Result<Context> {
         kb,
         warnings,
     })
-}
-
-/// Records a project session in `work/state.json`.
-pub fn touch_project(id: &Identity, project: &str) -> Result<()> {
-    let path = id.dir.join("work/state.json");
-    let mut doc = id
-        .read_object("work/state.json")?
-        .unwrap_or_else(|| json!({ "projects": {}, "files": {} }));
-    let at = crate::state::now();
-    if !doc.get("projects").is_some_and(|v| v.is_object()) {
-        doc["projects"] = json!({});
-    }
-    let entry = &mut doc["projects"][project];
-    if !(entry.is_object() || entry.is_null()) {
-        anyhow::bail!("work/state.json projects.{project} is not an object; fix it by hand");
-    }
-    if entry.get("first_touched").is_none() {
-        entry["first_touched"] = json!(at);
-    }
-    entry["last_touched"] = json!(at);
-    entry["sessions"] = json!(entry.get("sessions").and_then(|v| v.as_u64()).unwrap_or(0) + 1);
-    crate::identity::write_json(&path, &doc)
 }
 
 pub fn render_paths(c: &Context) -> String {

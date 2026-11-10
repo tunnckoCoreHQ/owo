@@ -21,8 +21,8 @@ Each command with its flags and exit behavior.
 - `owo resolve <name> [--type]` prints the path a name resolves to (a file path works too, absolute or relative to the working directory); on a miss it exits 1 with up to five candidates. The `--type` value is a type name such as `character` or `soul`; an unknown one is a usage error (exit 2), here and in `search`.
 - `owo show <name> [--section]` prints an entry or one section at any heading level; a `kb:<p>:<path>` name prints a file from the project KB.
 - `owo links <name> [--in] [--out]` lists backlinks and outlinks; `owo links --orphans` lists unlinked entries.
-- `owo context [--voice] [--look] [--with <name>]... [--notes N] [--format paths|text] [--no-touch]` prints the load set; see [[cli#Context]].
-- `owo state [--days N]` prints the derived Now block, plus sessions and recent notes with `--project`; `owo recent [--days N]` lists recently stamped files.
+- `owo context [--voice] [--look] [--with <name>]... [--notes N] [--format paths|text]` prints the load set; see [[cli#Context]].
+- `owo state [--days N]` prints the derived Now block, plus the last update and recent notes with `--project`; `owo recent [--days N]` lists recently stamped files.
 - `owo search <query> [--scope|--in soul|life|work] [--type <t>]... [--since <date>] [--limit N]` ranks entries with BM25; no hits gives `ok: false` and exit 1. See [[decisions#Search is in-crate BM25]].
 - `owo review` prints the review packet; see [[cli#Review]]. `owo review done [--through <date>]` records a finished review: `last_reviewed`, `reviewed_through` (default: newest log, event or journal date) and the MEMORY.md hash.
 - `owo soul note <file> --change <text> --evidence <name>...` appends to `soul/state.json` `history`. Evidence must resolve; fewer than two links and no defining event gives a warning. `owo soul history [file]` prints the trail.
@@ -41,7 +41,7 @@ Each command with its flags and exit behavior.
 - voice and look: `soul/VOICE.md` and `soul/LOOK.md` with `--voice` and `--look`.
 - project, with `--project <p>`: `work/README.md`, `project.md`, the newest N notes, and the KB pointer.
 
-The KB path comes from `project.md` `kb`, relative to the identity folder, with `~/` as the home folder. See [[decisions#KB pointer is always emitted]]. A project context records a session in `work/state.json` unless `--no-touch`.
+The KB path comes from `project.md` `kb`, relative to the identity folder, with `~/` as the home folder. See [[decisions#KB pointer is always emitted]]. `owo context` writes nothing; the last project is the one with the newest file stamp under `work/projects/`.
 
 
 ## Review
@@ -83,7 +83,7 @@ Host-agnostic session sync: the host calls `sync start` after each turn and `syn
 
 `owo sync start --session <session_id> --transcript <path> [--format jsonl|claude-jsonl|opencode-json] [--every N] [--now]` parses user and assistant text, reads the bookmark in `<root>/.owo/sessions/<session_id>.json`, and counts new user turns. A run is due at `--every` turns (default `identity.json` `sync_every`, else 6), or at any new turn with `--now`.
 
-When due it writes the slice, with two earlier user turns as overlap, to `<root>/sources/<slug>/<date>_<session_id>_<from>-<until>.md`, and the ingest prompt to `.owo/sessions/<session_id>.prompt.md`. `owo sync done --session <session_id> --until <n>` moves the bookmark forward; `--until` may not pass the message count the last `sync start` read. The prompt names the absolute root and runs `context --no-touch`, so ingest runs do not count as project sessions. `--project` must name an existing project. A file with no user or assistant messages for the chosen format fails. While a run is pending, a not-due `sync start` names its prompt.
+When due it writes the slice, with two earlier user turns as overlap, to `<root>/sources/<slug>/<date>_<session_id>_<from>-<until>.md`, and the ingest prompt to `.owo/sessions/<session_id>.prompt.md`. `owo sync done --session <session_id> --until <n>` moves the bookmark forward; `--until` may not pass the message count the last `sync start` read. The prompt names the absolute root. `--project` must name an existing project. A file with no user or assistant messages for the chosen format fails. While a run is pending, a not-due `sync start` names its prompt.
 
 `owo sync push --session <session_id> [--turns <json>] [--every N] [--now]` is for hosts with no transcript on this machine, such as a hosted chat over MCP. It takes a JSON array of `{id, role, text}` turns (stdin when `--turns` is left out), adds those whose turn id is not stored yet to `.owo/sessions/<session_id>.turns.jsonl`, then runs the `sync start` logic on that file. A turn id is the host's own message id: a number, or a string with no control characters. One bad turn fails the push and stores nothing. The store is rewritten through a temporary file, and a cut-off last line from an older write is dropped. A session that syncs a local file refuses pushes, and `sync start` refuses a session that stores pushed turns. The reply adds `added` and, when due, `source_text` and `prompt_text`. The MCP `sync_push` tool takes `turns` as a JSON array and sends it on the command's stdin, so a large push does not hit the argument size limit.
 

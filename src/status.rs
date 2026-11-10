@@ -54,7 +54,7 @@ pub struct State {
     pub open_conflicts: Vec<Link>,
     pub review: Review,
     pub last_soul_change: Option<Value>,
-    /// With `--project`: sessions and recent notes for that project.
+    /// With `--project`: last update and recent notes for that project.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub project: Option<ProjectState>,
 }
@@ -62,19 +62,15 @@ pub struct State {
 #[derive(Debug, Serialize)]
 pub struct ProjectState {
     pub slug: String,
-    pub first_touched: Option<String>,
-    pub last_touched: Option<String>,
-    pub sessions: u64,
+    /// Newest stamp among the project's files.
+    pub last_updated: Option<String>,
     pub notes: Vec<Link>,
 }
 
 pub fn project(id: &Identity, slug: &str) -> ProjectState {
-    let rec = &crate::state::doc(id, "work")["projects"][slug];
     ProjectState {
         slug: slug.into(),
-        first_touched: rec["first_touched"].as_str().map(str::to_string),
-        last_touched: rec["last_touched"].as_str().map(str::to_string),
-        sessions: rec["sessions"].as_u64().unwrap_or(0),
+        last_updated: project_stamps(id).remove(slug),
         notes: id.notes(slug).into_iter().take(5).map(Link::of).collect(),
     }
 }
@@ -149,14 +145,31 @@ fn scope_activity(id: &Identity) -> Vec<(String, String)> {
         .collect()
 }
 
+/// Newest `work/state.json` stamp per project, from its files under `projects/<p>/`.
+fn project_stamps(id: &Identity) -> std::collections::BTreeMap<String, String> {
+    let mut out = std::collections::BTreeMap::<String, String>::new();
+    let Some(files) = crate::state::doc(id, "work")["files"].as_object() else {
+        return out;
+    };
+    for (rel, rec) in files {
+        let (Some(rest), Some(at)) = (rel.strip_prefix("projects/"), rec["updated"].as_str())
+        else {
+            continue;
+        };
+        let Some((p, _)) = rest.split_once('/') else {
+            continue;
+        };
+        let newest = out.entry(p.to_string()).or_default();
+        if at > newest.as_str() {
+            *newest = at.to_string();
+        }
+    }
+    out
+}
+
+/// The project with the newest stamp, as (project, stamp).
 pub fn last_project(id: &Identity) -> Option<(String, String)> {
-    crate::state::doc(id, "work")
-        .get("projects")?
-        .as_object()?
-        .iter()
-        .filter_map(|(p, v)| Some((v.get("last_touched")?.as_str()?.to_string(), p.clone())))
-        .max()
-        .map(|(t, p)| (p, t))
+    project_stamps(id).into_iter().max_by(|a, b| a.1.cmp(&b.1))
 }
 
 pub fn compute(id: &Identity, days: i64, logs: usize) -> State {
@@ -294,14 +307,13 @@ pub fn render(s: &State) -> String {
     }
     if let Some(p) = &s.project {
         let last = p
-            .last_touched
+            .last_updated
             .as_deref()
             .map(crate::state::day)
             .unwrap_or("never");
         out.push_str(&format!(
-            "- Project {}: {} sessions, last {last}, notes {}\n",
+            "- Project {}: last {last}, notes {}\n",
             p.slug,
-            p.sessions,
             join(&p.notes)
         ));
     }

@@ -537,10 +537,7 @@ fn owo_toml_in_a_parent_sets_identity_and_project() {
     .unwrap();
     let mut cmd = owo_in(&repo.join("sub"), &home);
     cmd.arg("--root").arg(tmp.path());
-    let out = cmd
-        .args(["context", "--no-touch", "--json"])
-        .output()
-        .unwrap();
+    let out = cmd.args(["context", "--json"]).output().unwrap();
     assert!(out.status.success());
     assert!(
         out.stderr.is_empty(),

@@ -58,7 +58,7 @@ fn mcp_lists_and_calls_tools() {
             json!({ "query": "-i reviewer kiln", "limit": 1 }),
         ),
         call(6, "resolve", json!({ "nope": 1 })),
-        call(7, "context", json!({ "voice": true, "no_touch": true })),
+        call(7, "context", json!({ "voice": true })),
         json!({ "jsonrpc": "2.0", "id": 8, "method": "bogus" }),
     ]);
     assert_eq!(replies.len(), 8, "the notification gets no reply");

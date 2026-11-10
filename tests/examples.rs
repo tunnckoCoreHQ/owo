@@ -73,7 +73,6 @@ fn context_with_project_points_at_missing_kb() {
         "--project",
         "ledger-api",
         "context",
-        "--no-touch",
         "--voice",
     ]));
     let paths: Vec<&str> = v["data"]["items"]
@@ -105,21 +104,18 @@ fn context_with_project_points_at_missing_kb() {
 }
 
 #[test]
-fn context_project_touches_work_state_on_a_copy() {
-    let tmp = copy_example("nicole");
-    for _ in 0..2 {
-        owo_as(tmp.path(), "nicole")
-            .args(["--project", "picture-book", "context", "--format", "text"])
-            .assert()
-            .success();
-    }
-    let state: Value = serde_json::from_str(
-        &fs::read_to_string(tmp.path().join("nicole/work/state.json")).unwrap(),
-    )
-    .unwrap();
-    assert_eq!(state["projects"]["picture-book"]["sessions"], 2);
-    let s = json(owo_as(tmp.path(), "nicole").arg("state"));
-    assert_eq!(s["data"]["last_project"][0], "picture-book");
+fn context_writes_nothing_and_last_project_comes_from_stamps() {
+    let tmp = copy_example("reviewer");
+    let state = tmp.path().join("reviewer/work/state.json");
+    let before = fs::read_to_string(&state).unwrap();
+    owo_as(tmp.path(), "reviewer")
+        .args(["--project", "build-cache", "context"])
+        .assert()
+        .success();
+    assert_eq!(fs::read_to_string(&state).unwrap(), before);
+    let s = json(owo_as(tmp.path(), "reviewer").args(["--project", "build-cache", "state"]));
+    assert_eq!(s["data"]["last_project"][0], "ledger-api", "{s}");
+    assert_eq!(s["data"]["project"]["last_updated"], "2026-11-04T03:33:55Z");
 }
 
 #[test]
@@ -766,7 +762,6 @@ fn kb_path_expands_home() {
         "--project",
         "mural",
         "context",
-        "--no-touch",
     ]));
     assert_eq!(v["data"]["kb"]["exists"], true, "{v}");
 }
@@ -775,7 +770,6 @@ fn kb_path_expands_home() {
 fn context_look_and_with() {
     let v = json(owo_as(&examples(), "nicole").args([
         "context",
-        "--no-touch",
         "--look",
         "--with",
         "First Firing",

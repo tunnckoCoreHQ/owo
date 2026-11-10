@@ -406,7 +406,6 @@ fn run(cli: &Cli, out: &Out) -> Result<i32> {
             with,
             notes,
             format,
-            no_touch,
         } => {
             let (r, id) = load(cli)?;
             let project = need_project(&id.dir, r.project.as_deref())?;
@@ -418,9 +417,6 @@ fn run(cli: &Cli, out: &Out) -> Result<i32> {
                 notes: *notes,
             };
             let ctx = context::build(&id, &req)?;
-            if let (Some(p), false) = (project, *no_touch) {
-                context::touch_project(&id, p)?;
-            }
             let envelope =
                 Envelope::ok(serde_json::to_value(&ctx)?).with_warnings(ctx.warnings.clone());
             out.emit(envelope, || {

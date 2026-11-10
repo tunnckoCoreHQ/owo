@@ -151,9 +151,6 @@ pub enum Command {
         /// paths: the list; text: file contents concatenated
         #[arg(long, default_value = "paths", value_parser = ["paths", "text"])]
         format: String,
-        /// Leave work/state.json untouched
-        #[arg(long)]
-        no_touch: bool,
     },
     /// Derived current state: activity, recent days and events, open threads, review
     State {

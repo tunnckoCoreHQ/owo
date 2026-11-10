@@ -13,7 +13,7 @@ Input: a source file path. Copy a file from elsewhere into `<root>/sources/<slug
 
 A `sync_push` reply that is due carries the slice as `source_text` and the prompt as `prompt_text`; cite its `source` path and finish with `sync_done`.
 
-1. Read the core with `owo context --format text --no-touch` and the current state with `owo state`.
+1. Read the core with `owo context --format text` and the current state with `owo state`.
 2. Read the source. List the durable facts: happenings, people, places, decisions, quotes, work done, open promises.
 3. For each fact:
    - `owo resolve <name>` or `owo search <words>` to find its home.
