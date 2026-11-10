@@ -54,6 +54,34 @@ pub enum Kind {
 }
 
 impl Kind {
+    pub const ALL: [Kind; 20] = [
+        Kind::Soul,
+        Kind::Example,
+        Kind::Character,
+        Kind::Location,
+        Kind::LocationDetail,
+        Kind::Culture,
+        Kind::Faction,
+        Kind::Event,
+        Kind::Era,
+        Kind::Thread,
+        Kind::Conflict,
+        Kind::Lesson,
+        Kind::Writing,
+        Kind::Log,
+        Kind::Journal,
+        Kind::Project,
+        Kind::Note,
+        Kind::WorkReadme,
+        Kind::Generated,
+        Kind::Unknown,
+    ];
+
+    /// The kind whose `type:` value is `name`.
+    pub fn from_type(name: &str) -> Option<Kind> {
+        Kind::ALL.into_iter().find(|k| k.type_name() == Some(name))
+    }
+
     /// The `type:` value an entry of this kind carries in frontmatter.
     pub fn type_name(self) -> Option<&'static str> {
         Some(match self {

@@ -36,6 +36,11 @@ impl Hit {
     }
 }
 
+/// Every type name, for `--type` value lists.
+pub fn types() -> impl Iterator<Item = &'static str> {
+    Kind::ALL.into_iter().map(kind_name)
+}
+
 pub fn kind_name(kind: Kind) -> &'static str {
     kind.type_name().unwrap_or(match kind {
         Kind::Soul => "soul",

@@ -1,6 +1,6 @@
 //! `owo add`: creates one entry from its template at its deterministic path.
 
-use crate::identity::{Identity, LIFE_CATEGORIES};
+use crate::identity::{Identity, Kind, LIFE_CATEGORIES};
 use crate::slug::slugify;
 use crate::templates;
 use anyhow::{bail, Context, Result};
@@ -9,7 +9,7 @@ use std::collections::BTreeMap;
 use std::fs;
 
 pub struct Request<'a> {
-    pub kind: &'a str,
+    pub kind: Kind,
     pub title: &'a str,
     pub date: Option<NaiveDate>,
     pub parent: Option<&'a str>,
@@ -20,23 +20,23 @@ pub struct Request<'a> {
     pub kb: Option<&'a str>,
 }
 
-fn folder(kind: &str) -> Option<&'static str> {
+/// The `life/` folder that holds a kind.
+fn folder(kind: Kind) -> &'static str {
     LIFE_CATEGORIES
         .iter()
-        .find(|(_, k)| k.type_name() == Some(kind))
+        .find(|(_, k)| *k == kind)
         .map(|(dir, _)| *dir)
+        .expect("a life kind")
 }
 
 /// Returns the entry path and true when the file is new.
 pub fn add(id: &Identity, req: &Request) -> Result<(String, bool)> {
-    if req.parent.is_some() && req.kind != "location-detail" {
-        bail!(
-            "--parent is for location-detail; a {} has no parent",
-            req.kind
-        );
+    let name = req.kind.type_name().expect("clap lists entry types");
+    if req.parent.is_some() && req.kind != Kind::LocationDetail {
+        bail!("--parent is for location-detail; a {name} has no parent");
     }
-    if req.kb.is_some() && req.kind != "project" {
-        bail!("--kb is for project; a {} has no KB", req.kind);
+    if req.kb.is_some() && req.kind != Kind::Project {
+        bail!("--kb is for project; a {name} has no KB");
     }
     // The local day, so `owo add log` names the day the user is living.
     let today = chrono::Local::now().format("%Y-%m-%d").to_string();
@@ -46,7 +46,7 @@ pub fn add(id: &Identity, req: &Request) -> Result<(String, bool)> {
         .unwrap_or_else(|| today.clone());
     // A log without a title is titled by its date, so titles stay unique.
     let title = match req.title.trim() {
-        "" if req.kind == "log" => date.as_str(),
+        "" if req.kind == Kind::Log => date.as_str(),
         t => t,
     };
     let slug = slugify(title);
@@ -59,8 +59,8 @@ pub fn add(id: &Identity, req: &Request) -> Result<(String, bool)> {
     values.insert("date", date.clone());
 
     let rel = match req.kind {
-        "location" => format!("life/locations/{slug}/overview.md"),
-        "location-detail" => {
+        Kind::Location => format!("life/locations/{slug}/overview.md"),
+        Kind::LocationDetail => {
             let parent = req
                 .parent
                 .context("location-detail needs --parent <location>")?;
@@ -78,20 +78,15 @@ pub fn add(id: &Identity, req: &Request) -> Result<(String, bool)> {
             );
             format!("life/locations/{parent_slug}/{slug}.md")
         }
-        "project" => format!("work/projects/{slug}/project.md"),
-        "note" => {
+        Kind::Project => format!("work/projects/{slug}/project.md"),
+        Kind::Note => {
             let project = req.project.context("note needs --project <project>")?;
             values.insert("project", project.to_string());
             format!("work/projects/{project}/notes/{date}_{slug}.md")
         }
-        "log" => format!("life/log/{date}.md"),
-        "journal" | "writing" => {
-            format!("life/{}/{date}_{slug}.md", folder(req.kind).expect("known"))
-        }
-        other => format!(
-            "life/{}/{slug}.md",
-            folder(other).expect("clap lists known types")
-        ),
+        Kind::Log => format!("life/log/{date}.md"),
+        Kind::Journal | Kind::Writing => format!("life/{}/{date}_{slug}.md", folder(req.kind)),
+        other => format!("life/{}/{slug}.md", folder(other)),
     };
 
     let path = id.dir.join(&rel);
@@ -100,20 +95,17 @@ pub fn add(id: &Identity, req: &Request) -> Result<(String, bool)> {
     }
     let builtin = templates::ENTRY_TEMPLATES
         .iter()
-        .find(|(n, _)| *n == req.kind)
+        .find(|(n, _)| *n == name)
         .map(|(_, t)| *t)
         .expect("clap lists known types");
     let root = id.dir.parent().unwrap_or(&id.dir);
     let mut text = templates::fill(
-        &templates::get(root, &format!("{}.md", req.kind), builtin),
+        &templates::get(root, &format!("{name}.md"), builtin),
         &values,
     );
     if !req.aliases.is_empty() {
         if !text.contains("aliases: []") {
-            bail!(
-                "the {} template has no `aliases: []` line for --alias",
-                req.kind
-            );
+            bail!("the {name} template has no `aliases: []` line for --alias");
         }
         let list = req
             .aliases
@@ -122,7 +114,7 @@ pub fn add(id: &Identity, req: &Request) -> Result<(String, bool)> {
             .collect::<String>();
         text = text.replacen("aliases: []", &format!("aliases:{list}"), 1);
     }
-    if let (Some(kb), "project") = (req.kb, req.kind) {
+    if let (Some(kb), Kind::Project) = (req.kb, req.kind) {
         if !text.contains("kb: \"\"") {
             bail!("the project template has no `kb: \"\"` line for --kb");
         }
@@ -130,7 +122,7 @@ pub fn add(id: &Identity, req: &Request) -> Result<(String, bool)> {
         text = text.replacen("kb: \"\"", &format!("kb: \"{kb}\""), 1);
     }
     fs::create_dir_all(path.parent().expect("has parent"))?;
-    if req.kind == "project" {
+    if req.kind == Kind::Project {
         fs::create_dir_all(path.parent().expect("has parent").join("notes"))?;
     }
     fs::write(&path, text).with_context(|| format!("writing {}", path.display()))?;

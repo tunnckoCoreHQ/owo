@@ -1,7 +1,9 @@
 //! The command line: every command, flag and help line. MCP tools are built from it.
 
-use crate::{lint, state, sync, templates};
+use crate::identity::Kind;
+use crate::{find, lint, state, sync, templates};
 use chrono::NaiveDate;
+use clap::builder::TypedValueParser;
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 
@@ -54,8 +56,8 @@ pub enum Command {
     /// Create an entry from its template at its deterministic path
     Add {
         /// Entry type
-        #[arg(value_name = "TYPE", value_parser = clap::builder::PossibleValuesParser::new(templates::ENTRY_TEMPLATES.iter().map(|(n, _)| *n)))]
-        kind: String,
+        #[arg(value_name = "TYPE", value_parser = clap::builder::PossibleValuesParser::new(templates::ENTRY_TEMPLATES.iter().map(|(n, _)| *n)).map(|s| Kind::from_type(&s).expect("an entry type")))]
+        kind: Kind,
         /// Title (a log without one is titled by its date)
         title: Vec<String>,
         /// Date for dated entries (default: today, local time)
@@ -107,7 +109,7 @@ pub enum Command {
         /// Entry name, alias, path or [[link]]
         name: Vec<String>,
         /// Limit to one entry type
-        #[arg(long = "type")]
+        #[arg(long = "type", value_parser = clap::builder::PossibleValuesParser::new(find::types()))]
         kind: Option<String>,
     },
     /// Print an entry, or one section of it
@@ -173,7 +175,7 @@ pub enum Command {
         #[arg(long, visible_alias = "in", value_parser = ["soul", "life", "work"])]
         scope: Option<String>,
         /// Limit to entry types (repeatable)
-        #[arg(long = "type")]
+        #[arg(long = "type", value_parser = clap::builder::PossibleValuesParser::new(find::types()))]
         types: Vec<String>,
         /// Only entries dated (or updated) on or after YYYY-MM-DD
         #[arg(long, value_parser = state::parse_day)]

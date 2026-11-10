@@ -32,6 +32,7 @@ use cli::{
     Cli, Command, ExportFormat, MigrateFrom, ReviewAction, SoulAction, SyncAction, TemplatesAction,
 };
 use config::{need_identity, need_project, ConfigError};
+use identity::Kind;
 use output::{exit, Envelope, Level, Out};
 use serde_json::json;
 use std::path::PathBuf;
@@ -238,22 +239,22 @@ fn run(cli: &Cli, out: &Out) -> Result<i32> {
         } => {
             let (r, id) = load(cli)?;
             let title = title.join(" ");
-            if title.trim().is_empty() && kind != "log" {
+            if title.trim().is_empty() && *kind != Kind::Log {
                 Cli::command()
                     .error(
                         clap::error::ErrorKind::MissingRequiredArgument,
-                        format!("`owo add {kind}` needs a title"),
+                        format!("`owo add {}` needs a title", find::kind_name(*kind)),
                     )
                     .exit();
             }
             // Only a note lives under a project; other types ignore the working project.
-            let project = if kind == "note" {
+            let project = if *kind == Kind::Note {
                 need_project(&id.dir, r.project.as_deref())?
             } else {
                 None
             };
             let req = add::Request {
-                kind,
+                kind: *kind,
                 title: &title,
                 date: *date,
                 parent: parent.as_deref(),
@@ -262,7 +263,7 @@ fn run(cli: &Cli, out: &Out) -> Result<i32> {
                 kb: kb.as_deref(),
             };
             let (path, created) = add::add(&id, &req)?;
-            let ok = created || kind == "log";
+            let ok = created || *kind == Kind::Log;
             let envelope = Envelope::new(ok, json!({ "path": path, "created": created }))
                 .with_errors((!ok).then(|| format!("exists: {path}")));
             out.emit(envelope, || {
