@@ -250,7 +250,9 @@ pub fn push(req: &StartRequest, turns: &str) -> Result<Start> {
         let id = id_of(&t["id"])
             .filter(|id| !id.chars().any(char::is_control))
             .with_context(|| {
-                format!("turn {n}: id must be a number or a string with no control characters")
+                format!(
+                    "turn {n}: the turn id must be a number or a string with no control characters"
+                )
             })?;
         let role = t["role"]
             .as_str()

@@ -303,13 +303,13 @@ pub enum ExportFormat {
 pub enum SyncAction {
     /// Read the transcript and, when a run is due, write the slice and the ingest prompt
     Start {
-        /// Session id from the host (letters, digits, -, _ or .)
-        #[arg(long)]
+        /// Session id: the host's id for this chat (letters, digits, -, _ or .)
+        #[arg(long, value_name = "SESSION_ID")]
         session: String,
         /// Transcript file the host keeps for this session
         #[arg(long)]
         transcript: PathBuf,
-        /// Transcript format; jsonl lines are {"role": ..., "text": ...}
+        /// Transcript format; jsonl lines are {"role": ..., "text": ...} with an optional turn "id"
         #[arg(long, default_value = "jsonl", value_parser = clap::builder::PossibleValuesParser::new(sync::FORMATS))]
         format: String,
         /// Take any new turns now (session end)
@@ -321,10 +321,10 @@ pub enum SyncAction {
     },
     /// Store turns sent by the host, then run sync start on them (for hosts without a local transcript)
     Push {
-        /// Session id from the host (letters, digits, -, _ or .)
-        #[arg(long)]
+        /// Session id: the host's id for this chat (letters, digits, -, _ or .)
+        #[arg(long, value_name = "SESSION_ID")]
         session: String,
-        /// JSON array of {"id", "role", "text"}; turns whose id is stored already are skipped (default: stdin)
+        /// JSON array of {"id", "role", "text"}; id is the turn id, the host's id for that message, and a stored turn id is skipped (default: stdin)
         #[arg(long, allow_hyphen_values = true)]
         turns: Option<String>,
         /// Take any new turns now (session end)
@@ -336,8 +336,8 @@ pub enum SyncAction {
     },
     /// Move the bookmark after a successful ingest run
     Done {
-        /// Session id given to sync start
-        #[arg(long)]
+        /// Session id given to sync start or sync push
+        #[arg(long, value_name = "SESSION_ID")]
         session: String,
         /// Message index the ingest run reached (the until from sync start)
         #[arg(long)]
