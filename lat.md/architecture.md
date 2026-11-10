@@ -11,7 +11,7 @@ Each module owns one job; `main.rs` parses arguments with clap, checks the selec
 - `markdown.rs` splits frontmatter and parses it with `serde-saphyr` into `serde_json` values, reads sections, extracts wiki-links outside code, counts words.
 - `slug.rs` holds the one slug function.
 - `templates.rs` embeds every template with `include_str!` and fills `{{key}}` placeholders.
-- `create.rs` implements `owo new`; `add.rs` implements `owo add`.
+- `create.rs` implements `owo new`; `add.rs` implements `owo add` and `owo write`.
 - `index.rs` generates `_index.md` files and `life/timeline.md`.
 - `state.rs` and `stamp.rs` hash files and maintain the three `state.json` files; `state::parse_day` is the one strict `YYYY-MM-DD` parser.
 - `lint.rs` runs the rules in [[lint]].
