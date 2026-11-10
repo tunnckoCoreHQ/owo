@@ -24,7 +24,7 @@ pub struct Changes {
     pub pending: Vec<String>,
 }
 
-pub fn changes(id: &Identity, since: Option<&str>) -> Changes {
+pub fn changes(id: &Identity, since: Option<&str>) -> anyhow::Result<Changes> {
     if crate::git::is_repo(&id.dir) {
         let mut args = vec![
             "log".to_string(),
@@ -67,16 +67,24 @@ pub fn changes(id: &Identity, since: Option<&str>) -> Changes {
                 }
             }
         }
-        return Changes {
+        return Ok(Changes {
             source: "git",
             days,
             pending: crate::git::dirty(&id.dir).unwrap_or_default(),
-        };
+        });
     }
+    // Outside Git only a day compares; `git log --since` words such as "yesterday" do not.
+    let since = since
+        .map(|s| {
+            crate::state::parse_day(s)
+                .map_err(|e| anyhow::anyhow!("outside Git, --since takes a day: {e}"))
+        })
+        .transpose()?
+        .map(|d| d.to_string());
     let mut days: BTreeMap<String, Vec<Change>> = BTreeMap::new();
     for r in crate::status::recent(id, 36500) {
         let day = r.updated.chars().take(10).collect::<String>();
-        if since.is_some_and(|s| day.as_str() < s) {
+        if since.as_ref().is_some_and(|s| &day < s) {
             continue;
         }
         days.entry(day).or_default().push(Change {
@@ -86,11 +94,11 @@ pub fn changes(id: &Identity, since: Option<&str>) -> Changes {
             subject: None,
         });
     }
-    Changes {
+    Ok(Changes {
         source: "state",
         days,
         pending: vec![],
-    }
+    })
 }
 
 pub fn render(c: &Changes) -> String {

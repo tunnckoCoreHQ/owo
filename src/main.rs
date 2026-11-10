@@ -977,7 +977,7 @@ fn run(cli: &Cli, out: &Out) -> Result<i32> {
         }
         Command::Changes { since } => {
             let (_, id) = load(cli)?;
-            let c = changes::changes(&id, since.as_deref());
+            let c = changes::changes(&id, since.as_deref())?;
             if out.json {
                 Envelope::ok(serde_json::to_value(&c)?).print();
             } else {
