@@ -437,18 +437,6 @@ fn run(cli: &Cli, out: &Out) -> Result<i32> {
                 print!("{}", status::render(&s))
             })
         }
-        Command::Recent { days } => {
-            let (_, id) = load(cli)?;
-            let list = status::recent(&id, *days);
-            out.emit(Envelope::ok(json!({ "days": days, "files": list })), || {
-                if list.is_empty() {
-                    eprintln!("owo: nothing stamped in the last {days} days");
-                }
-                for f in &list {
-                    println!("{}  {}", state::day(&f.updated), f.path);
-                }
-            })
-        }
         Command::Search {
             query,
             scope,
@@ -579,8 +567,12 @@ fn run(cli: &Cli, out: &Out) -> Result<i32> {
                 }
             })
         }
-        Command::Changes { since } => {
+        Command::Changes { since, days } => {
             let (_, id) = load(cli)?;
+            let since = since.clone().or_else(|| {
+                days.map(|d| (chrono::Utc::now() - chrono::Duration::days(d)).format("%Y-%m-%d"))
+                    .map(|d| d.to_string())
+            });
             let c = changes::changes(&id, since.as_deref())?;
             out.emit(Envelope::ok(serde_json::to_value(&c)?), || {
                 print!("{}", changes::render(&c))

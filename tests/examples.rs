@@ -135,9 +135,17 @@ fn search_ranks_title_matches_first() {
 }
 
 #[test]
-fn recent_lists_stamped_files() {
-    let v = json(owo_as(&examples(), "reviewer").args(["recent", "--days", "36500"]));
-    assert!(v["data"]["files"].as_array().unwrap().len() > 20);
+fn changes_days_lists_stamped_files() {
+    let v = json(owo_as(&examples(), "reviewer").args(["changes", "--days", "36500"]));
+    let n: usize = v["data"]["days"]
+        .as_object()
+        .unwrap()
+        .values()
+        .map(|d| d.as_array().unwrap().len())
+        .sum();
+    assert!(n > 20, "{v}");
+    let v = json(owo_as(&examples(), "reviewer").args(["changes", "--days", "0"]));
+    assert!(v["data"]["days"].as_object().unwrap().is_empty(), "{v}");
 }
 
 fn check_card(card: &Value, name: &str) {

@@ -25,7 +25,7 @@ owo context --format text [--voice] [--look] [--project <p>]
 - `owo show <name> [--section <s>]`: an entry or one section.
 - `owo search <words> [--scope life|work|soul]`: ranked matches with the best line.
 - `owo links <name>`: what links to it and what it links to.
-- `owo state`: the Now block; `owo recent --days N`: recently changed files.
+- `owo state`: the Now block; `owo changes --days N`: recently changed files.
 
 ## Write
 

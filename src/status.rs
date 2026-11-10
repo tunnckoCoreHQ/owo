@@ -1,4 +1,4 @@
-//! Derived current state: `owo state`, `owo recent`, and the "Now" block of `owo context`.
+//! Derived current state: `owo state` and the "Now" block of `owo context`.
 //! Everything here is computed from the state files and frontmatter dates.
 
 use crate::identity::{Entry, Identity, Kind};
@@ -320,33 +320,5 @@ pub fn render(s: &State) -> String {
     if s.review.memory_changed_outside_review {
         out.push_str("- MEMORY.md changed outside a review\n");
     }
-    out
-}
-
-#[derive(Debug, Serialize)]
-pub struct Recent {
-    pub path: String,
-    pub updated: String,
-}
-
-/// Files whose state stamp (or frontmatter `updated`) falls in the last `days` days.
-pub fn recent(id: &Identity, days: i64) -> Vec<Recent> {
-    let since = (Utc::now() - Duration::days(days))
-        .format("%Y-%m-%d")
-        .to_string();
-    let mut out = vec![];
-    for e in crate::state::tracked(id) {
-        let stamped = crate::state::record(id, &e.rel)
-            .and_then(|r| r["updated"].as_str())
-            .map(str::to_string);
-        let updated = stamped.or_else(|| e.field_str("updated"));
-        if let Some(u) = updated.filter(|u| u.as_str() >= since.as_str()) {
-            out.push(Recent {
-                path: e.rel.clone(),
-                updated: u,
-            });
-        }
-    }
-    out.sort_by(|a, b| (&b.updated, &a.path).cmp(&(&a.updated, &b.path)));
     out
 }

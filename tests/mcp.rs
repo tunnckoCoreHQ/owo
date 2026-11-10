@@ -82,7 +82,6 @@ fn mcp_lists_and_calls_tools() {
         "lint",
         "new",
         "list",
-        "recent",
         "changes",
         "review",
         "review_done",

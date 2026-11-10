@@ -158,12 +158,6 @@ pub enum Command {
         #[arg(long, default_value_t = 14, value_parser = clap::value_parser!(i64).range(0..=36500))]
         days: i64,
     },
-    /// Files updated in the last N days
-    Recent {
-        /// Window in days
-        #[arg(long, default_value_t = 7, value_parser = clap::value_parser!(i64).range(0..=36500))]
-        days: i64,
-    },
     /// BM25 search over titles, aliases, summaries and bodies
     Search {
         /// Search words
@@ -194,8 +188,11 @@ pub enum Command {
     /// What changed, grouped by day (Git history, else state stamps)
     Changes {
         /// YYYY-MM-DD or anything `git log --since` accepts
-        #[arg(long)]
+        #[arg(long, conflicts_with = "days")]
         since: Option<String>,
+        /// Only the last N days
+        #[arg(long, value_parser = clap::value_parser!(i64).range(0..=36500))]
+        days: Option<i64>,
     },
     /// Export the identity to another format
     Export {

@@ -81,14 +81,25 @@ pub fn changes(id: &Identity, since: Option<&str>) -> anyhow::Result<Changes> {
         })
         .transpose()?
         .map(|d| d.to_string());
+    // Each tracked file's state stamp, else its frontmatter `updated`; newest first.
+    let mut stamped: Vec<(String, String)> = crate::state::tracked(id)
+        .filter_map(|e| {
+            let at = crate::state::record(id, &e.rel)
+                .and_then(|r| r["updated"].as_str())
+                .map(str::to_string)
+                .or_else(|| e.field_str("updated"))?;
+            Some((at, e.rel.clone()))
+        })
+        .collect();
+    stamped.sort_by(|a, b| (&b.0, &a.1).cmp(&(&a.0, &b.1)));
     let mut days: BTreeMap<String, Vec<Change>> = BTreeMap::new();
-    for r in crate::status::recent(id, 36500) {
-        let day = r.updated.chars().take(10).collect::<String>();
+    for (at, path) in stamped {
+        let day = crate::state::day(&at).to_string();
         if since.as_ref().is_some_and(|s| &day < s) {
             continue;
         }
         days.entry(day).or_default().push(Change {
-            path: r.path,
+            path,
             status: "stamp".into(),
             commit: None,
             subject: None,
