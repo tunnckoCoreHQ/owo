@@ -5,7 +5,9 @@ description: Create a new owo identity, once, from what the person has establish
 
 # Identity create
 
-Rules for where facts live: [../identity/references/rules.md](../identity/references/rules.md).
+Rules for where facts live: [../identity/references/rules.md](../identity/references/rules.md). The session procedure and checkpoint: [../identity/SKILL.md](../identity/SKILL.md).
+
+After `owo new`, pass `-i <slug>` to every `owo` command. In a root with more than one identity, a command without it exits 3.
 
 1. `owo new "<Name>"` creates `<root>/<slug>/` from templates. `owo config` shows which root is used.
 2. Gather what is established. Ask one question at a time for a missing key choice: name, role, world, voice.
@@ -19,10 +21,4 @@ Rules for where facts live: [../identity/references/rules.md](../identity/refere
 4. Fill `work/README.md` as a profile: roles, how I work, past work, projects.
 5. Add the first characters and places with `owo add character|location <title>`; add projects with `owo add project <title>` and set `kb:` in `project.md`.
 6. Write a first `soul/MEMORY.md`: patterns, defining moments, lessons and hints as links.
-7. Finish:
-
-```sh
-owo stamp && owo index && owo lint && owo review done
-```
-
-`owo review done` records the first MEMORY hash.
+7. Run the checkpoint from the identity skill, then `owo review done` to record the first MEMORY hash.

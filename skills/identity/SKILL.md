@@ -5,7 +5,9 @@ description: Embody an owo identity or do any work as it. Use when a task names 
 
 # Identity
 
-Rules for where facts live: [references/rules.md](references/rules.md).
+Rules for where facts live: [references/rules.md](references/rules.md). This skill is the session procedure; the other identity skills point here.
+
+Pass `-i <slug>` to every `owo` command. In a root with more than one identity, a command without it exits 3.
 
 ## Load
 

@@ -5,7 +5,9 @@ description: Import a transcript, notes or documents into an owo identity, or ru
 
 # Identity ingest
 
-Rules for where facts live: [../identity/references/rules.md](../identity/references/rules.md).
+Rules for where facts live: [../identity/references/rules.md](../identity/references/rules.md). The session procedure and checkpoint: [../identity/SKILL.md](../identity/SKILL.md).
+
+Pass `-i <slug>` to every `owo` command. In a root with more than one identity, a command without it exits 3.
 
 Input: a source file path. Copy a file from elsewhere into `<root>/sources/<slug>/` first and cite it relative to `sources/`.
 
@@ -21,9 +23,4 @@ A `sync_push` reply that is due carries the slice as `source_text` and the promp
 4. Small things become one bullet in that day's log (`owo add log --date <day>`); events get one bullet linking them.
 5. Record disagreements with existing entries as conflicts (`owo add conflict`).
 6. Leave MEMORY.md and soul files to review.
-7. Finish and report the changed paths, or "no changes":
-
-```sh
-owo stamp && owo index && owo lint --changed
-owo changes
-```
+7. Run the checkpoint from the identity skill. Report the paths `owo stamp` lists, or "no changes".

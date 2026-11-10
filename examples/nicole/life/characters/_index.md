@@ -2,4 +2,4 @@
 # Characters
 
 - [[Ines]]: Ceramicist who shares the studio and the kiln.
-- [[Joe]]: A friend Nicole talks with about her work.
+- [[Joe]]: A friend I talk with about my work.

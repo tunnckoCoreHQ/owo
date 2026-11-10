@@ -7,13 +7,13 @@
     },
     "characters/joe.md": {
       "created": "2026-11-04T03:34:43Z",
-      "updated": "2026-11-04T04:42:21Z",
-      "hash": "b3:223eb455b2852db5db679884820231108701f3785ceb37bdbaff2d234a86672b"
+      "updated": "2026-11-10T02:05:52Z",
+      "hash": "b3:0d21cf39d0079eddca45cfc4460e1c8cf5b56b8b3e530918881fed3729bbc2d5"
     },
     "eras/studio-year.md": {
       "created": "2026-11-04T03:34:43Z",
-      "updated": "2026-11-04T03:34:43Z",
-      "hash": "b3:bb3bd227f2dfe70900687898e76e555531947b1289b062aafe69da701b41a794"
+      "updated": "2026-11-10T02:05:52Z",
+      "hash": "b3:8e764bc4f80becee8ef19132de7617de21858abf1f7b324b6528c46362b587f6"
     },
     "events/first-firing.md": {
       "created": "2026-11-04T03:34:43Z",
@@ -61,5 +61,5 @@
       "hash": "b3:3ae9e297a7835d625795982dc634a0ee7b4e0d7eb84a34dedeebc44202a86212"
     }
   },
-  "last_write": "2026-11-04T06:44:38Z"
+  "last_write": "2026-11-10T02:05:52Z"
 }

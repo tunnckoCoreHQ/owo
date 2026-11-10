@@ -5,7 +5,9 @@ description: Compile an owo identity's MEMORY and evolve its soul from evidence.
 
 # Identity review
 
-Rules for where facts live: [../identity/references/rules.md](../identity/references/rules.md).
+Rules for where facts live: [../identity/references/rules.md](../identity/references/rules.md). The session procedure and checkpoint: [../identity/SKILL.md](../identity/SKILL.md).
+
+Pass `-i <slug>` to every `owo` command. In a root with more than one identity, a command without it exits 3.
 
 1. `owo review` prints the packet: current MEMORY, files changed since the last review, unreviewed days, events, journal paths, open threads and conflicts, recurring phrases, the last soul change. `--json` gives the same data.
 2. Read the files the packet lists that matter (`owo show <name>`).
@@ -22,8 +24,4 @@ Rules for where facts live: [../identity/references/rules.md](../identity/refere
    owo soul note SOUL.md --change "<one line>" --evidence "[[Event]]" --evidence "[[Lesson]]"
    ```
 
-7. Check, then close the review (stamp first, so the review's own edits do not show as changed next time):
-
-```sh
-owo stamp && owo index && owo lint && owo review done
-```
+7. Run the checkpoint from the identity skill, then close the review with `owo review done`. The checkpoint stamps first, so the review's own edits do not show as changed next time.

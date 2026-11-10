@@ -41,13 +41,13 @@ Every fact has one home. Write it there once and link to it from everywhere else
 
 ## Perspective
 
-- SOUL.md, MEMORY.md, lessons, journal, logs and project notes are first person.
+- SOUL.md, MEMORY.md and every life and work entry are first person, in the identity's own voice: characters, places, events, lessons, journal, logs and project notes.
 - IDENTITY.md is third person.
 - Every character, including the person the identity works with, is a character file like any other.
 
 ## Story time
 
-Dates are the dates things happened in the identity's life: `date:` on logs, events and notes. `created` and `updated` are file bookkeeping that `owo stamp` keeps.
+Dates are the dates things happened in the identity's life: `date:` on logs, events and notes. `created` is the day the file was made; `owo stamp` keeps `updated` current.
 
 ## Identifiers
 
@@ -61,4 +61,4 @@ Source authority, highest first: the person's direct statement or correction, th
 
 ## Finishing
 
-Every write session ends with `owo stamp && owo index && owo lint --changed`. Fix errors before stopping.
+Every write session ends with the checkpoint in the [identity skill](../SKILL.md#checkpoint). Fix errors before stopping.
