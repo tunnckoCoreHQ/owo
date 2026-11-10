@@ -1,32 +1,12 @@
 //! End-to-end tests: run the built `owo` binary against temporary roots.
 
-use assert_cmd::Command;
+mod common;
+
+use common::{copy_tree, owo};
 use serde_json::Value;
 use std::fs;
 use std::path::{Path, PathBuf};
 use tempfile::TempDir;
-
-fn owo(root: &Path) -> Command {
-    let mut cmd = Command::cargo_bin("owo").unwrap();
-    cmd.arg("--root")
-        .arg(root)
-        .env_remove("OWO_ROOT")
-        .env_remove("OWO_IDENTITY")
-        .env_remove("OWO_PROJECT");
-    cmd
-}
-
-fn copy_tree(from: &Path, to: &Path) {
-    for entry in walkdir::WalkDir::new(from) {
-        let entry = entry.unwrap();
-        let target = to.join(entry.path().strip_prefix(from).unwrap());
-        if entry.file_type().is_dir() {
-            fs::create_dir_all(&target).unwrap();
-        } else {
-            fs::copy(entry.path(), &target).unwrap();
-        }
-    }
-}
 
 /// A fresh "Aria" identity with the fixture entries copied in and indexes regenerated.
 fn aria() -> (TempDir, PathBuf) {

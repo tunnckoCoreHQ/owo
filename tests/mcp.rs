@@ -1,18 +1,10 @@
 //! End-to-end test for `owo mcp`: JSON-RPC over stdin and stdout.
 
-use assert_cmd::Command;
-use serde_json::{json, Value};
-use std::path::{Path, PathBuf};
+mod common;
 
-fn owo(root: &Path) -> Command {
-    let mut cmd = Command::cargo_bin("owo").unwrap();
-    cmd.env_remove("OWO_ROOT")
-        .env_remove("OWO_IDENTITY")
-        .env_remove("OWO_PROJECT")
-        .arg("--root")
-        .arg(root);
-    cmd
-}
+use common::{examples, owo};
+use serde_json::{json, Value};
+use std::path::Path;
 
 fn raw_session(root: &Path, id: &str, input: Vec<u8>) -> Vec<Value> {
     let out = owo(root)
@@ -37,8 +29,7 @@ fn lines(messages: &[Value]) -> Vec<u8> {
 }
 
 fn session(messages: &[Value]) -> Vec<Value> {
-    let examples = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("examples");
-    raw_session(&examples, "nicole", lines(messages))
+    raw_session(&examples(), "nicole", lines(messages))
 }
 
 fn call(id: u64, name: &str, arguments: Value) -> Value {
@@ -171,7 +162,7 @@ fn mcp_remote_serves_http() {
         .env_remove("OWO_IDENTITY")
         .env_remove("OWO_PROJECT")
         .arg("--root")
-        .arg(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("examples"))
+        .arg(examples())
         .args(["-i", "nicole", "mcp", "--remote", "--port", "0"])
         .stdout(std::process::Stdio::piped())
         .spawn()
