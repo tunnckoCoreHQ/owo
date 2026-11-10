@@ -85,7 +85,7 @@ enum Command {
         kind: String,
         /// Title (a log without one is titled by its date)
         title: Vec<String>,
-        /// Date for dated entries (default: today)
+        /// Date for dated entries (default: today, local time)
         #[arg(long, value_parser = state::parse_day)]
         date: Option<NaiveDate>,
         /// Parent location for location-detail
