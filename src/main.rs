@@ -11,6 +11,7 @@ mod find;
 mod git;
 mod identity;
 mod index;
+mod kb;
 mod lint;
 mod markdown;
 mod mcp;
@@ -346,7 +347,7 @@ fn run(cli: &Cli, out: &Out) -> Result<i32> {
             let (_, id) = load(cli)?;
             let joined = name.join(" ");
             let target = joined.trim_start_matches("[[").trim_end_matches("]]");
-            let (path, text) = match find::show_kb(&id, target, section.as_deref()) {
+            let (path, text) = match kb::show(&id, target, section.as_deref()) {
                 Some(shown) => shown?,
                 None => {
                     let e = &id.entries[find::one(&id, &joined)?];

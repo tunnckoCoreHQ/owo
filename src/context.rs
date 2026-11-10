@@ -8,7 +8,7 @@ use anyhow::Result;
 use serde::Serialize;
 use serde_json::json;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 pub struct Request<'a> {
     pub voice: bool,
@@ -33,15 +33,8 @@ pub struct Context {
     pub project: Option<String>,
     pub items: Vec<Item>,
     pub now: String,
-    pub kb: Option<Kb>,
+    pub kb: Option<crate::kb::Kb>,
     pub warnings: Vec<String>,
-}
-
-#[derive(Debug, Serialize)]
-pub struct Kb {
-    pub path: String,
-    pub exists: bool,
-    pub entry: Option<String>,
 }
 
 fn item(tier: &'static str, path: &str, reason: &str) -> Item {
@@ -50,43 +43,6 @@ fn item(tier: &'static str, path: &str, reason: &str) -> Item {
         path: path.to_string(),
         reason: reason.to_string(),
     }
-}
-
-/// KB path for a project: project.md `kb`, else identity.json `projects.<p>.kb`
-/// (both relative to the identity folder; `~/` is the home folder), else the `.owo.toml` value.
-pub fn kb_path(id: &Identity, project: &str, config_kb: Option<&Path>) -> Option<PathBuf> {
-    let from_note = id
-        .project(project)
-        .and_then(|e| e.field_str("kb"))
-        .filter(|s| !s.is_empty());
-    let from_manifest = from_note.or_else(|| {
-        id.manifest["projects"][project]["kb"]
-            .as_str()
-            .filter(|s| !s.is_empty())
-            .map(str::to_string)
-    });
-    match from_manifest {
-        Some(raw) => {
-            let home = std::env::var_os("HOME").map(PathBuf::from);
-            let p = crate::config::expand_home(&raw, home.as_deref());
-            Some(if p.is_absolute() { p } else { id.dir.join(p) })
-        }
-        None => config_kb.map(Path::to_path_buf),
-    }
-}
-
-fn normalize(p: &Path) -> PathBuf {
-    let mut out = PathBuf::new();
-    for c in p.components() {
-        match c {
-            std::path::Component::ParentDir => {
-                out.pop();
-            }
-            std::path::Component::CurDir => {}
-            other => out.push(other),
-        }
-    }
-    out
 }
 
 pub fn build(id: &Identity, req: &Request) -> Result<Context> {
@@ -114,32 +70,9 @@ pub fn build(id: &Identity, req: &Request) -> Result<Context> {
         for n in id.notes(p).into_iter().take(req.notes) {
             items.push(item("project", &n.rel, "recent project note"));
         }
-        match kb_path(id, p, req.config_kb.as_deref()) {
-            Some(path) => {
-                let path = normalize(&path);
-                let exists = path.exists();
-                let entry = if path.is_file() {
-                    Some(path.display().to_string())
-                } else {
-                    ["lat.md", "README.md", "index.md"]
-                        .iter()
-                        .map(|f| path.join(f))
-                        .find(|f| f.is_file())
-                        .map(|f| f.display().to_string())
-                };
-                if !exists {
-                    warnings.push(format!("project KB not found at {}", path.display()));
-                }
-                kb = Some(Kb {
-                    path: path.display().to_string(),
-                    exists,
-                    entry,
-                });
-            }
-            None => warnings.push(format!(
-                "project {p} has no KB path (identity.json projects.{p}.kb or .owo.toml kb)"
-            )),
-        }
+        let (pointer, warning) = crate::kb::pointer(id, p, req.config_kb.as_deref());
+        kb = pointer;
+        warnings.extend(warning);
     }
     for name in req.with {
         match crate::find::one(id, name) {

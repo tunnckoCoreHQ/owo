@@ -124,7 +124,7 @@ pub fn one(id: &Identity, name: &str) -> anyhow::Result<usize> {
 }
 
 /// One section with its heading line (any heading level, case-insensitive).
-fn section_text(body: &str, name: &str) -> Option<String> {
+pub fn section_text(body: &str, name: &str) -> Option<String> {
     let (head, lines) = markdown::section(body, name)?;
     let lines: Vec<&str> = lines.iter().map(|(_, l)| *l).collect();
     Some(format!("{head}\n{}\n", lines.join("\n").trim_end()))
@@ -284,100 +284,4 @@ mod tests {
         assert_eq!(levenshtein("kitten", "sitting"), 3);
         assert_eq!(levenshtein("", "abc"), 3);
     }
-}
-
-/// A `[[kb:<project>:<path>#<Section>]]` link resolved against the project KB.
-#[derive(Debug)]
-pub struct KbLink {
-    pub root_exists: bool,
-    pub file: Option<String>,
-    pub file_exists: bool,
-    pub section: Option<String>,
-    pub section_exists: bool,
-}
-
-/// Parses and resolves a kb link target (without brackets). None when it is not a kb link.
-pub fn kb_link(id: &Identity, target: &str) -> Option<Result<KbLink, String>> {
-    let rest = target.strip_prefix("kb:")?;
-    let Some((project, path)) = rest.split_once(':') else {
-        return Some(Err(format!(
-            "[[{target}]] must be kb:<project>:<path>[#<Section>]"
-        )));
-    };
-    let (path, section) = match path.split_once('#') {
-        Some((p, s)) => (p, Some(s.to_string())),
-        None => (path, None),
-    };
-    if std::path::Path::new(path).components().any(|c| {
-        matches!(
-            c,
-            std::path::Component::ParentDir
-                | std::path::Component::RootDir
-                | std::path::Component::Prefix(_)
-        )
-    }) {
-        return Some(Err(format!(
-            "[[{target}]]: the path must stay inside the KB (no `..` or absolute path)"
-        )));
-    }
-    if id.project(project).is_none() {
-        return Some(Err(format!("[[{target}]]: no project {project:?}")));
-    }
-    let mut out = KbLink {
-        root_exists: false,
-        file: None,
-        file_exists: false,
-        section,
-        section_exists: false,
-    };
-    let Some(kb) = crate::context::kb_path(id, project, None) else {
-        return Some(Ok(out));
-    };
-    let base = if kb.extension().is_some_and(|x| x == "md") {
-        kb.parent()
-            .map(std::path::Path::to_path_buf)
-            .unwrap_or(kb.clone())
-    } else {
-        kb.clone()
-    };
-    out.root_exists = base.is_dir();
-    let mut file = base.join(path);
-    if !file.is_file() && file.extension().is_none() {
-        file.set_extension("md");
-    }
-    out.file_exists = file.is_file();
-    if out.file_exists {
-        let text = std::fs::read_to_string(&file).unwrap_or_default();
-        out.section_exists = match &out.section {
-            None => true,
-            Some(s) => markdown::section(&text, s).is_some(),
-        };
-    }
-    out.file = Some(file.display().to_string());
-    Some(Ok(out))
-}
-
-/// The KB file a kb link points at, as (path, text): the requested section, else the link's
-/// section, else the whole file. None when the target is not a kb link.
-pub fn show_kb(
-    id: &Identity,
-    target: &str,
-    section: Option<&str>,
-) -> Option<anyhow::Result<(String, String)>> {
-    let link = kb_link(id, target)?;
-    Some(link.map_err(anyhow::Error::msg).and_then(|k| {
-        let file = k.file.clone().filter(|_| k.file_exists).ok_or_else(|| {
-            anyhow::anyhow!(
-                "KB file not found: {}",
-                k.file.unwrap_or_else(|| "(no KB path)".into())
-            )
-        })?;
-        let text = std::fs::read_to_string(&file)?;
-        let body = match section.or(k.section.as_deref()) {
-            None => text,
-            Some(s) => section_text(&text, s)
-                .ok_or_else(|| anyhow::anyhow!("no section {s:?} in {file}"))?,
-        };
-        Ok((file, body))
-    }))
 }

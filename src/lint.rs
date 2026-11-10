@@ -682,7 +682,7 @@ fn kb_links(id: &Identity, out: &mut Vec<Diagnostic>) {
                 Some(s) => format!("{}#{s}", link.target),
                 None => link.target.clone(),
             };
-            match crate::find::kb_link(id, &full) {
+            match crate::kb::link(id, &full) {
                 None => {}
                 Some(Err(msg)) => out.push(err(&e.rel, msg).at(line)),
                 Some(Ok(k)) if !k.root_exists => {}
