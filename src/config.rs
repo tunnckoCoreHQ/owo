@@ -230,6 +230,62 @@ fn only_identity(root: &Path) -> Option<String> {
     }
 }
 
+/// A selection or config problem; the CLI exits 3 for it.
+#[derive(Debug)]
+pub struct ConfigError(pub String);
+
+impl std::fmt::Display for ConfigError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl std::error::Error for ConfigError {}
+
+/// The selected identity slug, checked to be a slug with a folder in the root.
+pub fn need_identity(r: &Resolved) -> Result<String> {
+    let slug = r.identity.clone().ok_or_else(|| {
+        ConfigError(format!(
+            "no identity selected in {}: pass -i <slug> or set OWO_IDENTITY",
+            r.root.display()
+        ))
+    })?;
+    if !crate::slug::is_slug(&slug) {
+        return Err(ConfigError(format!(
+            "invalid identity {slug:?}: use lowercase letters, digits and single hyphens"
+        ))
+        .into());
+    }
+    if !r.root.join(&slug).is_dir() {
+        return Err(ConfigError(format!(
+            "identity folder not found: {}; `owo list` shows the identities in this root",
+            r.root.join(&slug).display()
+        ))
+        .into());
+    }
+    Ok(slug)
+}
+
+/// Checks that the selected project is a slug with a `project.md` in the identity folder.
+pub fn need_project<'a>(dir: &Path, project: Option<&'a str>) -> Result<Option<&'a str>> {
+    let Some(p) = project else {
+        return Ok(None);
+    };
+    if !crate::slug::is_slug(p) {
+        return Err(ConfigError(format!(
+            "invalid project {p:?}: use lowercase letters, digits and single hyphens"
+        ))
+        .into());
+    }
+    if !dir.join(format!("work/projects/{p}/project.md")).is_file() {
+        return Err(ConfigError(format!(
+            "project not found: work/projects/{p}/project.md (run `owo add project`)"
+        ))
+        .into());
+    }
+    Ok(Some(p))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

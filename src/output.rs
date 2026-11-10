@@ -118,3 +118,38 @@ impl Envelope {
         );
     }
 }
+
+/// Prints a warning to stderr with the one prefix every command uses.
+pub fn warn(message: &str) {
+    eprintln!("owo: warning: {message}");
+}
+
+/// Where a command's result goes: the JSON envelope, or text for people.
+pub struct Out {
+    pub json: bool,
+    pub quiet: bool,
+}
+
+impl Out {
+    /// Prints a text line unless `--json` or `--quiet` is set.
+    pub fn say(&self, text: impl AsRef<str>) {
+        if !self.json && !self.quiet {
+            println!("{}", text.as_ref());
+        }
+    }
+
+    /// Prints the envelope with `--json`; else prints its text warnings to stderr and runs
+    /// `text`. Returns the exit code for the envelope's `ok`.
+    pub fn emit(&self, envelope: Envelope, text: impl FnOnce()) -> anyhow::Result<i32> {
+        let code = exit::of(envelope.ok);
+        if self.json {
+            envelope.print();
+        } else {
+            for w in envelope.warnings.iter().filter_map(Value::as_str) {
+                warn(w);
+            }
+            text();
+        }
+        Ok(code)
+    }
+}

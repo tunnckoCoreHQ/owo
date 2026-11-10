@@ -365,6 +365,24 @@ pub fn soul_history(id: &Identity, file: Option<&str>) -> Vec<Value> {
         .collect()
 }
 
+pub fn render_history(list: &[Value]) -> String {
+    let mut out = String::new();
+    for r in list {
+        let ev: Vec<&str> = r["evidence"]
+            .as_array()
+            .map(|a| a.iter().filter_map(|v| v.as_str()).collect())
+            .unwrap_or_default();
+        out.push_str(&format!(
+            "{}  {}  {}\n    evidence: {}\n",
+            r["at"].as_str().unwrap_or("?"),
+            r["file"].as_str().unwrap_or("?"),
+            r["change"].as_str().unwrap_or(""),
+            ev.join(", ")
+        ));
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -566,3 +566,17 @@ fn fill(src: &Path, refs: &Path, root: &Path, slug: &str, manifest: &Value) -> R
     ];
     Ok(r)
 }
+
+/// The skipped files and the checklist; `moved` lines are left to the caller, which drops them
+/// under `--quiet`.
+pub fn render(r: &Report) -> String {
+    let mut out = String::new();
+    for s in &r.skipped {
+        out.push_str(&format!("skipped {s}\n"));
+    }
+    out.push_str(&format!("\nChecklist for {}:\n", r.dir));
+    for c in &r.checklist {
+        out.push_str(&format!("- [ ] {c}\n"));
+    }
+    out
+}

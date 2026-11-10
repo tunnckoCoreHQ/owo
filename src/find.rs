@@ -174,6 +174,25 @@ pub fn outlinks(id: &Identity, idx: usize) -> Vec<LinkRef> {
         .collect()
 }
 
+pub fn render_links(back: &[LinkRef], fwd: &[LinkRef]) -> String {
+    let mut out = String::new();
+    for l in back {
+        out.push_str(&format!("in  {}:{}  {}\n", l.path, l.line, l.text));
+    }
+    for l in fwd {
+        let to = if l.path.is_empty() {
+            "(broken)"
+        } else {
+            &l.path
+        };
+        out.push_str(&format!(
+            "out [[{}]] -> {to}  (line {})\n",
+            l.target, l.line
+        ));
+    }
+    out
+}
+
 /// Every wiki-link in a file with its 1-based line, frontmatter included,
 /// leaving out `kb:` links and empty targets.
 pub fn file_links(e: &Entry) -> Vec<(usize, markdown::Link)> {

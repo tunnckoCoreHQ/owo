@@ -127,6 +127,25 @@ pub fn list(root: &std::path::Path) -> Vec<Row> {
         .collect()
 }
 
+pub fn render_list(rows: &[Row]) -> String {
+    rows.iter()
+        .map(|row| {
+            let last = row
+                .last_activity
+                .as_deref()
+                .map(crate::state::day)
+                .unwrap_or("-");
+            format!(
+                "{:<16} {:<20} {:<10} {}\n",
+                row.slug,
+                row.name,
+                last,
+                row.projects.join(", ")
+            )
+        })
+        .collect()
+}
+
 fn by_date_desc(id: &Identity, kind: Kind) -> Vec<&Entry> {
     let mut v: Vec<&Entry> = id.entries.iter().filter(|e| e.kind == kind).collect();
     v.sort_by(|a, b| (b.field_str("date"), &b.rel).cmp(&(a.field_str("date"), &a.rel)));

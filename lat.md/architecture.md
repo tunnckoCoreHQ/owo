@@ -4,9 +4,11 @@ owo is one Rust binary crate. Each command loads an identity folder into memory,
 
 ## Modules
 
-Each module owns one job; `main.rs` parses arguments with clap, checks the selected identity and project (exit 3), and dispatches.
+Each module owns one job; `main.rs` parses arguments, dispatches each command, and prints its result through one `Out::emit` path.
 
-- `config.rs` resolves root, identity, project and KB. See [[formats#Config resolution]].
+- `cli.rs` holds the clap definitions: every command, flag and help line.
+
+- `config.rs` resolves root, identity, project and KB, and checks the selected identity and project (exit 3). See [[formats#Config resolution]].
 - `identity.rs` walks one identity folder and parses every Markdown file into an `Entry` with a `Kind` decided by its path.
 - `markdown.rs` splits frontmatter and parses it with `serde-saphyr` into `serde_json` values, reads sections, extracts wiki-links outside code, counts words.
 - `slug.rs` holds the one slug function.
@@ -21,7 +23,7 @@ Each module owns one job; `main.rs` parses arguments with clap, checks the selec
 - `git.rs` wraps the `git` binary; `changes.rs` implements `owo changes` and the changed-file set for `lint --changed`.
 - `export.rs` writes character cards (JSON or PNG), SoulSpec packages and skill wrappers.
 - `sync.rs` parses transcripts and writes session slices; `migrate.rs` converts v1 identities.
-- `output.rs` defines diagnostics, the envelope and exit codes.
+- `output.rs` defines diagnostics, the envelope, exit codes and `Out`, which prints the envelope or the text.
 - `mcp.rs` serves the MCP tools over stdio or HTTP, built from the clap definitions; see [[decisions#MCP runs the CLI]].
 
 ## Loading an identity
