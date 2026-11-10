@@ -2,10 +2,10 @@
 //! Each tracks authored Markdown files by content hash with an `updated` stamp.
 
 use crate::identity::{Identity, Kind};
-use chrono::{NaiveDate, SecondsFormat, Utc};
+use chrono::{DateTime, NaiveDate, SecondsFormat, Utc};
 use serde_json::{json, Map, Value};
 
-pub const SCOPES: &[&str] = &["soul", "life", "work"];
+pub const SCOPES: [&str; 3] = ["soul", "life", "work"];
 
 pub fn hash(text: &str) -> String {
     format!("b3:{}", blake3::hash(text.as_bytes()).to_hex())
@@ -82,4 +82,70 @@ pub fn initial(identity: &Identity, at: &str) -> Vec<(String, Value)> {
         ("life/state.json".into(), life),
         ("work/state.json".into(), work),
     ]
+}
+
+/// The loaded `<scope>/state.json`, or Null when it is missing or does not parse.
+pub fn doc<'a>(id: &'a Identity, scope: &str) -> &'a Value {
+    &id.state[SCOPES
+        .iter()
+        .position(|s| *s == scope)
+        .expect("a known scope")]
+}
+
+/// The state record of an identity-relative path: `{ "updated", "hash" }`.
+pub fn record<'a>(id: &'a Identity, rel: &str) -> Option<&'a Value> {
+    let (scope, rest) = scope_of(rel)?;
+    doc(id, scope).get("files")?.get(rest)
+}
+
+/// The day at the start of a date or stamp, when it parses.
+pub fn date_of(text: &str) -> Option<NaiveDate> {
+    parse_day(text.get(..10)?).ok()
+}
+
+/// Review status from `soul/state.json` → `review` and `identity.json` → `review_every_days`.
+pub struct Review {
+    pub last_reviewed: Option<String>,
+    pub reviewed_through: Option<NaiveDate>,
+    /// Days since `last_reviewed`; None when never reviewed or not an RFC 3339 timestamp.
+    pub days_since: Option<i64>,
+    pub every_days: i64,
+    pub due: bool,
+    /// MEMORY.md exists and its hash differs from the one the last review recorded.
+    pub memory_changed: bool,
+}
+
+impl Review {
+    /// True when a story date parses and falls after `reviewed_through` (or nothing is reviewed).
+    pub fn unreviewed(&self, date: Option<&str>) -> bool {
+        match (date.and_then(date_of), self.reviewed_through) {
+            (Some(d), Some(r)) => d > r,
+            (Some(_), None) => true,
+            _ => false,
+        }
+    }
+}
+
+pub fn review(id: &Identity) -> Review {
+    let field = |key: &str| doc(id, "soul")["review"][key].as_str();
+    let last_reviewed = field("last_reviewed").map(str::to_string);
+    let every_days = id
+        .manifest
+        .as_ref()
+        .and_then(|m| m.get("review_every_days"))
+        .and_then(Value::as_i64)
+        .unwrap_or(7);
+    let days_since = last_reviewed
+        .as_deref()
+        .and_then(|t| DateTime::parse_from_rfc3339(t).ok())
+        .map(|t| (Utc::now() - t.with_timezone(&Utc)).num_days());
+    let memory_hash = id.entry("soul/MEMORY.md").map(|e| hash(&e.text));
+    Review {
+        reviewed_through: field("reviewed_through").and_then(date_of),
+        days_since,
+        every_days,
+        due: days_since.is_none_or(|d| d >= every_days),
+        memory_changed: memory_hash.is_some() && memory_hash.as_deref() != field("memory_hash"),
+        last_reviewed,
+    }
 }

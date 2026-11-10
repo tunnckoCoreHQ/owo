@@ -132,11 +132,10 @@ pub fn render(c: &Changes) -> String {
 pub fn changed_paths(id: &Identity) -> Vec<String> {
     let mut out = crate::git::dirty(&id.dir).unwrap_or_else(|| {
         let today = crate::state::day(&crate::state::now()).to_string();
-        ["soul", "life", "work"]
+        crate::state::SCOPES
             .iter()
-            .filter_map(|scope| Some((scope, id.read_json(&format!("{scope}/state.json"))?)))
-            .flat_map(|(scope, doc)| {
-                doc["files"]
+            .flat_map(|scope| {
+                crate::state::doc(id, scope)["files"]
                     .as_object()
                     .into_iter()
                     .flatten()

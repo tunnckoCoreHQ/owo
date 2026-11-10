@@ -51,13 +51,6 @@ pub struct Packet {
     pub last_soul_change: Option<Value>,
 }
 
-fn review_field(id: &Identity, key: &str) -> Option<String> {
-    id.read_json("soul/state.json")?
-        .pointer(&format!("/review/{key}"))?
-        .as_str()
-        .map(str::to_string)
-}
-
 /// Short function words; a recurring phrase may not start or end with one.
 const STOP_WORDS: &[&str] = &[
     "a", "an", "and", "are", "as", "at", "be", "but", "by", "for", "from", "had", "has", "have",
@@ -88,31 +81,16 @@ fn recurring(days: &[Day]) -> Vec<(String, usize)> {
 }
 
 pub fn packet(id: &Identity) -> Packet {
-    let last = review_field(id, "last_reviewed");
-    let through = review_field(id, "reviewed_through");
-    let after_through = |d: &Option<String>| match (d, &through) {
-        (Some(d), Some(t)) => d.as_str() > t.as_str(),
-        (Some(_), None) => true,
-        _ => false,
-    };
+    let review = crate::state::review(id);
+    let last = review.last_reviewed.clone();
+    let after_through = |d: &Option<String>| review.unreviewed(d.as_deref());
     let git = crate::git::is_repo(&id.dir);
     let mut changed = vec![];
     for e in crate::state::tracked(id) {
-        let Some((scope, rel)) = crate::state::scope_of(&e.rel) else {
-            continue;
-        };
-        let updated = id
-            .read_json(&format!("{scope}/state.json"))
-            .and_then(|d| {
-                d.pointer(&format!(
-                    "/files/{}",
-                    rel.replace('~', "~0").replace('/', "~1")
-                ))?
-                .get("updated")?
-                .as_str()
-                .map(str::to_string)
-            })
-            .unwrap_or_default();
+        let updated = crate::state::record(id, &e.rel)
+            .and_then(|r| r["updated"].as_str())
+            .unwrap_or_default()
+            .to_string();
         // A file with no stamp yet is new since the last stamp, so it counts as changed.
         let reviewed =
             !updated.is_empty() && last.as_deref().is_some_and(|l| updated.as_str() <= l);
@@ -160,17 +138,14 @@ pub fn packet(id: &Identity) -> Packet {
             .collect()
     };
     let changed_paths: BTreeSet<&str> = changed.iter().map(|c| c.path.as_str()).collect();
-    let soul = id.read_json("soul/state.json");
     let memory = id.entry("soul/MEMORY.md");
-    let memory_hash = memory.map(|e| crate::state::hash(&e.text));
     Packet {
         identity: id.slug.clone(),
         memory: memory.map(|e| e.text.clone()).unwrap_or_default(),
         memory_words: memory
             .map(|e| crate::markdown::word_count(e.body()))
             .unwrap_or(0),
-        memory_changed_outside_review: memory_hash.is_some()
-            && memory_hash != review_field(id, "memory_hash"),
+        memory_changed_outside_review: review.memory_changed,
         events: of_kind(Kind::Event)
             .filter(|e| after_through(&e.field_str("date")))
             .map(Link::of)
@@ -186,13 +161,13 @@ pub fn packet(id: &Identity) -> Packet {
         open_threads: open(Kind::Thread),
         open_conflicts: open(Kind::Conflict),
         recurring: recurring(&days),
-        last_soul_change: soul
-            .as_ref()
-            .and_then(|d| d.get("history")?.as_array()?.last().cloned()),
+        last_soul_change: crate::state::doc(id, "soul")["history"]
+            .as_array()
+            .and_then(|h| h.last().cloned()),
         unreviewed_days: days,
         changed,
         last_reviewed: last,
-        reviewed_through: through,
+        reviewed_through: review.reviewed_through.map(|d| d.to_string()),
     }
 }
 
@@ -357,11 +332,12 @@ pub fn soul_note(id: &Identity, file: &str, change: &str, evidence: &[String]) -
 
 pub fn soul_history(id: &Identity, file: Option<&str>) -> Vec<Value> {
     let file = file.map(|f| f.trim_start_matches("soul/"));
-    id.read_json("soul/state.json")
-        .and_then(|d| d.get("history")?.as_array().cloned())
-        .unwrap_or_default()
+    crate::state::doc(id, "soul")["history"]
+        .as_array()
         .into_iter()
+        .flatten()
         .filter(|r| file.is_none_or(|f| r["file"].as_str() == Some(f)))
+        .cloned()
         .collect()
 }
 

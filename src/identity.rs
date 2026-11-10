@@ -164,6 +164,8 @@ pub struct Identity {
     pub dir: PathBuf,
     pub manifest: Option<Json>,
     pub manifest_error: Option<String>,
+    /// `soul`, `life` and `work` state.json in `state::SCOPES` order, read through `state::doc`.
+    pub state: [Json; 3],
     pub entries: Vec<Entry>,
 }
 
@@ -292,11 +294,14 @@ impl Identity {
             };
             entries.push(parse_entry(rel, text, lossy));
         }
+        let state = crate::state::SCOPES
+            .map(|s| read_json(&dir.join(s).join("state.json")).unwrap_or(Json::Null));
         Ok(Self {
             slug: slug.to_string(),
             dir,
             manifest,
             manifest_error,
+            state,
             entries,
         })
     }

@@ -2,7 +2,8 @@
 //! Everything here is computed from the state files and frontmatter dates.
 
 use crate::identity::{Entry, Identity, Kind};
-use chrono::{DateTime, Duration, NaiveDate, Utc};
+use crate::state::date_of;
+use chrono::{Duration, Utc};
 use serde::Serialize;
 use serde_json::Value;
 
@@ -68,10 +69,7 @@ pub struct ProjectState {
 }
 
 pub fn project(id: &Identity, slug: &str) -> ProjectState {
-    let rec = id
-        .read_json("work/state.json")
-        .and_then(|d| d.get("projects")?.get(slug).cloned())
-        .unwrap_or(Value::Null);
+    let rec = &crate::state::doc(id, "work")["projects"][slug];
     let prefix = format!("work/projects/{slug}/notes/");
     let mut notes: Vec<&Entry> = id
         .entries
@@ -152,17 +150,12 @@ fn by_date_desc(id: &Identity, kind: Kind) -> Vec<&Entry> {
     v
 }
 
-fn parse_date(s: &str) -> Option<NaiveDate> {
-    crate::state::parse_day(s.get(..10)?).ok()
-}
-
 /// Latest `updated` stamp per scope from the state files.
 fn scope_activity(id: &Identity) -> Vec<(String, String)> {
     crate::state::SCOPES
         .iter()
         .filter_map(|s| {
-            let doc = id.read_json(&format!("{s}/state.json"))?;
-            let latest = doc
+            let latest = crate::state::doc(id, s)
                 .get("files")?
                 .as_object()?
                 .values()
@@ -174,8 +167,8 @@ fn scope_activity(id: &Identity) -> Vec<(String, String)> {
 }
 
 pub fn last_project(id: &Identity) -> Option<(String, String)> {
-    let doc = id.read_json("work/state.json")?;
-    doc.get("projects")?
+    crate::state::doc(id, "work")
+        .get("projects")?
         .as_object()?
         .iter()
         .filter_map(|(p, v)| Some((v.get("last_touched")?.as_str()?.to_string(), p.clone())))
@@ -191,31 +184,11 @@ pub fn compute(id: &Identity, days: i64, logs: usize) -> State {
         .entries
         .iter()
         .filter(|e| matches!(e.kind, Kind::Log | Kind::Event))
-        .filter_map(|e| parse_date(&e.field_str("date")?))
+        .filter_map(|e| date_of(&e.field_str("date")?))
         .max()
         .unwrap_or(today);
     let since = newest - Duration::days(days);
-    let soul = id.read_json("soul/state.json");
-    let every = id
-        .manifest
-        .as_ref()
-        .and_then(|m| m.get("review_every_days"))
-        .and_then(Value::as_i64)
-        .unwrap_or(7);
-    let last_reviewed = soul
-        .as_ref()
-        .and_then(|d| d.pointer("/review/last_reviewed"))
-        .and_then(Value::as_str)
-        .map(str::to_string);
-    let reviewed_through = soul
-        .as_ref()
-        .and_then(|d| d.pointer("/review/reviewed_through"))
-        .and_then(Value::as_str)
-        .and_then(parse_date);
-    let days_since = last_reviewed
-        .as_deref()
-        .and_then(|t| DateTime::parse_from_rfc3339(t).ok())
-        .map(|t| (Utc::now() - t.with_timezone(&Utc)).num_days());
+    let review = crate::state::review(id);
     // A log with nothing written yet is not a day that happened.
     let log_entries: Vec<&Entry> = by_date_desc(id, Kind::Log)
         .into_iter()
@@ -223,25 +196,8 @@ pub fn compute(id: &Identity, days: i64, logs: usize) -> State {
         .collect();
     let unreviewed = log_entries
         .iter()
-        .filter(|e| {
-            match (
-                e.field_str("date").as_deref().and_then(parse_date),
-                reviewed_through,
-            ) {
-                (Some(d), Some(r)) => d > r,
-                (Some(_), None) => true,
-                _ => false,
-            }
-        })
+        .filter(|e| review.unreviewed(e.field_str("date").as_deref()))
         .count();
-    let memory_hash = id
-        .entry("soul/MEMORY.md")
-        .map(|e| crate::state::hash(&e.text));
-    let recorded = soul
-        .as_ref()
-        .and_then(|d| d.pointer("/review/memory_hash"))
-        .and_then(Value::as_str)
-        .map(str::to_string);
     let by_scope = scope_activity(id);
     let open = |kind: Kind, state: &str| -> Vec<Link> {
         id.entries
@@ -261,26 +217,24 @@ pub fn compute(id: &Identity, days: i64, logs: usize) -> State {
             .filter(|e| {
                 e.field_str("date")
                     .as_deref()
-                    .and_then(parse_date)
+                    .and_then(date_of)
                     .is_some_and(|d| d >= since)
             })
             .map(Link::of)
             .collect(),
         open_threads: open(Kind::Thread, "open"),
         open_conflicts: open(Kind::Conflict, "open"),
-        review: Review {
-            last_reviewed,
-            days_since,
-            every_days: every,
-            due: days_since.is_none_or(|d| d >= every),
-            unreviewed_log_days: unreviewed,
-            memory_changed_outside_review: memory_hash.is_some() && memory_hash != recorded,
-        },
-        last_soul_change: soul
-            .as_ref()
-            .and_then(|d| d.get("history"))
-            .and_then(Value::as_array)
+        last_soul_change: crate::state::doc(id, "soul")["history"]
+            .as_array()
             .and_then(|h| h.last().cloned()),
+        review: Review {
+            last_reviewed: review.last_reviewed,
+            days_since: review.days_since,
+            every_days: review.every_days,
+            due: review.due,
+            unreviewed_log_days: unreviewed,
+            memory_changed_outside_review: review.memory_changed,
+        },
         project: None,
     }
 }
@@ -387,14 +341,9 @@ pub fn recent(id: &Identity, days: i64) -> Vec<Recent> {
         .to_string();
     let mut out = vec![];
     for e in crate::state::tracked(id) {
-        let stamped = crate::state::scope_of(&e.rel).and_then(|(scope, rel)| {
-            id.read_json(&format!("{scope}/state.json"))?
-                .get("files")?
-                .get(rel)?
-                .get("updated")?
-                .as_str()
-                .map(str::to_string)
-        });
+        let stamped = crate::state::record(id, &e.rel)
+            .and_then(|r| r["updated"].as_str())
+            .map(str::to_string);
         let updated = stamped.or_else(|| e.field_str("updated"));
         if let Some(u) = updated.filter(|u| u.as_str() >= since.as_str()) {
             out.push(Recent {

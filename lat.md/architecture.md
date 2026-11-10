@@ -15,7 +15,7 @@ Each module owns one job; `main.rs` parses arguments, dispatches each command, a
 - `templates.rs` embeds every template with `include_str!` and fills `{{key}}` placeholders.
 - `create.rs` implements `owo new`; `add.rs` implements `owo add` and `owo write`.
 - `index.rs` generates `_index.md` files and `life/timeline.md`.
-- `state.rs` and `stamp.rs` hash files and maintain the three `state.json` files; `state::parse_day` is the one strict `YYYY-MM-DD` parser.
+- `state.rs` and `stamp.rs` hash files and maintain the three `state.json` files; `state::parse_day` is the one strict `YYYY-MM-DD` parser. Readers go through `state::doc`, `state::record` and `state::review` over the copies `Identity::load` reads; writers read, change and write a fresh copy.
 - `lint.rs` runs the rules in [[lint]].
 - `find.rs` resolves names, shows sections and KB files, and lists backlinks, outlinks and orphans.
 - `status.rs` derives current state and the Now block; `context.rs` builds the tiered load set.
@@ -28,7 +28,7 @@ Each module owns one job; `main.rs` parses arguments, dispatches each command, a
 
 ## Loading an identity
 
-`Identity::load` reads `identity.json`, then walks the folder in file-name order and parses each `.md` file once.
+`Identity::load` reads `identity.json` and the three state files, then walks the folder in file-name order and parses each `.md` file once.
 
 Path decides the kind: `life/events/x.md` is an event, `life/locations/<slug>/overview.md` a location, any other file in that folder a location detail, `_index.md` and `life/timeline.md` are generated. Files outside the layout get `Kind::Unknown`, which lint reports.
 

@@ -5,7 +5,7 @@ use crate::markdown;
 use crate::output::{Diagnostic, Level};
 use crate::slug::is_slug;
 use crate::{index, state};
-use chrono::{DateTime, NaiveDate, Utc};
+use chrono::NaiveDate;
 use serde_json::Value as Json;
 use serde_json::Value as Yaml;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
@@ -609,24 +609,15 @@ fn generated(c: &mut Ctx) {
     }
 }
 
-fn soul_state(c: &Ctx) -> Option<Json> {
-    c.id.read_json("soul/state.json")
-}
-
 fn memory_review(c: &mut Ctx) {
-    let (Some(state_doc), Some(memory)) = (soul_state(c), c.id.entry("soul/MEMORY.md")) else {
+    if state::doc(c.id, "soul").is_null() || !state::review(c.id).memory_changed {
         return;
-    };
-    let recorded = state_doc
-        .pointer("/review/memory_hash")
-        .and_then(Json::as_str);
-    if recorded != Some(state::hash(&memory.text).as_str()) {
-        c.push(warn(
-            "memory-review",
-            "soul/MEMORY.md",
-            "MEMORY.md changed outside a review; review compiles MEMORY (`owo review`)",
-        ));
     }
+    c.push(warn(
+        "memory-review",
+        "soul/MEMORY.md",
+        "MEMORY.md changed outside a review; review compiles MEMORY (`owo review`)",
+    ));
 }
 
 fn state_rule(c: &mut Ctx) {
@@ -759,8 +750,7 @@ fn orphans(c: &mut Ctx) {
 }
 
 fn soul_evidence(c: &mut Ctx) {
-    let Some(doc) = soul_state(c) else { return };
-    let Some(history) = doc.get("history").and_then(Json::as_array) else {
+    let Some(history) = state::doc(c.id, "soul")["history"].as_array() else {
         return;
     };
     let mut found = vec![];
@@ -792,28 +782,18 @@ fn soul_evidence(c: &mut Ctx) {
 }
 
 fn review_due(c: &mut Ctx) {
-    let every =
-        c.id.manifest
-            .as_ref()
-            .and_then(|m| m.get("review_every_days"))
-            .and_then(Json::as_i64)
-            .unwrap_or(7);
-    let last = soul_state(c).and_then(|d| {
-        d.pointer("/review/last_reviewed")
-            .and_then(Json::as_str)
-            .map(str::to_string)
-    });
-    let msg = match last.as_deref().map(DateTime::parse_from_rfc3339) {
-        None => {
+    let r = state::review(c.id);
+    let msg = match (&r.last_reviewed, r.days_since) {
+        (None, _) => {
             Some("never reviewed; run `owo review` when there is something to compile".to_string())
         }
-        Some(Err(_)) => Some("review.last_reviewed is not an RFC 3339 timestamp".to_string()),
-        Some(Ok(t)) => {
-            let days = (Utc::now() - t.with_timezone(&Utc)).num_days();
-            (days >= every).then(|| {
-                format!("review is due: {days} days since the last review (every {every})")
-            })
-        }
+        (Some(_), None) => Some("review.last_reviewed is not an RFC 3339 timestamp".to_string()),
+        (Some(_), Some(days)) => r.due.then(|| {
+            format!(
+                "review is due: {days} days since the last review (every {})",
+                r.every_days
+            )
+        }),
     };
     if let Some(m) = msg {
         c.push(Diagnostic::new(
