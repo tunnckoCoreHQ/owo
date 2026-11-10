@@ -38,6 +38,14 @@ fn frontmatter(text: &str) -> Fields {
         .unwrap_or_default()
 }
 
+/// The first line of why a v1 file's frontmatter does not parse, if it does not.
+fn frontmatter_error(text: &str) -> Option<String> {
+    crate::markdown::split(text)
+        .frontmatter
+        .and_then(|fm| parse_frontmatter(fm).err())
+        .map(|e| e.lines().next().unwrap_or_default().to_string())
+}
+
 /// The title a migrated file gets: frontmatter `title`, else the first `# ` heading, else the stem.
 fn title_of(text: &str, stem: &str) -> String {
     frontmatter(text)
@@ -208,6 +216,13 @@ fn migrate_locations(
     r: &mut Report,
 ) -> Result<()> {
     let mut write = |from: &Path, text: &str, to: String, kind: &str, parent: Option<&str>| {
+        if let Some(e) = frontmatter_error(text) {
+            r.skipped.push(format!(
+                "{} (frontmatter does not parse: {e}; move by hand)",
+                rel(from)
+            ));
+            return anyhow::Ok(());
+        }
         let target = dir.join(&to);
         if target.exists() {
             r.skipped
@@ -317,10 +332,17 @@ pub fn v1(src: &Path, out: &Path) -> Result<Report> {
         .map(str::to_string)
         .unwrap_or_else(|| slug.clone());
     crate::create::new_identity(root, &name, &slug)?;
-    let dir = root.join(&slug);
+    fill(src, &refs, root, &slug, &manifest).inspect_err(|_| {
+        let _ = fs::remove_dir_all(root.join(&slug));
+    })
+}
+
+/// Fills a just-created identity from a v1 folder. The caller removes the folder on error.
+fn fill(src: &Path, refs: &Path, root: &Path, slug: &str, manifest: &Value) -> Result<Report> {
+    let dir = root.join(slug);
     let today = crate::state::day(&crate::state::now()).to_string();
     let mut r = Report {
-        identity: slug.clone(),
+        identity: slug.to_string(),
         dir: dir.display().to_string(),
         ..Default::default()
     };
@@ -395,6 +417,13 @@ pub fn v1(src: &Path, out: &Path) -> Result<Report> {
                 continue;
             }
             let text = fs::read_to_string(&p)?;
+            if let Some(e) = frontmatter_error(&text) {
+                r.skipped.push(format!(
+                    "{} (frontmatter does not parse: {e}; move by hand)",
+                    rel(&p)
+                ));
+                continue;
+            }
             let date = date.or_else(|| {
                 frontmatter(&text)
                     .get("date")
@@ -444,13 +473,13 @@ pub fn v1(src: &Path, out: &Path) -> Result<Report> {
                     date.as_deref().filter(|_| *dated),
                     None,
                     &today,
-                    &slug,
+                    slug,
                 ),
             )?;
             r.moved.push((rel(&p), format!("{to}/{name}")));
         }
     }
-    migrate_locations(&world.join("locations"), &dir, &today, &slug, &rel, &mut r)?;
+    migrate_locations(&world.join("locations"), &dir, &today, slug, &rel, &mut r)?;
     if let Ok(text) = fs::read_to_string(world.join("meta/conflicts.md")) {
         for block in format!("\n{text}").split("\n## ").skip(1) {
             let (title, body) = block.split_once('\n').unwrap_or((block, ""));
@@ -477,7 +506,7 @@ pub fn v1(src: &Path, out: &Path) -> Result<Report> {
             );
             fs::write(
                 dir.join(&file),
-                normalize(&doc, "conflict", &name, None, None, &today, &slug),
+                normalize(&doc, "conflict", &name, None, None, &today, slug),
             )?;
             r.moved
                 .push(("references/world/meta/conflicts.md".into(), file));
@@ -496,7 +525,7 @@ pub fn v1(src: &Path, out: &Path) -> Result<Report> {
     {
         let name = e.path().strip_prefix(&from).expect("under sources");
         let name = name.to_string_lossy().replace('\\', "/");
-        let target = root.join("sources").join(&slug).join(&name);
+        let target = root.join("sources").join(slug).join(&name);
         if target.exists() {
             r.skipped.push(format!(
                 "{} (target <root>/sources/{slug}/{name} exists; merge by hand)",
@@ -510,7 +539,7 @@ pub fn v1(src: &Path, out: &Path) -> Result<Report> {
             .push((rel(e.path()), format!("<root>/sources/{slug}/{name}")));
     }
     let known: Vec<String> = r.moved.iter().map(|(f, _)| f.clone()).collect();
-    for e in walkdir::WalkDir::new(&refs)
+    for e in walkdir::WalkDir::new(refs)
         .into_iter()
         .flatten()
         .filter(|e| {
@@ -523,9 +552,9 @@ pub fn v1(src: &Path, out: &Path) -> Result<Report> {
         }
     }
 
-    let id = crate::identity::Identity::load(root, &slug)?;
+    let id = crate::identity::Identity::load(root, slug)?;
     crate::index::write(&id)?;
-    let id = crate::identity::Identity::load(root, &slug)?;
+    let id = crate::identity::Identity::load(root, slug)?;
     crate::stamp::run(&id, false)?;
     r.checklist = vec![
         "Move MEMORY \"Moments\" into event links under \"Defining moments\".".into(),
