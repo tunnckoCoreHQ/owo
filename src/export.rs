@@ -21,19 +21,25 @@ pub const LICENSES: &[&str] = &[
     "UNLICENSED",
 ];
 
-/// Body text without the first `# ` heading and without the listed `## ` sections.
+/// Body text without its `# ` headings and without the listed sections at any level.
+/// Headings inside fenced code do not count.
 fn body_without(text: &str, drop: &[&str]) -> String {
     let body = markdown::split(text).body;
     let mut out = vec![];
-    let mut skipping = false;
-    for line in body.lines() {
-        if line.starts_with("# ") {
-            continue;
+    let mut skipping: Option<usize> = None;
+    for (_, line, open) in markdown::unfenced(body) {
+        if let Some((level, h)) = markdown::heading(line).filter(|_| open) {
+            if skipping.is_some_and(|at| level <= at) {
+                skipping = None;
+            }
+            if skipping.is_none() && drop.iter().any(|d| d.eq_ignore_ascii_case(h)) {
+                skipping = Some(level);
+            }
+            if level == 1 {
+                continue;
+            }
         }
-        if let Some(h) = line.strip_prefix("## ") {
-            skipping = drop.iter().any(|d| d.eq_ignore_ascii_case(h.trim()));
-        }
-        if !skipping {
+        if skipping.is_none() {
             out.push(line);
         }
     }
@@ -475,5 +481,14 @@ mod tests {
         assert_eq!(super::base64(b"Ma"), "TWE=");
         assert_eq!(super::base64(b"M"), "TQ==");
         assert_eq!(super::crc32(b"IEND"), 0xAE42_6082);
+    }
+
+    #[test]
+    fn body_without_drops_sections_at_any_level_outside_code() {
+        let text = "# Sam\n\nSails.\n\n### Identifiers\n\n- born 1990\n\n## Notes\n\n```sh\n# keep me\n```\n";
+        assert_eq!(
+            super::body_without(text, &["Identifiers"]),
+            "Sails.\n\n## Notes\n\n```sh\n# keep me\n```"
+        );
     }
 }

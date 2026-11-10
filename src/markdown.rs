@@ -67,7 +67,7 @@ pub fn heading(line: &str) -> Option<(usize, &str)> {
 }
 
 /// Lines with their 0-based index, marking each as outside fenced code (fence lines are not).
-fn unfenced(body: &str) -> impl Iterator<Item = (usize, &str, bool)> {
+pub fn unfenced(body: &str) -> impl Iterator<Item = (usize, &str, bool)> {
     let mut fenced = false;
     body.lines().enumerate().map(move |(i, line)| {
         if line.trim_start().starts_with("```") {
