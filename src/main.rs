@@ -184,12 +184,7 @@ fn run(cli: &Cli, out: &Out) -> Result<i32> {
         }
         Command::Lint { rules, changed } => {
             let (_, id) = load(cli)?;
-            let mut found = lint::run(
-                &id,
-                &lint::Options {
-                    rules: rules.clone(),
-                },
-            );
+            let mut found = lint::run(&id, rules);
             if *changed {
                 let paths = changes::changed_paths(&id);
                 found.retain(|d| paths.contains(&d.path));

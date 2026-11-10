@@ -68,10 +68,9 @@ fn levenshtein(a: &str, b: &str) -> usize {
 
 /// Resolves a name the way links do, optionally limited to one entry type.
 pub fn resolve(id: &Identity, name: &str, kind: Option<&str>) -> Resolution {
-    let keys = id.link_keys();
     let matches_kind = |i: &usize| kind.is_none_or(|k| kind_name(id.entries[*i].kind) == k);
     let hits: Vec<usize> = id
-        .resolve_link(&keys, name)
+        .resolve_link(name)
         .into_iter()
         .filter(matches_kind)
         .collect();
@@ -79,7 +78,8 @@ pub fn resolve(id: &Identity, name: &str, kind: Option<&str>) -> Resolution {
         1 => Resolution::Found(hits[0]),
         0 => {
             let needle = name.trim().to_lowercase();
-            let mut scored: Vec<(usize, usize)> = keys
+            let mut scored: Vec<(usize, usize)> = id
+                .keys
                 .iter()
                 .flat_map(|(k, idx)| {
                     let d = if k.contains(&needle) || needle.contains(k.as_str()) {
@@ -132,14 +132,13 @@ pub struct LinkRef {
 
 /// Links that point at entry `idx` (backlinks), from authored files.
 pub fn backlinks(id: &Identity, idx: usize) -> Vec<LinkRef> {
-    let keys = id.link_keys();
     let mut out = vec![];
     for (src, e) in id.entries.iter().enumerate() {
         if src == idx || e.is_generated() {
             continue;
         }
         for (line, link) in file_links(e) {
-            if id.resolve_link(&keys, &link.target).contains(&idx) {
+            if id.resolve_link(&link.target).contains(&idx) {
                 out.push(LinkRef {
                     path: e.rel.clone(),
                     line,
@@ -154,13 +153,12 @@ pub fn backlinks(id: &Identity, idx: usize) -> Vec<LinkRef> {
 
 /// Links going out of entry `idx`, with the path they resolve to (empty when broken).
 pub fn outlinks(id: &Identity, idx: usize) -> Vec<LinkRef> {
-    let keys = id.link_keys();
     let e = &id.entries[idx];
     file_links(e)
         .into_iter()
         .map(|(line, link)| {
             let path = id
-                .resolve_link(&keys, &link.target)
+                .resolve_link(&link.target)
                 .first()
                 .map(|i| id.entries[*i].rel.clone())
                 .unwrap_or_default();
@@ -227,7 +225,6 @@ fn line_text(e: &Entry, line: usize) -> String {
 
 /// Entries that should be linked from somewhere but are not.
 pub fn orphans(id: &Identity) -> Vec<usize> {
-    let keys = id.link_keys();
     let mut inbound = vec![0usize; id.entries.len()];
     for (src, e) in id
         .entries
@@ -236,7 +233,7 @@ pub fn orphans(id: &Identity) -> Vec<usize> {
         .filter(|(_, e)| !e.is_generated())
     {
         for (_, link) in file_links(e) {
-            for hit in id.resolve_link(&keys, &link.target) {
+            for hit in id.resolve_link(&link.target) {
                 if hit != src {
                     inbound[hit] += 1;
                 }

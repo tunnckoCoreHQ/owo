@@ -167,6 +167,8 @@ pub struct Identity {
     /// `soul`, `life` and `work` state.json in `state::SCOPES` order, read through `state::doc`.
     pub state: [Json; 3],
     pub entries: Vec<Entry>,
+    /// Lowercase link key to the entries it can point at; see `resolve_link`.
+    pub keys: BTreeMap<String, Vec<usize>>,
 }
 
 pub fn classify(rel: &str) -> Kind {
@@ -302,6 +304,7 @@ impl Identity {
             manifest,
             manifest_error,
             state,
+            keys: Self::link_keys(&entries),
             entries,
         })
     }
@@ -319,7 +322,7 @@ impl Identity {
     }
 
     /// Map from lowercase link key to the entries it can point at.
-    pub fn link_keys(&self) -> BTreeMap<String, Vec<usize>> {
+    fn link_keys(entries: &[Entry]) -> BTreeMap<String, Vec<usize>> {
         let mut keys: BTreeMap<String, Vec<usize>> = BTreeMap::new();
         let mut add = |key: String, idx: usize| {
             let key = key.trim().to_lowercase();
@@ -331,7 +334,7 @@ impl Identity {
                 list.push(idx);
             }
         };
-        for (idx, e) in self.entries.iter().enumerate() {
+        for (idx, e) in entries.iter().enumerate() {
             if e.is_generated() {
                 continue;
             }
@@ -358,7 +361,7 @@ impl Identity {
 
     /// Resolves a link target to entry indexes. Tries the raw key (a path may end in `.md`),
     /// then its slug.
-    pub fn resolve_link(&self, keys: &BTreeMap<String, Vec<usize>>, target: &str) -> Vec<usize> {
+    pub fn resolve_link(&self, target: &str) -> Vec<usize> {
         // A file path inside the identity folder (absolute, or relative to the working directory)
         // resolves like its identity-relative path.
         let looks_like_path = target.contains('/') || target.ends_with(".md");
@@ -377,10 +380,10 @@ impl Identity {
         let target = inside.as_deref().unwrap_or(target);
         let raw = target.trim().to_lowercase();
         let raw = raw.strip_suffix(".md").unwrap_or(&raw).to_string();
-        if let Some(hit) = keys.get(&raw) {
+        if let Some(hit) = self.keys.get(&raw) {
             return hit.clone();
         }
-        keys.get(&slugify(target)).cloned().unwrap_or_default()
+        self.keys.get(&slugify(target)).cloned().unwrap_or_default()
     }
 
     /// Budget overrides from `identity.json` → `budgets`.

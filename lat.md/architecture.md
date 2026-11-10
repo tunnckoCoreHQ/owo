@@ -16,7 +16,7 @@ Each module owns one job; `main.rs` parses arguments, dispatches each command, a
 - `create.rs` implements `owo new`; `add.rs` implements `owo add` and `owo write`.
 - `index.rs` generates `_index.md` files and `life/timeline.md`.
 - `state.rs` and `stamp.rs` hash files and maintain the three `state.json` files; `state::parse_day` is the one strict `YYYY-MM-DD` parser. Readers go through `state::doc`, `state::record` and `state::review` over the copies `Identity::load` reads; writers read, change and write a fresh copy.
-- `lint.rs` runs the rules in [[lint]].
+- `lint.rs` runs the rules in [[lint]]; each rule appends findings and the runner names them after the rule.
 - `find.rs` resolves names, shows sections and KB files, and lists backlinks, outlinks and orphans.
 - `status.rs` derives current state and the Now block; `context.rs` builds the tiered load set.
 - `search.rs` is the BM25 ranker; `review.rs` builds the review packet, records finished reviews, and keeps the soul history.
@@ -34,6 +34,6 @@ Path decides the kind: `life/events/x.md` is an event, `life/locations/<slug>/ov
 
 ## Link resolution
 
-Links resolve through one lowercase key map built from titles, aliases, file stems (folder name for `overview.md`), identity-relative paths and soul file names.
+Links resolve through one lowercase key map, built once in `Identity::load`, from titles, aliases, file stems (folder name for `overview.md`), identity-relative paths and soul file names.
 
 `resolve_link` tries the raw lowercase target, then its slug. Generated files are left out of the map, so links always land on authored entries.

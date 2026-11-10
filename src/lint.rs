@@ -23,23 +23,8 @@ pub const BUDGETS: &[(&str, usize)] = &[
 const DUPE_WORDS: usize = 12;
 const STATUSES: &[&str] = &["canon", "disputed", "superseded"];
 
-pub struct Options {
-    pub rules: Vec<String>,
-}
-
-type Check = fn(&mut Ctx);
-
-struct Ctx<'a> {
-    id: &'a Identity,
-    keys: BTreeMap<String, Vec<usize>>,
-    out: Vec<Diagnostic>,
-}
-
-impl Ctx<'_> {
-    fn push(&mut self, d: Diagnostic) {
-        self.out.push(d);
-    }
-}
+/// A rule appends its findings; the runner names them after the rule.
+type Check = fn(&Identity, &mut Vec<Diagnostic>);
 
 /// Every rule, in run order.
 const CHECKS: &[(&str, Check)] = &[
@@ -67,39 +52,38 @@ pub fn rules() -> impl Iterator<Item = &'static str> {
     CHECKS.iter().map(|(name, _)| *name)
 }
 
-pub fn run(id: &Identity, opts: &Options) -> Vec<Diagnostic> {
-    let mut ctx = Ctx {
-        id,
-        keys: id.link_keys(),
-        out: vec![],
-    };
-    let enabled = |rule: &str| opts.rules.is_empty() || opts.rules.iter().any(|r| r == rule);
+/// Runs the named rules, or every rule when `rules` is empty.
+pub fn run(id: &Identity, rules: &[String]) -> Vec<Diagnostic> {
+    let mut out = vec![];
     for (name, check) in CHECKS {
-        if enabled(name) {
-            check(&mut ctx);
+        if rules.is_empty() || rules.iter().any(|r| r == name) {
+            let start = out.len();
+            check(id, &mut out);
+            for d in &mut out[start..] {
+                d.rule = name.to_string();
+            }
         }
     }
-    let mut out = ctx.out;
     out.sort_by(|a, b| {
         (a.level, &a.path, a.line, &a.rule).cmp(&(b.level, &b.path, b.line, &b.rule))
     });
     out
 }
 
-fn err(rule: &str, path: &str, msg: impl Into<String>) -> Diagnostic {
-    Diagnostic::new(rule, Level::Error, path, msg)
+fn err(path: &str, msg: impl Into<String>) -> Diagnostic {
+    Diagnostic::new(Level::Error, path, msg)
 }
 
-fn warn(rule: &str, path: &str, msg: impl Into<String>) -> Diagnostic {
-    Diagnostic::new(rule, Level::Warning, path, msg)
+fn warn(path: &str, msg: impl Into<String>) -> Diagnostic {
+    Diagnostic::new(Level::Warning, path, msg)
 }
 
 fn parse_date(value: &str) -> Option<NaiveDate> {
     state::parse_day(value.trim()).ok()
 }
 
-fn tree(c: &mut Ctx) {
-    let dir = c.id.dir.clone();
+fn tree(id: &Identity, out: &mut Vec<Diagnostic>) {
+    let dir = id.dir.clone();
     let mut required: Vec<String> = vec![
         "identity.json".into(),
         "soul/soul.json".into(),
@@ -111,7 +95,7 @@ fn tree(c: &mut Ctx) {
     required.extend(SOUL_FILES.iter().map(|f| format!("soul/{f}")));
     for rel in &required {
         if !dir.join(rel).is_file() {
-            c.push(err("tree", rel, "required file is missing"));
+            out.push(err(rel, "required file is missing"));
         }
     }
     let mut dirs: Vec<String> = LIFE_CATEGORIES
@@ -121,34 +105,32 @@ fn tree(c: &mut Ctx) {
     dirs.push("work/projects".into());
     for rel in &dirs {
         if !dir.join(rel).is_dir() {
-            c.push(err("tree", rel, "required folder is missing"));
+            out.push(err(rel, "required folder is missing"));
         }
     }
 
-    match (&c.id.manifest, &c.id.manifest_error) {
-        (_, Some(e)) => c.push(err("tree", "identity.json", format!("invalid JSON: {e}"))),
+    match (&id.manifest, &id.manifest_error) {
+        (_, Some(e)) => out.push(err("identity.json", format!("invalid JSON: {e}"))),
         (Some(m), None) => {
             if m.get("schema").and_then(Json::as_str) != Some("owo/1") {
-                c.push(err("tree", "identity.json", "schema must be \"owo/1\""));
+                out.push(err("identity.json", "schema must be \"owo/1\""));
             }
-            if m.get("slug").and_then(Json::as_str) != Some(c.id.slug.as_str()) {
-                c.push(err(
-                    "tree",
+            if m.get("slug").and_then(Json::as_str) != Some(id.slug.as_str()) {
+                out.push(err(
                     "identity.json",
-                    format!("slug must equal the folder name {:?}", c.id.slug),
+                    format!("slug must equal the folder name {:?}", id.slug),
                 ));
             }
         }
         _ => {}
     }
     if dir.join("soul/soul.json").is_file() {
-        match c.id.read_json("soul/soul.json") {
-            None => c.push(err("tree", "soul/soul.json", "invalid JSON")),
+        match id.read_json("soul/soul.json") {
+            None => out.push(err("soul/soul.json", "invalid JSON")),
             Some(s) => {
                 for key in ["specVersion", "name", "displayName", "version"] {
                     if s.get(key).and_then(Json::as_str).is_none_or(str::is_empty) {
-                        c.push(err(
-                            "tree",
+                        out.push(err(
                             "soul/soul.json",
                             format!("SoulSpec field {key:?} is missing"),
                         ));
@@ -168,15 +150,14 @@ fn tree(c: &mut Ctx) {
             }
             let rel = format!("life/locations/{name}");
             if !path.join("overview.md").is_file() {
-                c.push(err("tree", &rel, "location folder needs overview.md"));
+                out.push(err(&rel, "location folder needs overview.md"));
             }
             if !is_slug(&name) {
-                c.push(err("tree", &rel, "location folder name must be a slug"));
+                out.push(err(&rel, "location folder name must be a slug"));
             }
             if let Ok(inner) = fs::read_dir(&path) {
                 for sub in inner.flatten().filter(|s| s.path().is_dir()) {
-                    c.push(err(
-                        "tree",
+                    out.push(err(
                         &format!("{rel}/{}", sub.file_name().to_string_lossy()),
                         "location folders sit one level deep",
                     ));
@@ -184,47 +165,28 @@ fn tree(c: &mut Ctx) {
             }
         }
     }
-    let unknown: Vec<String> =
-        c.id.entries
-            .iter()
-            .filter(|e| e.kind == Kind::Unknown)
-            .map(|e| e.rel.clone())
-            .collect();
-    for rel in unknown {
-        c.push(err("tree", &rel, "file sits outside the identity layout"));
+    for e in id.entries.iter().filter(|e| e.kind == Kind::Unknown) {
+        out.push(err(&e.rel, "file sits outside the identity layout"));
     }
-    let lossy: Vec<String> =
-        c.id.entries
-            .iter()
-            .filter(|e| e.lossy)
-            .map(|e| e.rel.clone())
-            .collect();
-    for rel in lossy {
-        c.push(err(
-            "tree",
-            &rel,
+    for e in id.entries.iter().filter(|e| e.lossy) {
+        out.push(err(
+            &e.rel,
             "file is not valid UTF-8; owo reads the bad bytes as U+FFFD",
         ));
     }
 }
 
-fn schema(c: &mut Ctx) {
-    let mut found = vec![];
-    for e in c.id.entries.iter().filter(|e| e.kind.has_frontmatter()) {
-        check_entry_schema(e, &mut found);
+fn schema(id: &Identity, out: &mut Vec<Diagnostic>) {
+    for e in id.entries.iter().filter(|e| e.kind.has_frontmatter()) {
+        check_entry_schema(e, out);
     }
-    c.out.extend(found);
 }
 
 fn check_entry_schema(e: &Entry, out: &mut Vec<Diagnostic>) {
     let rel = e.rel.as_str();
     let expected = e.kind.type_name().expect("frontmatter kinds have a type");
     if let Some(msg) = &e.frontmatter_error {
-        out.push(err(
-            "schema",
-            rel,
-            format!("frontmatter does not parse: {msg}"),
-        ));
+        out.push(err(rel, format!("frontmatter does not parse: {msg}")));
         return;
     }
     if e.frontmatter.is_none() {
@@ -233,59 +195,45 @@ fn check_entry_schema(e: &Entry, out: &mut Vec<Diagnostic>) {
         } else {
             "frontmatter is missing"
         };
-        out.push(err("schema", rel, msg));
+        out.push(err(rel, msg));
         return;
     }
     match e.field_str("type") {
         Some(t) if t == expected => {}
         Some(t) => out.push(err(
-            "schema",
             rel,
             format!("type is {t:?}; files here are {expected:?}"),
         )),
-        None => out.push(err("schema", rel, "type is missing")),
+        None => out.push(err(rel, "type is missing")),
     }
     if e.field_str("title").is_none_or(|t| t.trim().is_empty()) {
-        out.push(err("schema", rel, "title is missing"));
+        out.push(err(rel, "title is missing"));
     }
     match e.field_str("status") {
         Some(s) if STATUSES.contains(&s.as_str()) => {}
         Some(s) => out.push(err(
-            "schema",
             rel,
             format!("status {s:?} must be one of canon, disputed, superseded"),
         )),
-        None => out.push(err("schema", rel, "status is missing")),
+        None => out.push(err(rel, "status is missing")),
     }
     for key in ["created", "updated"] {
         match e.field_str(key) {
             Some(v) if parse_date(&v).is_some() => {}
-            Some(v) => out.push(err(
-                "schema",
-                rel,
-                format!("{key} {v:?} is not a YYYY-MM-DD date"),
-            )),
-            None => out.push(err("schema", rel, format!("{key} is missing"))),
+            Some(v) => out.push(err(rel, format!("{key} {v:?} is not a YYYY-MM-DD date"))),
+            None => out.push(err(rel, format!("{key} is missing"))),
         }
     }
     for key in ["aliases", "sources"] {
         match e.field(key) {
             None | Some(Yaml::Null) => {}
             Some(Yaml::Array(items)) if items.iter().all(|i| i.is_string()) => {}
-            Some(_) => out.push(err(
-                "schema",
-                rel,
-                format!("{key} must be a list of strings"),
-            )),
+            Some(_) => out.push(err(rel, format!("{key} must be a list of strings"))),
         }
     }
     let needs_summary = !matches!(e.kind, Kind::Log | Kind::Journal | Kind::Writing);
     if needs_summary && e.field_str("summary").is_none_or(|s| s.trim().is_empty()) {
-        out.push(warn(
-            "schema",
-            rel,
-            "summary is empty; indexes and search use it",
-        ));
+        out.push(warn(rel, "summary is empty; indexes and search use it"));
     }
 
     let file = rel
@@ -297,7 +245,7 @@ fn check_entry_schema(e: &Entry, out: &mut Vec<Diagnostic>) {
         Some(with_slug) => {
             let date = e.field_str("date");
             match date.as_deref().and_then(parse_date) {
-                None => out.push(err("schema", rel, "date is missing or not YYYY-MM-DD")),
+                None => out.push(err(rel, "date is missing or not YYYY-MM-DD")),
                 Some(d) => {
                     let d = d.format("%Y-%m-%d").to_string();
                     let ok = if with_slug {
@@ -311,7 +259,7 @@ fn check_entry_schema(e: &Entry, out: &mut Vec<Diagnostic>) {
                         } else {
                             format!("{d}.md")
                         };
-                        out.push(err("schema", rel, format!("file name must be {want}")));
+                        out.push(err(rel, format!("file name must be {want}")));
                     }
                 }
             }
@@ -322,11 +270,7 @@ fn check_entry_schema(e: &Entry, out: &mut Vec<Diagnostic>) {
                 && !is_slug(&stem)
                 && !(e.kind == Kind::Location && file == "overview")
             {
-                out.push(err(
-                    "schema",
-                    rel,
-                    format!("file name {stem:?} must be a slug"),
-                ));
+                out.push(err(rel, format!("file name {stem:?} must be a slug")));
             }
         }
     }
@@ -334,7 +278,6 @@ fn check_entry_schema(e: &Entry, out: &mut Vec<Diagnostic>) {
         |key: &str, allowed: &[&str], out: &mut Vec<Diagnostic>| match e.field_str(key) {
             Some(v) if allowed.contains(&v.as_str()) => {}
             _ => out.push(err(
-                "schema",
                 rel,
                 format!("{key} must be one of {}", allowed.join(", ")),
             )),
@@ -346,15 +289,11 @@ fn check_entry_schema(e: &Entry, out: &mut Vec<Diagnostic>) {
                 .and_then(parse_date)
                 .is_none()
             {
-                out.push(err(
-                    "schema",
-                    rel,
-                    "event date is missing or not YYYY-MM-DD",
-                ));
+                out.push(err(rel, "event date is missing or not YYYY-MM-DD"));
             }
             if let Some(v) = e.field_str("end_date") {
                 if parse_date(&v).is_none() {
-                    out.push(err("schema", rel, "end_date is not YYYY-MM-DD"));
+                    out.push(err(rel, "end_date is not YYYY-MM-DD"));
                 }
             }
         }
@@ -362,56 +301,46 @@ fn check_entry_schema(e: &Entry, out: &mut Vec<Diagnostic>) {
         Kind::Conflict => state_field("state", &["open", "resolved"], out),
         Kind::LocationDetail => {
             if e.field_str("parent").is_none_or(|p| p.trim().is_empty()) {
-                out.push(err("schema", rel, "parent is missing"));
+                out.push(err(rel, "parent is missing"));
             }
         }
         Kind::Note => {
             let folder = rel.split('/').nth(2).unwrap_or_default();
             if e.field_str("project").as_deref() != Some(folder) {
-                out.push(err("schema", rel, format!("project must be {folder:?}")));
+                out.push(err(rel, format!("project must be {folder:?}")));
             }
         }
         _ => {}
     }
 }
 
-fn soul_plain(c: &mut Ctx) {
-    let bad: Vec<String> =
-        c.id.entries
-            .iter()
-            .filter(|e| e.kind == Kind::Soul && e.text.starts_with("---"))
-            .map(|e| e.rel.clone())
-            .collect();
-    for rel in bad {
-        c.push(err(
-            "soul-plain",
-            &rel,
+fn soul_plain(id: &Identity, out: &mut Vec<Diagnostic>) {
+    for e in id
+        .entries
+        .iter()
+        .filter(|e| e.kind == Kind::Soul && e.text.starts_with("---"))
+    {
+        out.push(err(
+            &e.rel,
             "soul files are plain Markdown; stamps live in soul/state.json",
         ));
     }
 }
 
-fn links(c: &mut Ctx) {
-    let mut found = vec![];
-    for e in c.id.entries.iter().filter(|e| !e.is_generated()) {
+fn links(id: &Identity, out: &mut Vec<Diagnostic>) {
+    for e in id.entries.iter().filter(|e| !e.is_generated()) {
         for (line, link) in crate::find::file_links(e) {
-            let hits = c.id.resolve_link(&c.keys, &link.target);
+            let hits = id.resolve_link(&link.target);
             match hits.len() {
-                0 => found.push(
-                    err(
-                        "links",
-                        &e.rel,
-                        format!("[[{}]] does not resolve", link.target),
-                    )
-                    .at(line),
-                ),
+                0 => {
+                    out.push(err(&e.rel, format!("[[{}]] does not resolve", link.target)).at(line))
+                }
                 1 => {
-                    let target = &c.id.entries[hits[0]];
+                    let target = &id.entries[hits[0]];
                     if let Some(s) = link.section.as_deref().filter(|s| !s.is_empty()) {
                         if markdown::section(target.body(), s).is_none() {
-                            found.push(
+                            out.push(
                                 warn(
-                                    "links",
                                     &e.rel,
                                     format!(
                                         "[[{}#{s}]]: {} has no section {s:?}",
@@ -423,9 +352,8 @@ fn links(c: &mut Ctx) {
                         }
                     }
                 }
-                _ => found.push(
+                _ => out.push(
                     warn(
-                        "links",
                         &e.rel,
                         format!("[[{}]] matches {} entries", link.target, hits.len()),
                     )
@@ -434,15 +362,14 @@ fn links(c: &mut Ctx) {
             }
         }
     }
-    c.out.extend(found);
 }
 
-fn unique(c: &mut Ctx) {
+fn unique(id: &Identity, out: &mut Vec<Diagnostic>) {
     let mut seen: BTreeMap<String, Vec<&str>> = BTreeMap::new();
-    for e in
-        c.id.entries
-            .iter()
-            .filter(|e| !e.is_generated() && e.kind != Kind::Example)
+    for e in id
+        .entries
+        .iter()
+        .filter(|e| !e.is_generated() && e.kind != Kind::Example)
     {
         let mut names: BTreeSet<String> =
             e.aliases.iter().map(|a| a.trim().to_lowercase()).collect();
@@ -453,11 +380,9 @@ fn unique(c: &mut Ctx) {
             seen.entry(n).or_default().push(&e.rel);
         }
     }
-    let mut found = vec![];
     for (name, paths) in seen.into_iter().filter(|(_, p)| p.len() > 1) {
         for p in &paths {
-            found.push(err(
-                "unique",
+            out.push(err(
                 p,
                 format!(
                     "title or alias {name:?} is also used by {}",
@@ -471,7 +396,6 @@ fn unique(c: &mut Ctx) {
             ));
         }
     }
-    c.out.extend(found);
 }
 
 /// Identifier values and their home file.
@@ -509,10 +433,9 @@ fn identifier_values(id: &Identity) -> Vec<(String, String)> {
     out
 }
 
-fn identifiers(c: &mut Ctx) {
-    let values = identifier_values(c.id);
-    let mut found = vec![];
-    for e in &c.id.entries {
+fn identifiers(id: &Identity, out: &mut Vec<Diagnostic>) {
+    let values = identifier_values(id);
+    for e in &id.entries {
         // In the home file, only the `## Identifiers` lines may hold the values.
         let split = markdown::split(&e.text);
         let home_lines: Vec<usize> = markdown::section(split.body, "Identifiers")
@@ -530,65 +453,59 @@ fn identifiers(c: &mut Ctx) {
                     } else {
                         format!("identifier {value:?} belongs only in {home}")
                     };
-                    found.push(err("identifiers", &e.rel, msg).at(i + 1));
+                    out.push(err(&e.rel, msg).at(i + 1));
                 }
             }
         }
     }
-    c.out.extend(found);
 }
 
-fn journal(c: &mut Ctx) {
-    let mut found = vec![];
-    for e in
-        c.id.entries
-            .iter()
-            .filter(|e| e.kind != Kind::Journal && !e.is_generated())
+fn journal(id: &Identity, out: &mut Vec<Diagnostic>) {
+    for e in id
+        .entries
+        .iter()
+        .filter(|e| e.kind != Kind::Journal && !e.is_generated())
     {
         for (line, link) in crate::find::raw_links(e) {
-            let hits = c.id.resolve_link(&c.keys, &link.target);
-            if hits.iter().any(|&i| c.id.entries[i].kind == Kind::Journal) {
-                found.push(err("journal", &e.rel, format!("[[{}]] links into life/journal/; journal links stay between journal entries", link.target)).at(line));
+            let hits = id.resolve_link(&link.target);
+            if hits.iter().any(|&i| id.entries[i].kind == Kind::Journal) {
+                out.push(err(&e.rel, format!("[[{}]] links into life/journal/; journal links stay between journal entries", link.target)).at(line));
             }
         }
     }
-    c.out.extend(found);
 }
 
-fn link_hits(c: &Ctx, value: &str) -> Vec<usize> {
+fn link_hits(id: &Identity, value: &str) -> Vec<usize> {
     markdown::links(value)
         .iter()
-        .flat_map(|l| c.id.resolve_link(&c.keys, &l.target))
+        .flat_map(|l| id.resolve_link(&l.target))
         .collect()
 }
 
-fn supersede(c: &mut Ctx) {
-    let mut found = vec![];
-    let open_conflict_targets: BTreeSet<usize> =
-        c.id.entries
-            .iter()
-            .filter(|e| e.kind == Kind::Conflict && e.field_str("state").as_deref() == Some("open"))
-            .flat_map(|e| {
-                crate::find::raw_links(e)
-                    .into_iter()
-                    .flat_map(|(_, l)| c.id.resolve_link(&c.keys, &l.target))
-            })
-            .collect();
-    for (idx, e) in c.id.entries.iter().enumerate() {
+fn supersede(id: &Identity, out: &mut Vec<Diagnostic>) {
+    let open_conflict_targets: BTreeSet<usize> = id
+        .entries
+        .iter()
+        .filter(|e| e.kind == Kind::Conflict && e.field_str("state").as_deref() == Some("open"))
+        .flat_map(|e| {
+            crate::find::raw_links(e)
+                .into_iter()
+                .flat_map(|(_, l)| id.resolve_link(&l.target))
+        })
+        .collect();
+    for (idx, e) in id.entries.iter().enumerate() {
         match e.field_str("status").as_deref() {
             Some("superseded") => {
                 let target = e.field_str("superseded_by").unwrap_or_default();
-                if link_hits(c, &target).is_empty() {
-                    found.push(err(
-                        "supersede",
+                if link_hits(id, &target).is_empty() {
+                    out.push(err(
                         &e.rel,
                         "superseded entries need superseded_by: \"[[Replacement]]\" that resolves",
                     ));
                 }
             }
             Some("disputed") if !open_conflict_targets.contains(&idx) => {
-                found.push(err(
-                    "supersede",
+                out.push(err(
                     &e.rel,
                     "disputed entries need an open conflict in life/conflicts/ that links here",
                 ));
@@ -596,82 +513,65 @@ fn supersede(c: &mut Ctx) {
             _ => {}
         }
     }
-    c.out.extend(found);
 }
 
-fn generated(c: &mut Ctx) {
-    for rel in index::stale(c.id) {
-        c.push(err(
-            "generated",
-            &rel,
-            "generated file is out of date; run `owo index`",
-        ));
+fn generated(id: &Identity, out: &mut Vec<Diagnostic>) {
+    for rel in index::stale(id) {
+        out.push(err(&rel, "generated file is out of date; run `owo index`"));
     }
 }
 
-fn memory_review(c: &mut Ctx) {
-    if state::doc(c.id, "soul").is_null() || !state::review(c.id).memory_changed {
+fn memory_review(id: &Identity, out: &mut Vec<Diagnostic>) {
+    if state::doc(id, "soul").is_null() || !state::review(id).memory_changed {
         return;
     }
-    c.push(warn(
-        "memory-review",
+    out.push(warn(
         "soul/MEMORY.md",
         "MEMORY.md changed outside a review; review compiles MEMORY (`owo review`)",
     ));
 }
 
 /// The drift `owo stamp --check` reports, one warning per file.
-fn state_rule(c: &mut Ctx) {
-    let report = match crate::stamp::run(c.id, true) {
+fn state_rule(id: &Identity, out: &mut Vec<Diagnostic>) {
+    let report = match crate::stamp::run(id, true) {
         Ok(r) => r,
         Err(e) => {
             // Only a state file that does not parse stops the check.
             let path = state::SCOPES
                 .iter()
                 .map(|s| format!("{s}/state.json"))
-                .find(|p| c.id.read_object(p).is_err())
+                .find(|p| id.read_object(p).is_err())
                 .unwrap_or_default();
-            return c.push(warn("state", &path, format!("{e:#}")));
+            return out.push(warn(&path, format!("{e:#}")));
         }
     };
     for rel in &report.added {
         let scope = state::scope_of(rel).map_or("", |(s, _)| s);
-        c.push(warn(
-            "state",
-            rel,
-            format!("not stamped in {scope}/state.json"),
-        ));
+        out.push(warn(rel, format!("not stamped in {scope}/state.json")));
     }
     for rel in &report.changed {
-        c.push(warn("state", rel, "changed since the last stamp"));
+        out.push(warn(rel, "changed since the last stamp"));
     }
     for gone in &report.removed {
         let (scope, rel) = gone.split_once('/').expect("scope/rel");
-        c.push(warn(
-            "state",
+        out.push(warn(
             &format!("{scope}/state.json"),
             format!("stamps {rel}, which is gone"),
         ));
     }
 }
 
-fn budget(c: &mut Ctx) {
-    let mut found = vec![];
+fn budget(id: &Identity, out: &mut Vec<Diagnostic>) {
     for (file, default) in BUDGETS {
-        let Some(e) = c.id.entry(&format!("soul/{file}")) else {
+        let Some(e) = id.entry(&format!("soul/{file}")) else {
             continue;
         };
-        let limit = c.id.budget_override(file).unwrap_or(*default);
+        let limit = id.budget_override(file).unwrap_or(*default);
         let words = markdown::word_count(&e.text);
         if words > limit {
-            found.push(warn(
-                "budget",
-                &e.rel,
-                format!("{words} words, soft budget {limit}"),
-            ));
+            out.push(warn(&e.rel, format!("{words} words, soft budget {limit}")));
         }
     }
-    c.out.extend(found);
 }
 
 fn shingles(body: &str) -> BTreeSet<String> {
@@ -688,12 +588,12 @@ fn shingles(body: &str) -> BTreeSet<String> {
     words.windows(DUPE_WORDS).map(|w| w.join(" ")).collect()
 }
 
-fn dupes(c: &mut Ctx) {
-    let authored: Vec<&Entry> =
-        c.id.entries
-            .iter()
-            .filter(|e| !e.is_generated() && e.kind != Kind::Example)
-            .collect();
+fn dupes(id: &Identity, out: &mut Vec<Diagnostic>) {
+    let authored: Vec<&Entry> = id
+        .entries
+        .iter()
+        .filter(|e| !e.is_generated() && e.kind != Kind::Example)
+        .collect();
     let mut owners: HashMap<String, Vec<usize>> = HashMap::new();
     for (i, e) in authored.iter().enumerate() {
         for s in shingles(e.body()) {
@@ -713,9 +613,7 @@ fn dupes(c: &mut Ctx) {
     }
     for ((a, b), (n, passage)) in pairs {
         let windows = if n == 1 { "window" } else { "windows" };
-        c.push(warn(
-            "dupes",
-            &authored[a].rel,
+        out.push(warn(&authored[a].rel,
             format!(
                 "shares text with {} (\"{passage}\", {n} overlapping {DUPE_WORDS}-word {windows}); keep it in one home and link",
                 authored[b].rel
@@ -724,19 +622,18 @@ fn dupes(c: &mut Ctx) {
     }
 }
 
-fn orphans(c: &mut Ctx) {
-    let found: Vec<Diagnostic> = crate::find::orphans(c.id)
-        .into_iter()
-        .map(|i| warn("orphans", &c.id.entries[i].rel, "zero inbound links"))
-        .collect();
-    c.out.extend(found);
+fn orphans(id: &Identity, out: &mut Vec<Diagnostic>) {
+    out.extend(
+        crate::find::orphans(id)
+            .into_iter()
+            .map(|i| warn(&id.entries[i].rel, "zero inbound links")),
+    );
 }
 
-fn soul_evidence(c: &mut Ctx) {
-    let Some(history) = state::doc(c.id, "soul")["history"].as_array() else {
+fn soul_evidence(id: &Identity, out: &mut Vec<Diagnostic>) {
+    let Some(history) = state::doc(id, "soul")["history"].as_array() else {
         return;
     };
-    let mut found = vec![];
     for (n, record) in history.iter().enumerate() {
         let evidence: std::collections::BTreeSet<usize> = record
             .get("evidence")
@@ -745,27 +642,25 @@ fn soul_evidence(c: &mut Ctx) {
                 items
                     .iter()
                     .filter_map(Json::as_str)
-                    .flat_map(|v| link_hits(c, v))
+                    .flat_map(|v| link_hits(id, v))
                     .collect()
             })
             .unwrap_or_default();
         let defining = evidence.iter().any(|&i| {
-            let e = &c.id.entries[i];
+            let e = &id.entries[i];
             e.kind == Kind::Event && matches!(e.field("defining"), Some(Yaml::Bool(true)))
         });
         if evidence.len() < 2 && !defining {
-            found.push(warn(
-                "soul-evidence",
+            out.push(warn(
                 "soul/state.json",
                 format!("history[{n}] needs two evidence links or one defining event"),
             ));
         }
     }
-    c.out.extend(found);
 }
 
-fn review_due(c: &mut Ctx) {
-    let r = state::review(c.id);
+fn review_due(id: &Identity, out: &mut Vec<Diagnostic>) {
+    let r = state::review(id);
     let msg = match (&r.last_reviewed, r.days_since) {
         (None, _) => {
             Some("never reviewed; run `owo review` when there is something to compile".to_string())
@@ -779,32 +674,25 @@ fn review_due(c: &mut Ctx) {
         }),
     };
     if let Some(m) = msg {
-        c.push(Diagnostic::new(
-            "review-due",
-            Level::Info,
-            "soul/state.json",
-            m,
-        ));
+        out.push(Diagnostic::new(Level::Info, "soul/state.json", m));
     }
 }
 
 /// `[[kb:<p>:<path>#<Section>]]` links: the project must exist; when its KB folder exists,
 /// the file and section must too. A KB that is not checked out is skipped.
-fn kb_links(c: &mut Ctx) {
-    let mut found = vec![];
-    for e in c.id.entries.iter().filter(|e| !e.is_generated()) {
+fn kb_links(id: &Identity, out: &mut Vec<Diagnostic>) {
+    for e in id.entries.iter().filter(|e| !e.is_generated()) {
         for (line, link) in crate::find::raw_links(e) {
             let full = match &link.section {
                 Some(s) => format!("{}#{s}", link.target),
                 None => link.target.clone(),
             };
-            match crate::find::kb_link(c.id, &full) {
+            match crate::find::kb_link(id, &full) {
                 None => {}
-                Some(Err(msg)) => found.push(err("kb", &e.rel, msg).at(line)),
+                Some(Err(msg)) => out.push(err(&e.rel, msg).at(line)),
                 Some(Ok(k)) if !k.root_exists => {}
-                Some(Ok(k)) if !k.file_exists => found.push(
+                Some(Ok(k)) if !k.file_exists => out.push(
                     warn(
-                        "kb",
                         &e.rel,
                         format!(
                             "[[{}]]: {} not found",
@@ -814,9 +702,8 @@ fn kb_links(c: &mut Ctx) {
                     )
                     .at(line),
                 ),
-                Some(Ok(k)) if !k.section_exists => found.push(
+                Some(Ok(k)) if !k.section_exists => out.push(
                     warn(
-                        "kb",
                         &e.rel,
                         format!(
                             "[[{}]]: no section {:?}",
@@ -830,5 +717,4 @@ fn kb_links(c: &mut Ctx) {
             }
         }
     }
-    c.out.extend(found);
 }

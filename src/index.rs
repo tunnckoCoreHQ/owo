@@ -123,7 +123,6 @@ fn timeline(identity: &Identity) -> String {
         l
     };
     // Each event's era, resolved the way links resolve (title, alias, slug, `|label`).
-    let keys = identity.link_keys();
     let era_of: Vec<Option<String>> = events
         .iter()
         .map(|ev| {
@@ -132,7 +131,7 @@ fn timeline(identity: &Identity) -> String {
                 .first()
                 .map(|l| l.target.clone())
                 .unwrap_or(value);
-            match identity.resolve_link(&keys, &target)[..] {
+            match identity.resolve_link(&target)[..] {
                 [i] if identity.entries[i].kind == Kind::Era => {
                     Some(identity.entries[i].rel.clone())
                 }

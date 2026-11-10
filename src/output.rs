@@ -40,14 +40,10 @@ pub struct Diagnostic {
 }
 
 impl Diagnostic {
-    pub fn new(
-        rule: &str,
-        level: Level,
-        path: impl Into<String>,
-        message: impl Into<String>,
-    ) -> Self {
+    /// A finding with no rule name yet; the lint runner sets it.
+    pub fn new(level: Level, path: impl Into<String>, message: impl Into<String>) -> Self {
         Self {
-            rule: rule.to_string(),
+            rule: String::new(),
             level,
             path: path.into(),
             line: None,
