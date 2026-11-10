@@ -41,7 +41,7 @@ Each command with its flags and exit behavior.
 - voice and look: `soul/VOICE.md` and `soul/LOOK.md` with `--voice` and `--look`.
 - project, with `--project <p>`: `work/README.md`, `project.md`, the newest N notes, and the KB pointer.
 
-The KB path comes from `project.md` `kb`, else `identity.json` `projects.<p>.kb` (both relative to the identity folder, with `~/` as the home folder), else `.owo.toml` `kb` (relative to that file, with `~/` as the home folder). See [[decisions#KB pointer is always emitted]]. A project context records a session in `work/state.json` unless `--no-touch`.
+The KB path comes from `project.md` `kb`, relative to the identity folder, with `~/` as the home folder. See [[decisions#KB pointer is always emitted]]. A project context records a session in `work/state.json` unless `--no-touch`.
 
 
 ## Review

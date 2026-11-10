@@ -35,7 +35,6 @@ use config::{need_identity, need_project, ConfigError};
 use identity::Kind;
 use output::{exit, Envelope, Level, Out};
 use serde_json::json;
-use std::path::PathBuf;
 use std::process::ExitCode;
 
 fn main() -> ExitCode {
@@ -415,7 +414,6 @@ fn run(cli: &Cli, out: &Out) -> Result<i32> {
                 voice: *voice,
                 look: *look,
                 project,
-                config_kb: r.kb.as_ref().map(PathBuf::from),
                 with,
                 notes: *notes,
             };

@@ -17,7 +17,6 @@ pub struct FileConfig {
     pub root: Option<String>,
     pub identity: Option<String>,
     pub project: Option<String>,
-    pub kb: Option<String>,
 }
 
 /// Where a resolved value came from, reported by `owo config`.
@@ -39,7 +38,6 @@ pub struct Resolved {
     pub identity: Option<String>,
     pub identity_source: Option<Source>,
     pub project: Option<String>,
-    pub kb: Option<String>,
 }
 
 /// Inputs to resolution, so tests can run without touching the real environment.
@@ -193,17 +191,12 @@ pub fn resolve(inputs: &Inputs) -> Result<Resolved> {
         .or_else(|| inputs.env_project.clone())
         .or_else(|| project_cfg.as_ref().and_then(|(_, c)| c.project.clone()));
 
-    let kb = project_cfg.as_ref().and_then(|(file, c)| {
-        let base = file.parent().unwrap_or(Path::new("."));
-        Some(inputs.expand(c.kb.as_ref()?, base).display().to_string())
-    });
     Ok(Resolved {
         root,
         root_source,
         identity,
         identity_source,
         project,
-        kb,
     })
 }
 

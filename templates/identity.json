@@ -6,6 +6,5 @@
   "accounts": [],
   "budgets": {},
   "review_every_days": 7,
-  "sync_every": 6,
-  "projects": {}
+  "sync_every": 6
 }

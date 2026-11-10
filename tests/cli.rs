@@ -516,11 +516,12 @@ fn owo_in(cwd: &Path, home: &Path) -> assert_cmd::Command {
 }
 
 #[test]
-fn owo_toml_in_a_parent_sets_identity_project_and_kb() {
+fn owo_toml_in_a_parent_sets_identity_and_project() {
     let tmp = copy_example("reviewer");
     copy_tree(&examples().join("nicole"), &tmp.path().join("nicole"));
     owo(tmp.path())
         .args(["-i", "reviewer", "add", "project", "Mural"])
+        .args(["--kb", "../repo/kb/mural"])
         .assert()
         .success();
     let repo = tmp.path().join("repo");
@@ -531,7 +532,7 @@ fn owo_toml_in_a_parent_sets_identity_project_and_kb() {
     fs::write(repo.join("kb/mural/lat.md"), "# Mural\n").unwrap();
     fs::write(
         repo.join(".owo.toml"),
-        "identity = \"reviewer\"\nproject = \"mural\"\nkb = \"kb/mural\"\n",
+        "identity = \"reviewer\"\nproject = \"mural\"\n",
     )
     .unwrap();
     let mut cmd = owo_in(&repo.join("sub"), &home);

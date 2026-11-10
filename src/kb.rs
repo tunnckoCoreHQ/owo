@@ -6,27 +6,15 @@ use crate::markdown;
 use serde::Serialize;
 use std::path::{Component, Path, PathBuf};
 
-/// KB path for a project: project.md `kb`, else identity.json `projects.<p>.kb`
-/// (both relative to the identity folder; `~/` is the home folder), else the `.owo.toml` value.
-pub fn root(id: &Identity, project: &str, config_kb: Option<&Path>) -> Option<PathBuf> {
-    let from_note = id
+/// KB path for a project: project.md `kb`, relative to the identity folder (`~/` is the home folder).
+pub fn root(id: &Identity, project: &str) -> Option<PathBuf> {
+    let raw = id
         .project(project)
         .and_then(|e| e.field_str("kb"))
-        .filter(|s| !s.is_empty());
-    let from_manifest = from_note.or_else(|| {
-        id.manifest["projects"][project]["kb"]
-            .as_str()
-            .filter(|s| !s.is_empty())
-            .map(str::to_string)
-    });
-    match from_manifest {
-        Some(raw) => {
-            let home = std::env::var_os("HOME").map(PathBuf::from);
-            let p = crate::config::expand_home(&raw, home.as_deref());
-            Some(if p.is_absolute() { p } else { id.dir.join(p) })
-        }
-        None => config_kb.map(Path::to_path_buf),
-    }
+        .filter(|s| !s.is_empty())?;
+    let home = std::env::var_os("HOME").map(PathBuf::from);
+    let p = crate::config::expand_home(&raw, home.as_deref());
+    Some(if p.is_absolute() { p } else { id.dir.join(p) })
 }
 
 fn normalize(p: &Path) -> PathBuf {
@@ -51,12 +39,12 @@ pub struct Kb {
 }
 
 /// The KB pointer for `owo context`, and a warning when the KB is missing or has no path.
-pub fn pointer(id: &Identity, p: &str, config_kb: Option<&Path>) -> (Option<Kb>, Option<String>) {
-    let Some(path) = root(id, p, config_kb) else {
+pub fn pointer(id: &Identity, p: &str) -> (Option<Kb>, Option<String>) {
+    let Some(path) = root(id, p) else {
         return (
             None,
             Some(format!(
-                "project {p} has no KB path (identity.json projects.{p}.kb or .owo.toml kb)"
+                "project {p} has no KB path (set kb in work/projects/{p}/project.md)"
             )),
         );
     };
@@ -122,7 +110,7 @@ pub fn link(id: &Identity, target: &str) -> Option<Result<Link, String>> {
         section,
         section_exists: false,
     };
-    let Some(kb) = root(id, project, None) else {
+    let Some(kb) = root(id, project) else {
         return Some(Ok(out));
     };
     let base = if kb.extension().is_some_and(|x| x == "md") {

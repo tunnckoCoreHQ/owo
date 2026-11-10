@@ -84,7 +84,6 @@ The tool manifest, read by the CLI.
 - `accounts`: the identity's own accounts as `{kind, handle}`. Handles appear only here.
 - `budgets`: soul file word budgets that override the defaults in [[lint]].
 - `review_every_days` (default 7) and `sync_every` (default 6).
-- `projects.<p>.kb`: a KB path; see [[cli#Context]].
 
 `soul/soul.json` is the SoulSpec v0.5 manifest. `owo stamp` bumps its minor version when a soul file changes.
 
@@ -108,7 +107,7 @@ Root resolves from `--root`, `OWO_ROOT`, `root` in the nearest `.owo.toml`, `roo
 
 When the root comes from a `.owo.toml` in a parent of the working folder, owo prints a warning on stderr that names that file, since a cloned repo can ship one.
 
-Identity resolves from `-i`, `OWO_IDENTITY`, `.owo.toml`, user config, then the only identity in the root. Project resolves from `--project`, `OWO_PROJECT`, `.owo.toml`; see [[decisions#Working project versus project filter]]. Relative `root` and `kb` values resolve against the config file's folder; `~/` expands to `$HOME`.
+Identity resolves from `-i`, `OWO_IDENTITY`, `.owo.toml`, user config, then the only identity in the root. Project resolves from `--project`, `OWO_PROJECT`, `.owo.toml`; see [[decisions#Working project versus project filter]]. A relative `root` value resolves against the config file's folder; `~/` expands to `$HOME`.
 
 ## Templates
 

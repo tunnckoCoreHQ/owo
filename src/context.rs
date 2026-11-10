@@ -8,14 +8,11 @@ use anyhow::Result;
 use serde::Serialize;
 use serde_json::json;
 use std::fs;
-use std::path::PathBuf;
 
 pub struct Request<'a> {
     pub voice: bool,
     pub look: bool,
     pub project: Option<&'a str>,
-    /// KB path from `.owo.toml` (already absolute), used when identity.json has none.
-    pub config_kb: Option<PathBuf>,
     pub with: &'a [String],
     pub notes: usize,
 }
@@ -70,7 +67,7 @@ pub fn build(id: &Identity, req: &Request) -> Result<Context> {
         for n in id.notes(p).into_iter().take(req.notes) {
             items.push(item("project", &n.rel, "recent project note"));
         }
-        let (pointer, warning) = crate::kb::pointer(id, p, req.config_kb.as_deref());
+        let (pointer, warning) = crate::kb::pointer(id, p);
         kb = pointer;
         warnings.extend(warning);
     }
