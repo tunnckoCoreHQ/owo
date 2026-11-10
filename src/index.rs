@@ -176,15 +176,12 @@ fn work(identity: &Identity) -> String {
 }
 
 /// Writes generated files that differ. Returns the paths written.
-pub fn write(identity: &Identity) -> std::io::Result<Vec<String>> {
+pub fn write(identity: &Identity) -> anyhow::Result<Vec<String>> {
     let mut written = vec![];
     for (rel, content) in generate(identity) {
         let path = identity.dir.join(&rel);
         if fs::read_to_string(&path).ok().as_deref() != Some(content.as_str()) {
-            if let Some(parent) = path.parent() {
-                fs::create_dir_all(parent)?;
-            }
-            fs::write(&path, content)?;
+            crate::identity::write_file(&path, content)?;
             written.push(rel);
         }
     }

@@ -20,6 +20,11 @@ pub fn now() -> String {
     Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true)
 }
 
+/// The UTC day of `now`, as `YYYY-MM-DD`.
+pub fn today() -> String {
+    day(&now()).to_string()
+}
+
 /// A zero-padded `YYYY-MM-DD` day. Also the clap parser for date flags.
 pub fn parse_day(value: &str) -> Result<NaiveDate, String> {
     let shaped = value.len() == 10

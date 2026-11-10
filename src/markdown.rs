@@ -117,6 +117,13 @@ pub fn section<'a>(body: &'a str, name: &str) -> Option<(&'a str, Vec<(usize, &'
     found.map(|(_, h)| (h, lines))
 }
 
+/// A section as its heading line and the text below it.
+pub fn section_text<'a>(body: &'a str, name: &str) -> Option<(&'a str, String)> {
+    let (head, lines) = section(body, name)?;
+    let lines: Vec<&str> = lines.iter().map(|(_, l)| *l).collect();
+    Some((head, lines.join("\n")))
+}
+
 /// A `[[target#section|label]]` link with its 0-based line in the body.
 #[derive(Debug, Clone)]
 pub struct Link {

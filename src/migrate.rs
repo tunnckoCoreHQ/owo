@@ -229,10 +229,9 @@ fn migrate_locations(
                 .push(format!("{} (target {to} exists; merge by hand)", rel(from)));
             return anyhow::Ok(());
         }
-        fs::create_dir_all(target.parent().expect("inside life/locations"))?;
         let stem = from.file_stem().map(|s| s.to_string_lossy().into_owned());
         let stem = stem.unwrap_or_default();
-        fs::write(
+        crate::identity::write_file(
             &target,
             normalize(text, kind, &stem, None, parent, today, slug),
         )?;
@@ -340,7 +339,7 @@ pub fn v1(src: &Path, out: &Path) -> Result<Report> {
 /// Fills a just-created identity from a v1 folder. The caller removes the folder on error.
 fn fill(src: &Path, refs: &Path, root: &Path, slug: &str, manifest: &Value) -> Result<Report> {
     let dir = root.join(slug);
-    let today = crate::state::day(&crate::state::now()).to_string();
+    let today = crate::state::today();
     let mut r = Report {
         identity: slug.to_string(),
         dir: dir.display().to_string(),

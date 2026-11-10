@@ -287,8 +287,16 @@ pub fn read_object(path: &Path) -> Result<Option<Json>> {
 pub fn write_json(path: &Path, doc: &Json) -> Result<()> {
     let text = format!("{}\n", serde_json::to_string_pretty(doc)?);
     let tmp = path.with_extension("json.tmp");
-    fs::write(&tmp, text).with_context(|| format!("writing {}", tmp.display()))?;
+    write_file(&tmp, text)?;
     fs::rename(&tmp, path).with_context(|| format!("writing {}", path.display()))
+}
+
+/// Writes a file, creating its folders first.
+pub fn write_file(path: &Path, text: impl AsRef<[u8]>) -> Result<()> {
+    if let Some(dir) = path.parent() {
+        fs::create_dir_all(dir).with_context(|| format!("creating {}", dir.display()))?;
+    }
+    fs::write(path, text).with_context(|| format!("writing {}", path.display()))
 }
 
 impl Identity {

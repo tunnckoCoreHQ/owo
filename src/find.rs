@@ -130,9 +130,8 @@ pub fn one(id: &Identity, name: &str) -> anyhow::Result<usize> {
 
 /// One section with its heading line (any heading level, case-insensitive).
 pub fn section_text(body: &str, name: &str) -> Option<String> {
-    let (head, lines) = markdown::section(body, name)?;
-    let lines: Vec<&str> = lines.iter().map(|(_, l)| *l).collect();
-    Some(format!("{head}\n{}\n", lines.join("\n").trim_end()))
+    let (head, text) = markdown::section_text(body, name)?;
+    Some(format!("{head}\n{}\n", text.trim_end()))
 }
 
 /// Text of one section, or the whole file.

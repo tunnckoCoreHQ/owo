@@ -3,7 +3,7 @@
 //! slice to `<root>/sources/<slug>/` and an ingest prompt to `<root>/.owo/sessions/`.
 //! The host runs the ingest agent and then calls `done --until <n>` to move the bookmark.
 
-use crate::identity::{read_json, write_json};
+use crate::identity::{read_json, write_file, write_json};
 use anyhow::{bail, Context, Result};
 use serde::Serialize;
 use serde_json::{json, Value};
@@ -205,9 +205,7 @@ fn read_bookmark(root: &Path, session: &str) -> Result<Value> {
 }
 
 fn write_bookmark(root: &Path, session: &str, doc: &Value) -> Result<()> {
-    let path = bookmark_path(root, session);
-    fs::create_dir_all(path.parent().expect("has parent"))?;
-    write_json(&path, doc)
+    write_json(&bookmark_path(root, session), doc)
 }
 
 /// The file that `push` stores turns in, relative to the root.
@@ -279,9 +277,8 @@ pub fn push(req: &StartRequest, turns: &str) -> Result<Start> {
             added += 1;
         }
     }
-    fs::create_dir_all(file.parent().expect("has parent"))?;
     let tmp = file.with_extension("jsonl.tmp");
-    fs::write(&tmp, &stored)?;
+    write_file(&tmp, &stored)?;
     fs::rename(&tmp, &file)?;
     let mut out = run(req, &file, "jsonl")?;
     out.added = Some(added);
@@ -365,9 +362,7 @@ fn run(req: &StartRequest, transcript: &Path, format: &str) -> Result<Start> {
                     .unwrap_or_default();
             body.push_str(&format!("\n## {} {}{id}\n\n{}\n", from + i, m.role, m.text));
         }
-        let path = req.root.join(&source);
-        fs::create_dir_all(path.parent().expect("has parent"))?;
-        fs::write(&path, body)?;
+        write_file(&req.root.join(&source), body)?;
         let prompt = format!(".owo/sessions/{}.prompt.md", req.session);
         let project = req
             .project
@@ -385,8 +380,7 @@ fn run(req: &StartRequest, transcript: &Path, format: &str) -> Result<Start> {
             cite = source.trim_start_matches("sources/"),
             session = req.session,
         );
-        fs::create_dir_all(req.root.join(".owo/sessions"))?;
-        fs::write(req.root.join(&prompt), text)?;
+        write_file(&req.root.join(&prompt), text)?;
         doc["pending"] =
             json!({ "from": from, "until": until, "source": source, "prompt": prompt });
         out.source = Some(source);

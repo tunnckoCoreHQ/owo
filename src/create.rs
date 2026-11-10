@@ -2,7 +2,7 @@
 
 use crate::identity::{Identity, LIFE_CATEGORIES};
 use crate::{index, state, templates};
-use anyhow::{bail, Context, Result};
+use anyhow::{bail, Result};
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::Path;
@@ -24,14 +24,11 @@ pub fn new_identity(root: &Path, name: &str, slug: &str) -> Result<Created> {
     let mut values = BTreeMap::new();
     values.insert("name", name.to_string());
     values.insert("slug", slug.to_string());
-    values.insert("today", chrono::Utc::now().format("%Y-%m-%d").to_string());
+    values.insert("today", crate::state::today());
 
     let mut files = vec![];
     let write = |rel: &str, content: &str, files: &mut Vec<String>| -> Result<()> {
-        let path = dir.join(rel);
-        fs::create_dir_all(path.parent().expect("file has a parent"))
-            .with_context(|| format!("creating {}", path.display()))?;
-        fs::write(&path, content).with_context(|| format!("writing {}", path.display()))?;
+        crate::identity::write_file(&dir.join(rel), content)?;
         files.push(rel.to_string());
         Ok(())
     };

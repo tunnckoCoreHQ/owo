@@ -131,7 +131,7 @@ pub fn render(c: &Changes) -> String {
 /// its own edits.
 pub fn changed_paths(id: &Identity) -> Vec<String> {
     let mut out = crate::git::dirty(&id.dir).unwrap_or_else(|| {
-        let today = crate::state::day(&crate::state::now()).to_string();
+        let today = crate::state::today();
         crate::state::SCOPES
             .iter()
             .flat_map(|scope| {

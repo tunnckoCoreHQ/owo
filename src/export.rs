@@ -54,16 +54,8 @@ fn text(id: &Identity, rel: &str) -> String {
 
 fn section(id: &Identity, rel: &str, name: &str) -> String {
     id.entry(rel)
-        .and_then(|e| markdown::section(e.body(), name))
-        .map(|(_, lines)| {
-            lines
-                .iter()
-                .map(|(_, l)| *l)
-                .collect::<Vec<_>>()
-                .join("\n")
-                .trim()
-                .to_string()
-        })
+        .and_then(|e| markdown::section_text(e.body(), name))
+        .map(|(_, text)| text.trim().to_string())
         .unwrap_or_default()
 }
 
@@ -100,10 +92,8 @@ fn lore(e: &Entry, n: usize) -> Value {
     keys.extend(e.aliases.iter().cloned());
     let summary = e.field_str("summary").unwrap_or_default();
     // Summary plus `## Key facts` (design 10.3); entries without that section give their body.
-    let facts = markdown::section(e.body(), "Key facts").map(|(_, lines)| {
-        let lines: Vec<&str> = lines.iter().map(|(_, l)| *l).collect();
-        lines.join("\n").trim().to_string()
-    });
+    let facts =
+        markdown::section_text(e.body(), "Key facts").map(|(_, text)| text.trim().to_string());
     let body = facts.unwrap_or_else(|| body_without(&e.text, &["Identifiers", "Sources"]));
     let content = [summary, body]
         .into_iter()
@@ -192,7 +182,7 @@ pub fn card(
         .and_then(Value::as_str)
         .unwrap_or("1.0.0")
         .to_string();
-    let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
+    let today = crate::state::today();
     let mut data = json!({
         "name": name,
         "description": description,
