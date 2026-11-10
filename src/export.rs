@@ -271,7 +271,12 @@ pub struct Report {
 
 pub fn soulspec(id: &Identity, dir: &Path) -> Result<Report> {
     let soul = id.dir.join("soul");
-    let mut manifest = id.read_json("soul/soul.json").unwrap_or_else(|| json!({}));
+    let mut manifest = id
+        .read_object("soul/soul.json")?
+        .unwrap_or_else(|| json!({}));
+    if !(manifest["files"].is_object() || manifest["files"].is_null()) {
+        bail!("soul/soul.json `files` is not an object");
+    }
     let mut warnings = vec![];
     let license = manifest["license"].as_str().unwrap_or("").to_string();
     if !LICENSES.contains(&license.as_str()) {

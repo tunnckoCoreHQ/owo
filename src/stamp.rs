@@ -22,9 +22,10 @@ impl Report {
     }
 }
 
-fn load(id: &Identity, scope: &str) -> Value {
-    id.read_json(&format!("{scope}/state.json"))
-        .unwrap_or_else(|| json!({ "files": {} }))
+fn load(id: &Identity, scope: &str) -> Result<Value> {
+    Ok(id
+        .read_object(&format!("{scope}/state.json"))?
+        .unwrap_or_else(|| json!({ "files": {} })))
 }
 
 fn files_mut(doc: &mut Value) -> &mut Map<String, Value> {
@@ -57,7 +58,10 @@ fn touch_updated(text: &str, today: &str) -> Option<String> {
 pub fn run(id: &Identity, check: bool) -> Result<Report> {
     let at = state::now();
     let today = state::day(&at);
-    let mut docs: Vec<(&str, Value)> = SCOPES.iter().map(|s| (*s, load(id, s))).collect();
+    let mut docs = SCOPES
+        .iter()
+        .map(|s| Ok((*s, load(id, s)?)))
+        .collect::<Result<Vec<(&str, Value)>>>()?;
     let mut report = Report::default();
     let mut soul_changed = false;
     let mut life_changed = false;
@@ -141,7 +145,7 @@ pub fn run(id: &Identity, check: bool) -> Result<Report> {
 }
 
 fn bump_soul_version(id: &Identity) -> Result<()> {
-    let Some(mut soul) = id.read_json("soul/soul.json") else {
+    let Some(mut soul) = id.read_object("soul/soul.json")? else {
         return Ok(());
     };
     let version = soul

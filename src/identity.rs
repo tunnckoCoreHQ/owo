@@ -231,10 +231,29 @@ pub fn read_json(path: &Path) -> Option<Json> {
     serde_json::from_str(&fs::read_to_string(path).ok()?).ok()
 }
 
-/// Writes pretty JSON with a trailing newline.
+/// A JSON object file for a command that rewrites it: None when it is missing, an error when
+/// it does not parse or is not an object, so the rewrite does not drop its contents.
+pub fn read_object(path: &Path) -> Result<Option<Json>> {
+    let text = match fs::read_to_string(path) {
+        Ok(text) => text,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(e) => return Err(e).with_context(|| format!("reading {}", path.display())),
+    };
+    let doc: Json = serde_json::from_str(&text)
+        .with_context(|| format!("{} does not parse; fix it by hand", path.display()))?;
+    if !doc.is_object() {
+        anyhow::bail!("{} is not a JSON object; fix it by hand", path.display());
+    }
+    Ok(Some(doc))
+}
+
+/// Writes pretty JSON with a trailing newline through a temporary file and a rename, so a
+/// killed write never leaves a cut-off file.
 pub fn write_json(path: &Path, doc: &Json) -> Result<()> {
     let text = format!("{}\n", serde_json::to_string_pretty(doc)?);
-    fs::write(path, text).with_context(|| format!("writing {}", path.display()))
+    let tmp = path.with_extension("json.tmp");
+    fs::write(&tmp, text).with_context(|| format!("writing {}", tmp.display()))?;
+    fs::rename(&tmp, path).with_context(|| format!("writing {}", path.display()))
 }
 
 impl Identity {
@@ -277,6 +296,10 @@ impl Identity {
             manifest_error,
             entries,
         })
+    }
+
+    pub fn read_object(&self, rel: &str) -> Result<Option<Json>> {
+        read_object(&self.dir.join(rel))
     }
 
     pub fn read_json(&self, rel: &str) -> Option<Json> {

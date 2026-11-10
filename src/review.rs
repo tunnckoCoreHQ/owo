@@ -279,7 +279,7 @@ pub fn render(p: &Packet) -> String {
 /// story date among logs, events and journal entries, memory_hash = current MEMORY.md hash.
 pub fn done(id: &Identity, through: Option<NaiveDate>) -> Result<Value> {
     let mut doc = id
-        .read_json("soul/state.json")
+        .read_object("soul/state.json")?
         .context("soul/state.json missing; run `owo stamp`")?;
     let through = match through {
         Some(t) => Some(t.to_string()),
@@ -337,7 +337,7 @@ pub fn soul_note(id: &Identity, file: &str, change: &str, evidence: &[String]) -
     let warning = (links.len() < 2 && !defining)
         .then(|| "soul changes need two evidence links or one defining event".to_string());
     let mut doc = id
-        .read_json("soul/state.json")
+        .read_object("soul/state.json")?
         .context("soul/state.json missing; run `owo stamp`")?;
     let recorded = doc["history"].as_array().is_some_and(|h| {
         h.iter()

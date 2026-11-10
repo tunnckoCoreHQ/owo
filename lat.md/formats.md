@@ -94,6 +94,8 @@ Each `state.json` has `files`: a map from scope-relative path to `{created, upda
 
 `soul/state.json` adds `history` and `review`. Each history record is `{at, file, change, evidence}`, appended by `owo soul note`. The `review` object holds `last_reviewed`, `reviewed_through` and `memory_hash`; when MEMORY.md's hash differs from `memory_hash`, lint warns that MEMORY changed outside a review. `life/state.json` adds `last_write`. `work/state.json` adds `projects`: per project `first_touched`, `last_touched` and `sessions`.
 
+Commands write JSON files through a temporary file and a rename. A command that rewrites a state file or `soul/soul.json` exits 1 when the file exists but does not parse or is not an object, so a broken file is never replaced with an empty one.
+
 ## Generated files
 
 Generated files start with a marker comment and depend only on entry content, so regeneration is deterministic and comparable. Only `owo index` writes them.
