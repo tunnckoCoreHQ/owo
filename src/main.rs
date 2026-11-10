@@ -301,7 +301,16 @@ impl std::error::Error for ConfigError {}
 fn resolved(cli: &Cli) -> Result<config::Resolved> {
     let inputs =
         config::Inputs::from_env(cli.root.clone(), cli.identity.clone(), cli.project.clone());
-    config::resolve(&inputs).map_err(|e| ConfigError(format!("{e:#}")).into())
+    let r = config::resolve(&inputs).map_err(|e| ConfigError(format!("{e:#}")))?;
+    if let config::Source::ProjectFile(file) = &r.root_source {
+        if file.parent() != Some(inputs.cwd.as_path()) {
+            eprintln!(
+                "owo: warning: the root comes from {} in a parent folder",
+                file.display()
+            );
+        }
+    }
+    Ok(r)
 }
 
 fn need_identity(r: &config::Resolved) -> Result<String> {
