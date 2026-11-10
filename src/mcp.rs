@@ -7,8 +7,8 @@ use serde_json::{json, Map, Value};
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::path::PathBuf;
-use std::process::Command;
-use std::time::Duration;
+use std::process::{Command, Stdio};
+use std::time::{Duration, Instant};
 
 const PROTOCOL: &str = "2025-06-18";
 
@@ -19,11 +19,13 @@ enum Arg {
     Flag(String),
     /// `--flag` when true.
     Switch(String),
+    /// A JSON value written to the child's stdin.
+    Stdin,
 }
 
 struct Param {
     name: String,
-    /// JSON schema type: string, integer, boolean, or array (of strings).
+    /// JSON schema type: string, integer, boolean, or array (of strings; of objects for stdin).
     kind: &'static str,
     arg: Arg,
     required: bool,
@@ -101,12 +103,15 @@ fn param(a: &clap::Arg) -> Param {
     ]
     .iter()
     .any(|t| parser == *t);
+    // `sync push --turns` takes a JSON array, which can pass the argument size limit,
+    // so the tool takes a real array and sends it on stdin.
+    let stdin = a.get_id() == "turns";
     let kind = if switch {
         "boolean"
     } else if a.is_positional() {
         // A multi-word positional (a title, a query) is one string.
         "string"
-    } else if matches!(a.get_action(), clap::ArgAction::Append) {
+    } else if stdin || matches!(a.get_action(), clap::ArgAction::Append) {
         "array"
     } else if integer {
         "integer"
@@ -118,6 +123,7 @@ fn param(a: &clap::Arg) -> Param {
         name: long.replace('-', "_"),
         kind,
         arg: match (a.is_positional(), switch) {
+            _ if stdin => Arg::Stdin,
             (true, _) => Arg::Positional,
             (false, true) => Arg::Switch(format!("--{long}")),
             (false, false) => Arg::Flag(format!("--{long}")),
@@ -136,13 +142,6 @@ fn param(a: &clap::Arg) -> Param {
     }
 }
 
-/// Defaults the server was started with (`owo --root R -i thea mcp`).
-pub struct Defaults {
-    pub root: Option<PathBuf>,
-    pub identity: Option<String>,
-    pub project: Option<String>,
-}
-
 fn schema(tool: &Tool) -> Value {
     let mut props = Map::new();
     props.insert(
@@ -157,7 +156,12 @@ fn schema(tool: &Tool) -> Value {
         let mut s = json!({ "type": prm.kind, "description": prm.about });
         let values = (!prm.values.is_empty()).then(|| json!(prm.values));
         if prm.kind == "array" {
-            s["items"] = json!({ "type": "string" });
+            let item = if matches!(prm.arg, Arg::Stdin) {
+                "object"
+            } else {
+                "string"
+            };
+            s["items"] = json!({ "type": item });
             if let Some(v) = values {
                 s["items"]["enum"] = v;
             }
@@ -184,8 +188,13 @@ fn scalar(v: &Value) -> Option<String> {
     }
 }
 
-/// The command line for a tool call. Positionals go after `--`, so values never parse as flags.
-fn argv(tool: &Tool, args: &Map<String, Value>, d: &Defaults) -> Result<Vec<String>, String> {
+/// The command line and stdin for a tool call. Positionals go after `--` and flag values
+/// are joined as `--flag=value`, so values never parse as flags.
+fn argv(
+    tool: &Tool,
+    args: &Map<String, Value>,
+    cli: &crate::Cli,
+) -> Result<(Vec<String>, String), String> {
     if let Some(k) = args
         .keys()
         .find(|k| *k != "identity" && *k != "project" && !tool.params.iter().any(|p| p.name == **k))
@@ -193,16 +202,16 @@ fn argv(tool: &Tool, args: &Map<String, Value>, d: &Defaults) -> Result<Vec<Stri
         return Err(format!("unknown argument {k:?} for {}", tool.name));
     }
     let mut out: Vec<String> = vec![];
-    if let Some(root) = &d.root {
+    if let Some(root) = &cli.root {
         out.extend(["--root".into(), root.display().to_string()]);
     }
     let pick = |key: &str, default: &Option<String>| {
         args.get(key).and_then(scalar).or_else(|| default.clone())
     };
-    if let Some(i) = pick("identity", &d.identity) {
+    if let Some(i) = pick("identity", &cli.identity) {
         out.extend(["-i".into(), i]);
     }
-    if let Some(p) = pick("project", &d.project) {
+    if let Some(p) = pick("project", &cli.project) {
         out.extend(["--project".into(), p]);
     }
     if tool.json {
@@ -210,6 +219,7 @@ fn argv(tool: &Tool, args: &Map<String, Value>, d: &Defaults) -> Result<Vec<Stri
     }
     out.extend(tool.command.iter().map(|s| s.to_string()));
     let mut positionals = vec![];
+    let mut stdin = String::new();
     for prm in &tool.params {
         let Some(v) = args.get(&prm.name).filter(|v| !v.is_null()) else {
             if prm.required {
@@ -223,26 +233,23 @@ fn argv(tool: &Tool, args: &Map<String, Value>, d: &Defaults) -> Result<Vec<Stri
         };
         match &prm.arg {
             Arg::Positional => positionals.extend(values),
-            Arg::Flag(f) => {
-                for value in values {
-                    out.extend([f.clone(), value]);
-                }
-            }
+            Arg::Flag(f) => out.extend(values.into_iter().map(|value| format!("{f}={value}"))),
             Arg::Switch(f) => {
                 if v.as_bool() == Some(true) {
                     out.push(f.clone());
                 }
             }
+            Arg::Stdin => stdin = v.to_string(),
         }
     }
     if !positionals.is_empty() {
         out.push("--".into());
         out.extend(positionals);
     }
-    Ok(out)
+    Ok((out, stdin))
 }
 
-fn call(params: &Value, d: &Defaults) -> Value {
+fn call(params: &Value, cli: &crate::Cli) -> Value {
     let name = params["name"].as_str().unwrap_or_default();
     let empty = Map::new();
     let args = params["arguments"].as_object().unwrap_or(&empty);
@@ -251,12 +258,27 @@ fn call(params: &Value, d: &Defaults) -> Value {
     let Some(tool) = tools.iter().find(|t| t.name == name) else {
         return result(format!("unknown tool {name:?}"), true);
     };
-    let argv = match argv(tool, args, d) {
+    let (argv, stdin) = match argv(tool, args, cli) {
         Ok(a) => a,
         Err(e) => return result(e, true),
     };
     let exe = std::env::current_exe().unwrap_or_else(|_| PathBuf::from("owo"));
-    match Command::new(exe).args(&argv).output() {
+    let run = || {
+        let mut child = Command::new(exe)
+            .args(&argv)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()?;
+        // A child that exits before reading (a usage error) closes the pipe; its output says why.
+        let _ = child
+            .stdin
+            .take()
+            .expect("piped")
+            .write_all(stdin.as_bytes());
+        child.wait_with_output()
+    };
+    match run() {
         Ok(o) => {
             let stdout = String::from_utf8_lossy(&o.stdout).into_owned();
             let stderr = String::from_utf8_lossy(&o.stderr).into_owned();
@@ -271,7 +293,7 @@ fn call(params: &Value, d: &Defaults) -> Value {
     }
 }
 
-fn respond(id: &Value, method: &str, params: &Value, d: &Defaults) -> Option<Value> {
+fn respond(id: &Value, method: &str, params: &Value, cli: &crate::Cli) -> Option<Value> {
     let ok = |result: Value| Some(json!({ "jsonrpc": "2.0", "id": id, "result": result }));
     match method {
         "initialize" => ok(json!({
@@ -287,7 +309,7 @@ fn respond(id: &Value, method: &str, params: &Value, d: &Defaults) -> Option<Val
                 .map(|t| json!({ "name": t.name, "description": t.about, "inputSchema": schema(t) }))
                 .collect::<Vec<_>>()
         })),
-        "tools/call" => ok(call(params, d)),
+        "tools/call" => ok(call(params, cli)),
         _ => Some(json!({
             "jsonrpc": "2.0",
             "id": id,
@@ -297,11 +319,12 @@ fn respond(id: &Value, method: &str, params: &Value, d: &Defaults) -> Option<Val
 }
 
 /// The reply to one JSON-RPC message, or None for notifications and responses.
-fn handle(text: &str, d: &Defaults) -> Option<Value> {
-    match serde_json::from_str::<Value>(text) {
+/// Bytes that are not UTF-8 JSON get a parse error.
+fn handle(bytes: &[u8], cli: &crate::Cli) -> Option<Value> {
+    match serde_json::from_slice::<Value>(bytes) {
         Ok(msg) if msg.get("id").is_some() && msg.get("method").is_some() => {
             let method = msg["method"].as_str().unwrap_or_default();
-            respond(&msg["id"], method, &msg["params"], d)
+            respond(&msg["id"], method, &msg["params"], cli)
         }
         Ok(_) => None,
         Err(e) => Some(json!({
@@ -313,17 +336,18 @@ fn handle(text: &str, d: &Defaults) -> Option<Value> {
 }
 
 /// Serves MCP on stdin and stdout until stdin closes.
-pub fn serve(d: &Defaults) -> Result<()> {
+pub fn serve(cli: &crate::Cli) -> Result<()> {
+    let mut stdin = std::io::stdin().lock();
     let mut stdout = std::io::stdout();
-    for line in std::io::stdin().lock().lines() {
-        let line = line?;
-        if line.trim().is_empty() {
-            continue;
+    let mut line = vec![];
+    while stdin.read_until(b'\n', &mut line)? > 0 {
+        if !line.trim_ascii().is_empty() {
+            if let Some(r) = handle(&line, cli) {
+                writeln!(stdout, "{r}")?;
+                stdout.flush()?;
+            }
         }
-        if let Some(r) = handle(&line, d) {
-            writeln!(stdout, "{r}")?;
-            stdout.flush()?;
-        }
+        line.clear();
     }
     Ok(())
 }
@@ -331,65 +355,121 @@ pub fn serve(d: &Defaults) -> Result<()> {
 pub const DEFAULT_PORT: u16 = 4224;
 /// Largest request body the HTTP mode reads; a tool call is a few kilobytes.
 pub const MAX_BODY: usize = 8 << 20;
+/// Largest request line plus headers the HTTP mode reads.
+const MAX_HEAD: usize = 16 << 10;
+/// Time one HTTP request may take to arrive, and its reply to leave.
+const DEADLINE: Duration = Duration::from_secs(30);
 
 /// Serves MCP over HTTP at `http://<addr>:<port>/mcp` (Streamable HTTP with JSON replies).
 /// Without `port` it takes 4224, or the next free port up to 4323. Prints the URL, then
 /// handles one request at a time.
-pub fn serve_http(addr: &str, port: Option<u16>, d: &Defaults) -> Result<()> {
+pub fn serve_http(addr: &str, port: Option<u16>, cli: &crate::Cli) -> Result<()> {
     let listener = match port {
         Some(p) => TcpListener::bind((addr, p)).with_context(|| format!("binding {addr}:{p}"))?,
         None => (DEFAULT_PORT..DEFAULT_PORT + 100)
             .find_map(|p| TcpListener::bind((addr, p)).ok())
             .with_context(|| format!("no free port on {addr} from {DEFAULT_PORT}"))?,
     };
-    println!("http://{}/mcp", listener.local_addr()?);
+    let bound = listener.local_addr()?;
+    println!("http://{bound}/mcp");
     std::io::stdout().flush()?;
+    // A request must name this server in Host, so a DNS name a web page controls cannot reach it.
+    let hosts = [addr.to_string(), bound.ip().to_string(), "localhost".into()];
     for stream in listener.incoming() {
         let Ok(stream) = stream else { continue };
         // A broken or slow client only ends its own request.
-        let _ = http_request(stream, d);
+        let _ = http_request(stream, &hosts, cli);
     }
     Ok(())
 }
 
-fn http_request(stream: TcpStream, d: &Defaults) -> std::io::Result<()> {
-    stream.set_read_timeout(Some(Duration::from_secs(30)))?;
-    let mut reader = BufReader::new(stream.try_clone()?);
+/// Reads from the stream until one deadline for the whole request.
+struct Timed {
+    stream: TcpStream,
+    until: Instant,
+}
+
+impl Read for Timed {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        let left = self
+            .until
+            .checked_duration_since(Instant::now())
+            .filter(|d| !d.is_zero())
+            .ok_or(std::io::ErrorKind::TimedOut)?;
+        self.stream.set_read_timeout(Some(left))?;
+        self.stream.read(buf)
+    }
+}
+
+fn http_request(stream: TcpStream, hosts: &[String], cli: &crate::Cli) -> std::io::Result<()> {
+    stream.set_write_timeout(Some(DEADLINE))?;
+    let timed = Timed {
+        stream: stream.try_clone()?,
+        until: Instant::now() + DEADLINE,
+    };
+    let mut reader = BufReader::new(timed.take((MAX_HEAD + MAX_BODY) as u64));
     let mut request = String::new();
-    reader.read_line(&mut request)?;
-    let mut length = 0;
+    let mut head = reader.read_line(&mut request)?;
+    let (mut length, mut host, mut json_body, mut origin) = (0, String::new(), false, false);
     loop {
         let mut header = String::new();
-        if reader.read_line(&mut header)? == 0 || header.trim().is_empty() {
+        let n = reader.read_line(&mut header)?;
+        head += n;
+        if n == 0 || header.trim().is_empty() || head > MAX_HEAD {
             break;
         }
-        if let Some((k, v)) = header.split_once(':') {
-            if k.trim().eq_ignore_ascii_case("content-length") {
-                length = v.trim().parse().unwrap_or(0);
+        let Some((k, v)) = header.split_once(':') else {
+            continue;
+        };
+        let (k, v) = (k.trim().to_ascii_lowercase(), v.trim());
+        match k.as_str() {
+            "content-length" => length = v.parse().unwrap_or(0),
+            "host" => host = v.to_string(),
+            "content-type" => {
+                json_body = v
+                    .split(';')
+                    .next()
+                    .is_some_and(|t| t.trim().eq_ignore_ascii_case("application/json"))
             }
+            "origin" => origin = true,
+            _ => {}
         }
+    }
+    // Host without its port; an IPv6 host is in brackets.
+    let name = match host.strip_prefix('[') {
+        Some(rest) => rest.split(']').next().unwrap_or(""),
+        None => host.rsplit_once(':').map_or(host.as_str(), |(h, _)| h),
+    };
+    // Read the body even for a refused request: closing with unread data resets the connection
+    // and the client never sees the status.
+    let mut body = vec![];
+    if head <= MAX_HEAD && length <= MAX_BODY {
+        body.resize(length, 0);
+        reader.read_exact(&mut body)?;
     }
     let mut parts = request.split_whitespace();
     let (method, path) = (parts.next().unwrap_or(""), parts.next().unwrap_or(""));
     let path = path.split('?').next().unwrap_or("");
-    let (status, body) = match (method, path) {
-        ("POST", "/mcp") if length > MAX_BODY => ("413 Payload Too Large", String::new()),
-        ("POST", "/mcp") => {
-            let mut body = vec![0; length];
-            reader.read_exact(&mut body)?;
-            match handle(&String::from_utf8_lossy(&body), d) {
-                Some(reply) => ("200 OK", reply.to_string()),
-                None => ("202 Accepted", String::new()),
-            }
+    let (status, reply) = match (method, path) {
+        _ if head > MAX_HEAD => ("431 Request Header Fields Too Large", String::new()),
+        // A browser sends Origin with a page's POST; a DNS name rebound to us fails the Host check.
+        _ if origin || !hosts.iter().any(|h| h.eq_ignore_ascii_case(name)) => {
+            ("403 Forbidden", String::new())
         }
+        ("POST", "/mcp") if !json_body => ("415 Unsupported Media Type", String::new()),
+        ("POST", "/mcp") if length > MAX_BODY => ("413 Payload Too Large", String::new()),
+        ("POST", "/mcp") => match handle(&body, cli) {
+            Some(reply) => ("200 OK", reply.to_string()),
+            None => ("202 Accepted", String::new()),
+        },
         (_, "/mcp") => ("405 Method Not Allowed", String::new()),
         _ => ("404 Not Found", String::new()),
     };
     let mut stream = stream;
     write!(
         stream,
-        "HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
-        body.len()
+        "HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{reply}",
+        reply.len()
     )?;
     stream.flush()
 }

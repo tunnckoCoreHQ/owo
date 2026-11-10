@@ -356,6 +356,63 @@ fn need_project<'a>(dir: &Path, project: Option<&'a str>) -> Result<Option<&'a s
     Ok(Some(p))
 }
 
+/// Runs `sync start` or `sync push` with the shared identity, project and run size.
+fn sync_cmd(
+    cli: &Cli,
+    out: &Out,
+    session: &str,
+    now: bool,
+    every: Option<usize>,
+    step: impl FnOnce(&sync::StartRequest) -> Result<sync::Start>,
+) -> Result<i32> {
+    let r = resolved(cli)?;
+    let slug = need_identity(&r)?;
+    let dir = r.root.join(&slug);
+    let project = need_project(&dir, r.project.as_deref())?;
+    let every = every
+        .or_else(|| {
+            identity::read_json(&dir.join("identity.json"))?
+                .get("sync_every")?
+                .as_u64()
+                .map(|v| v as usize)
+        })
+        .unwrap_or(6)
+        .max(1);
+    let s = step(&sync::StartRequest {
+        root: &r.root,
+        slug: &slug,
+        session,
+        now,
+        every,
+        project,
+    })?;
+    if let Some(n) = s.added.filter(|_| !out.json) {
+        out.say(format!("added {n}"));
+    }
+    if out.json {
+        Envelope::ok(serde_json::to_value(&s)?).print();
+    } else if let Some(src) = &s.source {
+        println!(
+            "due {} {}-{}\nsource {src}\nprompt {}",
+            s.identity,
+            s.from,
+            s.until,
+            s.prompt.as_deref().unwrap_or("")
+        );
+    } else {
+        out.say(format!(
+            "not due: {} new user turns (every {}){}",
+            s.new_user_turns,
+            s.every,
+            s.pending
+                .as_deref()
+                .map(|p| format!("; a run is pending ({p}) until `sync done`"))
+                .unwrap_or_default()
+        ));
+    }
+    Ok(exit::OK)
+}
+
 fn run(cli: &Cli, out: &Out) -> Result<i32> {
     match &cli.command {
         Command::Slug { text } => {
@@ -370,14 +427,9 @@ fn run(cli: &Cli, out: &Out) -> Result<i32> {
         }
         Command::Templates { action } => templates_cmd(cli, action.as_ref(), out),
         Command::Mcp { remote, port } => {
-            let d = mcp::Defaults {
-                root: cli.root.clone(),
-                identity: cli.identity.clone(),
-                project: cli.project.clone(),
-            };
             match remote {
-                Some(addr) => mcp::serve_http(addr, *port, &d)?,
-                None => mcp::serve(&d)?,
+                Some(addr) => mcp::serve_http(addr, *port, cli)?,
+                None => mcp::serve(cli)?,
             }
             Ok(exit::OK)
         }
@@ -798,84 +850,32 @@ fn run(cli: &Cli, out: &Out) -> Result<i32> {
         }
         Command::Sync {
             action:
-                action @ (SyncAction::Start {
-                    session,
-                    now,
-                    every,
-                    ..
-                }
-                | SyncAction::Push {
-                    session,
-                    now,
-                    every,
-                    ..
-                }),
-        } => {
-            let r = resolved(cli)?;
-            let slug = need_identity(&r)?;
-            let dir = r.root.join(&slug);
-            let project = need_project(&dir, r.project.as_deref())?;
-            let every = every
-                .or_else(|| {
-                    identity::read_json(&dir.join("identity.json"))?
-                        .get("sync_every")?
-                        .as_u64()
-                        .map(|v| v as usize)
-                })
-                .unwrap_or(6)
-                .max(1);
-            let mut req = sync::StartRequest {
-                root: &r.root,
-                slug: &slug,
-                session,
-                transcript: Path::new(""),
-                format: "jsonl",
-                now: *now,
-                every,
-                project,
-            };
-            let s = match action {
                 SyncAction::Start {
-                    transcript, format, ..
-                } => {
-                    req.transcript = transcript;
-                    req.format = format;
-                    sync::start(&req)?
-                }
-                SyncAction::Push { turns, .. } => {
-                    let turns = match turns {
-                        Some(t) => t.clone(),
-                        None => std::io::read_to_string(std::io::stdin())?,
-                    };
-                    sync::push(&req, &turns)?
-                }
-                SyncAction::Done { .. } => unreachable!("matched above"),
+                    session,
+                    transcript,
+                    format,
+                    now,
+                    every,
+                },
+        } => sync_cmd(cli, out, session, *now, *every, |req| {
+            sync::start(req, transcript, format)
+        }),
+        Command::Sync {
+            action:
+                SyncAction::Push {
+                    session,
+                    turns,
+                    now,
+                    every,
+                },
+        } => {
+            let turns = match turns {
+                Some(t) => t.clone(),
+                None => std::io::read_to_string(std::io::stdin())?,
             };
-            if let Some(n) = s.added.filter(|_| !out.json) {
-                out.say(format!("added {n}"));
-            }
-            if out.json {
-                Envelope::ok(serde_json::to_value(&s)?).print();
-            } else if let Some(src) = &s.source {
-                println!(
-                    "due {} {}-{}\nsource {src}\nprompt {}",
-                    s.identity,
-                    s.from,
-                    s.until,
-                    s.prompt.as_deref().unwrap_or("")
-                );
-            } else {
-                out.say(format!(
-                    "not due: {} new user turns (every {}){}",
-                    s.new_user_turns,
-                    s.every,
-                    s.pending
-                        .as_deref()
-                        .map(|p| format!("; a run is pending ({p}) until `sync done`"))
-                        .unwrap_or_default()
-                ));
-            }
-            Ok(exit::OK)
+            sync_cmd(cli, out, session, *now, *every, |req| {
+                sync::push(req, &turns)
+            })
         }
         Command::Sync {
             action: SyncAction::Done { session, until },
