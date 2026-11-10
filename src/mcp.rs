@@ -373,12 +373,10 @@ pub fn serve_http(addr: &str, port: Option<u16>, cli: &crate::Cli) -> Result<()>
     let bound = listener.local_addr()?;
     println!("http://{bound}/mcp");
     std::io::stdout().flush()?;
-    // A request must name this server in Host, so a DNS name a web page controls cannot reach it.
-    let hosts = [addr.to_string(), bound.ip().to_string(), "localhost".into()];
     for stream in listener.incoming() {
         let Ok(stream) = stream else { continue };
         // A broken or slow client only ends its own request.
-        let _ = http_request(stream, &hosts, cli);
+        let _ = http_request(stream, cli);
     }
     Ok(())
 }
@@ -401,7 +399,7 @@ impl Read for Timed {
     }
 }
 
-fn http_request(stream: TcpStream, hosts: &[String], cli: &crate::Cli) -> std::io::Result<()> {
+fn http_request(stream: TcpStream, cli: &crate::Cli) -> std::io::Result<()> {
     stream.set_write_timeout(Some(DEADLINE))?;
     let timed = Timed {
         stream: stream.try_clone()?,
@@ -410,7 +408,7 @@ fn http_request(stream: TcpStream, hosts: &[String], cli: &crate::Cli) -> std::i
     let mut reader = BufReader::new(timed.take((MAX_HEAD + MAX_BODY) as u64));
     let mut request = String::new();
     let mut head = reader.read_line(&mut request)?;
-    let (mut length, mut host, mut json_body, mut origin) = (0, String::new(), false, false);
+    let (mut length, mut json_body, mut origin) = (0, false, false);
     loop {
         let mut header = String::new();
         let n = reader.read_line(&mut header)?;
@@ -424,7 +422,6 @@ fn http_request(stream: TcpStream, hosts: &[String], cli: &crate::Cli) -> std::i
         let (k, v) = (k.trim().to_ascii_lowercase(), v.trim());
         match k.as_str() {
             "content-length" => length = v.parse().unwrap_or(0),
-            "host" => host = v.to_string(),
             "content-type" => {
                 json_body = v
                     .split(';')
@@ -435,11 +432,6 @@ fn http_request(stream: TcpStream, hosts: &[String], cli: &crate::Cli) -> std::i
             _ => {}
         }
     }
-    // Host without its port; an IPv6 host is in brackets.
-    let name = match host.strip_prefix('[') {
-        Some(rest) => rest.split(']').next().unwrap_or(""),
-        None => host.rsplit_once(':').map_or(host.as_str(), |(h, _)| h),
-    };
     // Read the body even for a refused request: closing with unread data resets the connection
     // and the client never sees the status.
     let mut body = vec![];
@@ -452,10 +444,8 @@ fn http_request(stream: TcpStream, hosts: &[String], cli: &crate::Cli) -> std::i
     let path = path.split('?').next().unwrap_or("");
     let (status, reply) = match (method, path) {
         _ if head > MAX_HEAD => ("431 Request Header Fields Too Large", String::new()),
-        // A browser sends Origin with a page's POST; a DNS name rebound to us fails the Host check.
-        _ if origin || !hosts.iter().any(|h| h.eq_ignore_ascii_case(name)) => {
-            ("403 Forbidden", String::new())
-        }
+        // A browser sends Origin with every POST from a page, also after DNS rebinding.
+        _ if origin => ("403 Forbidden", String::new()),
         ("POST", "/mcp") if !json_body => ("415 Unsupported Media Type", String::new()),
         ("POST", "/mcp") if length > MAX_BODY => ("413 Payload Too Large", String::new()),
         ("POST", "/mcp") => match handle(&body, cli) {

@@ -217,6 +217,7 @@ fn mcp_remote_serves_http() {
         status("POST /mcp", &format!("{ok}Origin: http://example.com\r\n")),
         status(
             "POST /mcp",
+            // A tunnel forwards its public hostname.
             &format!("Host: example.com:{port}\r\nContent-Type: application/json\r\n"),
         ),
         status("POST /mcp", &format!("Host: localhost:{port}\r\n")),
@@ -237,7 +238,7 @@ fn mcp_remote_serves_http() {
             "HTTP/1.1 405 Method Not Allowed",
             "HTTP/1.1 404 Not Found",
             "HTTP/1.1 403 Forbidden",
-            "HTTP/1.1 403 Forbidden",
+            "HTTP/1.1 200 OK",
             "HTTP/1.1 415 Unsupported Media Type",
             "HTTP/1.1 200 OK",
         ]
