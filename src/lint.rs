@@ -111,7 +111,7 @@ fn tree(id: &Identity, out: &mut Vec<Diagnostic>) {
 
     match (&id.manifest, &id.manifest_error) {
         (_, Some(e)) => out.push(err("identity.json", format!("invalid JSON: {e}"))),
-        (Some(m), None) => {
+        (m, None) if !m.is_null() => {
             if m.get("schema").and_then(Json::as_str) != Some("owo/1") {
                 out.push(err("identity.json", "schema must be \"owo/1\""));
             }
@@ -414,12 +414,7 @@ fn identifier_values(id: &Identity) -> Vec<(String, String)> {
             }
         }
     }
-    if let Some(accounts) = id
-        .manifest
-        .as_ref()
-        .and_then(|m| m.get("accounts"))
-        .and_then(Json::as_array)
-    {
+    if let Some(accounts) = id.manifest["accounts"].as_array() {
         for a in accounts {
             if let Some(h) = a
                 .get("handle")

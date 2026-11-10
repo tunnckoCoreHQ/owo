@@ -304,10 +304,7 @@ pub fn kb_link(id: &Identity, target: &str) -> Option<Result<KbLink, String>> {
             "[[{target}]]: the path must stay inside the KB (no `..` or absolute path)"
         )));
     }
-    if id
-        .entry(&format!("work/projects/{project}/project.md"))
-        .is_none()
-    {
+    if id.project(project).is_none() {
         return Some(Err(format!("[[{target}]]: no project {project:?}")));
     }
     let mut out = KbLink {

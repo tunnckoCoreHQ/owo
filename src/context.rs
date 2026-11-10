@@ -2,7 +2,7 @@
 //! Core (always): IDENTITY, SOUL, MEMORY and the generated "Now" block.
 //! Voice: VOICE.md. Look: LOOK.md. Project: work README, project.md, recent notes, KB pointer.
 
-use crate::identity::{Identity, Kind};
+use crate::identity::Identity;
 use crate::status;
 use anyhow::Result;
 use serde::Serialize;
@@ -56,14 +56,12 @@ fn item(tier: &'static str, path: &str, reason: &str) -> Item {
 /// (both relative to the identity folder; `~/` is the home folder), else the `.owo.toml` value.
 pub fn kb_path(id: &Identity, project: &str, config_kb: Option<&Path>) -> Option<PathBuf> {
     let from_note = id
-        .entry(&format!("work/projects/{project}/project.md"))
+        .project(project)
         .and_then(|e| e.field_str("kb"))
         .filter(|s| !s.is_empty());
     let from_manifest = from_note.or_else(|| {
-        id.manifest
-            .as_ref()
-            .and_then(|m| m.pointer(&format!("/projects/{project}/kb")))
-            .and_then(|v| v.as_str())
+        id.manifest["projects"][project]["kb"]
+            .as_str()
             .filter(|s| !s.is_empty())
             .map(str::to_string)
     });
@@ -113,14 +111,7 @@ pub fn build(id: &Identity, req: &Request) -> Result<Context> {
         let project_md = format!("work/projects/{p}/project.md");
         items.push(item("project", "work/README.md", "work profile"));
         items.push(item("project", &project_md, "role on this project"));
-        let prefix = format!("work/projects/{p}/notes/");
-        let mut notes: Vec<_> = id
-            .entries
-            .iter()
-            .filter(|e| e.kind == Kind::Note && e.rel.starts_with(&prefix))
-            .collect();
-        notes.sort_by(|a, b| b.rel.cmp(&a.rel));
-        for n in notes.into_iter().take(req.notes) {
+        for n in id.notes(p).into_iter().take(req.notes) {
             items.push(item("project", &n.rel, "recent project note"));
         }
         match kb_path(id, p, req.config_kb.as_deref()) {

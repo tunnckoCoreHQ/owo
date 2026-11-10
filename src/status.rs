@@ -70,19 +70,12 @@ pub struct ProjectState {
 
 pub fn project(id: &Identity, slug: &str) -> ProjectState {
     let rec = &crate::state::doc(id, "work")["projects"][slug];
-    let prefix = format!("work/projects/{slug}/notes/");
-    let mut notes: Vec<&Entry> = id
-        .entries
-        .iter()
-        .filter(|e| e.kind == Kind::Note && e.rel.starts_with(&prefix))
-        .collect();
-    notes.sort_by(|a, b| b.rel.cmp(&a.rel));
     ProjectState {
         slug: slug.into(),
         first_touched: rec["first_touched"].as_str().map(str::to_string),
         last_touched: rec["last_touched"].as_str().map(str::to_string),
         sessions: rec["sessions"].as_u64().unwrap_or(0),
-        notes: notes.into_iter().take(5).map(Link::of).collect(),
+        notes: id.notes(slug).into_iter().take(5).map(Link::of).collect(),
     }
 }
 
@@ -100,19 +93,9 @@ pub fn list(root: &std::path::Path) -> Vec<Row> {
         .into_iter()
         .map(|slug| match Identity::load(root, &slug) {
             Ok(id) => Row {
-                name: id
-                    .manifest
-                    .as_ref()
-                    .and_then(|m| m["name"].as_str())
-                    .unwrap_or(&slug)
-                    .to_string(),
+                name: id.name().to_string(),
                 last_activity: scope_activity(&id).into_iter().map(|(_, t)| t).max(),
-                projects: id
-                    .entries
-                    .iter()
-                    .filter(|e| e.kind == Kind::Project)
-                    .filter_map(|e| e.rel.split('/').nth(2).map(str::to_string))
-                    .collect(),
+                projects: id.projects(),
                 slug,
             },
             Err(_) => Row {

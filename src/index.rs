@@ -169,12 +169,7 @@ fn timeline(identity: &Identity) -> String {
 fn work(identity: &Identity) -> String {
     let mut lines = vec!["- [Profile](README.md)".to_string()];
     for project in identity.entries.iter().filter(|e| e.kind == Kind::Project) {
-        let folder = project.rel.trim_end_matches("project.md");
-        let notes = identity
-            .entries
-            .iter()
-            .filter(|e| e.kind == Kind::Note && e.rel.starts_with(folder))
-            .count();
+        let notes = identity.notes(&project.stem_key()).len();
         lines.push(format!("{} ({notes} notes)", line(project)));
     }
     doc("Work", &lines)

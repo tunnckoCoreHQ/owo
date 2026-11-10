@@ -162,7 +162,8 @@ impl Entry {
 pub struct Identity {
     pub slug: String,
     pub dir: PathBuf,
-    pub manifest: Option<Json>,
+    /// `identity.json`, or Null when it is missing or does not parse.
+    pub manifest: Json,
     pub manifest_error: Option<String>,
     /// `soul`, `life` and `work` state.json in `state::SCOPES` order, read through `state::doc`.
     pub state: [Json; 3],
@@ -267,10 +268,10 @@ impl Identity {
         let dir = root.join(slug);
         let (manifest, manifest_error) = match fs::read_to_string(dir.join("identity.json")) {
             Ok(text) => match serde_json::from_str::<Json>(&text) {
-                Ok(v) => (Some(v), None),
-                Err(e) => (None, Some(e.to_string())),
+                Ok(v) => (v, None),
+                Err(e) => (Json::Null, Some(e.to_string())),
             },
-            Err(_) => (None, None),
+            Err(_) => (Json::Null, None),
         };
         let mut entries = vec![];
         for item in WalkDir::new(&dir).sort_by_file_name() {
@@ -388,12 +389,38 @@ impl Identity {
 
     /// Budget overrides from `identity.json` → `budgets`.
     pub fn budget_override(&self, file: &str) -> Option<usize> {
-        self.manifest
-            .as_ref()?
-            .get("budgets")?
-            .get(file)?
-            .as_u64()
-            .map(|n| n as usize)
+        self.manifest["budgets"][file].as_u64().map(|n| n as usize)
+    }
+
+    /// The display name from `identity.json`, else the slug.
+    pub fn name(&self) -> &str {
+        self.manifest["name"].as_str().unwrap_or(&self.slug)
+    }
+
+    /// The `project.md` of a project.
+    pub fn project(&self, slug: &str) -> Option<&Entry> {
+        self.entry(&format!("work/projects/{slug}/project.md"))
+    }
+
+    /// Project slugs, in file-name order.
+    pub fn projects(&self) -> Vec<String> {
+        self.entries
+            .iter()
+            .filter(|e| e.kind == Kind::Project)
+            .map(|e| e.stem_key())
+            .collect()
+    }
+
+    /// The notes of a project, newest first.
+    pub fn notes(&self, project: &str) -> Vec<&Entry> {
+        let prefix = format!("work/projects/{project}/notes/");
+        let mut notes: Vec<&Entry> = self
+            .entries
+            .iter()
+            .filter(|e| e.kind == Kind::Note && e.rel.starts_with(&prefix))
+            .collect();
+        notes.sort_by(|a, b| b.rel.cmp(&a.rel));
+        notes
     }
 }
 

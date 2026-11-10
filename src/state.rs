@@ -129,12 +129,7 @@ impl Review {
 pub fn review(id: &Identity) -> Review {
     let field = |key: &str| doc(id, "soul")["review"][key].as_str();
     let last_reviewed = field("last_reviewed").map(str::to_string);
-    let every_days = id
-        .manifest
-        .as_ref()
-        .and_then(|m| m.get("review_every_days"))
-        .and_then(Value::as_i64)
-        .unwrap_or(7);
+    let every_days = id.manifest["review_every_days"].as_i64().unwrap_or(7);
     let days_since = last_reviewed
         .as_deref()
         .and_then(|t| DateTime::parse_from_rfc3339(t).ok())

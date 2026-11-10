@@ -123,12 +123,7 @@ pub fn card(
     project: Option<&str>,
     scenario_from: Option<&str>,
 ) -> Result<Value> {
-    let name = id
-        .manifest
-        .as_ref()
-        .and_then(|m| m["name"].as_str())
-        .unwrap_or(&id.slug)
-        .to_string();
+    let name = id.name().to_string();
     let soul_json = id.read_json("soul/soul.json").unwrap_or(Value::Null);
     let mut description = text(id, "soul/IDENTITY.md");
     let look = text(id, "soul/LOOK.md");
@@ -160,8 +155,8 @@ pub fn card(
         "id": 0, "keys": ["memory"], "content": text(id, "soul/MEMORY.md"), "extensions": {}, "enabled": true,
         "insertion_order": 10, "case_sensitive": false, "use_regex": false, "constant": true, "name": "Memory", "priority": 0, "comment": "soul/MEMORY.md"
     })];
-    let project_prefix = project.map(|p| format!("work/projects/{p}/"));
-    if let Some(e) = project.and_then(|p| id.entry(&format!("work/projects/{p}/project.md"))) {
+    let project_md = project.and_then(|p| id.project(p));
+    if let Some(e) = project_md {
         scenario = format!(
             "{}\n\n{}",
             e.field_str("summary").unwrap_or_default(),
@@ -183,9 +178,7 @@ pub fn card(
     }
     for e in &id.entries {
         let include = match e.kind {
-            Kind::Project => project_prefix
-                .as_ref()
-                .is_some_and(|p| e.rel.starts_with(p)),
+            Kind::Project => project_md.is_some_and(|p| p.rel == e.rel),
             k => order(k).is_some(),
         };
         if include {
@@ -228,10 +221,8 @@ pub fn card(
         return Ok(json!({ "spec": "chara_card_v2", "spec_version": "2.0", "data": data }));
     }
     let now = chrono::Utc::now().timestamp();
-    let nickname = id
-        .manifest
-        .as_ref()
-        .and_then(|m| m.get("nickname")?.as_str())
+    let nickname = id.manifest["nickname"]
+        .as_str()
         .filter(|n| !n.trim().is_empty());
     let extra = json!({
         "nickname": nickname, "assets": [{ "type": "icon", "uri": "ccdefault:", "name": "main", "ext": "png" }],
@@ -327,12 +318,7 @@ pub fn soulspec(id: &Identity, dir: &Path) -> Result<Report> {
 
 /// A `SKILL.md` wrapper for hosts that load identities as skills.
 pub fn skill(id: &Identity, dir: &Path) -> Result<String> {
-    let name = id
-        .manifest
-        .as_ref()
-        .and_then(|m| m["name"].as_str())
-        .unwrap_or(&id.slug)
-        .to_string();
+    let name = id.name().to_string();
     let soul = id.read_json("soul/soul.json").unwrap_or(Value::Null);
     let about = soul["description"]
         .as_str()
@@ -340,12 +326,7 @@ pub fn skill(id: &Identity, dir: &Path) -> Result<String> {
         .map(str::to_string)
         .unwrap_or_else(|| format!("The {name} identity."));
     let slug = &id.slug;
-    let projects: Vec<String> = id
-        .entries
-        .iter()
-        .filter(|e| e.kind == Kind::Project)
-        .map(|e| e.rel.split('/').nth(2).unwrap_or_default().to_string())
-        .collect();
+    let projects = id.projects();
     let project_line = if projects.is_empty() {
         String::new()
     } else {
