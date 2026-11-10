@@ -271,7 +271,7 @@ pub fn render(p: &Packet) -> String {
             c["change"].as_str().unwrap_or("")
         ));
     }
-    o.push_str("\nWhen MEMORY is compiled: `owo review done`, then `owo stamp && owo index && owo lint`.\n");
+    o.push_str("\nWhen MEMORY is compiled: `owo stamp && owo index && owo lint`, then `owo review done`.\n");
     o
 }
 
