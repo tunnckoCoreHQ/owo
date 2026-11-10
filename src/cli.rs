@@ -163,7 +163,7 @@ pub enum Command {
         /// Search words
         query: Vec<String>,
         /// Limit to soul, life or work
-        #[arg(long, visible_alias = "in", value_parser = ["soul", "life", "work"])]
+        #[arg(long, value_parser = ["soul", "life", "work"])]
         scope: Option<String>,
         /// Limit to entry types (repeatable)
         #[arg(long = "type", value_parser = clap::builder::PossibleValuesParser::new(find::types()))]
