@@ -21,7 +21,7 @@ Each command with its flags and exit behavior.
 - `owo resolve <name> [--type]` prints the path a name resolves to (a file path works too, absolute or relative to the working directory); on a miss it exits 1 with up to five candidates. The `--type` value is a type name such as `character` or `soul`; an unknown one is a usage error (exit 2), here and in `search`.
 - `owo show <name> [--section]` prints an entry or one section at any heading level; a `kb:<p>:<path>` name prints a file from the project KB.
 - `owo links <name> [--in] [--out]` lists backlinks and outlinks; `owo links --orphans` lists unlinked entries.
-- `owo context [--voice] [--look] [--with <name>]... [--notes N] [--format paths|text]` prints the load set; see [[cli#Context]].
+- `owo context [--voice] [--look] [--with <name>]... [--notes N] [--format paths]` prints the load set as text, or the file list with `--format paths`; see [[cli#Context]].
 - `owo state [--days N]` prints the derived Now block, plus the last update and recent notes with `--project`.
 - `owo search <query> [--scope|--in soul|life|work] [--type <t>]... [--since <date>] [--limit N]` ranks entries with BM25; no hits gives `ok: false` and exit 1. See [[decisions#Search is in-crate BM25]].
 - `owo review` prints the review packet; see [[cli#Review]]. `owo review done [--through <date>]` records a finished review: `last_reviewed`, `reviewed_through` (default: newest log, event or journal date) and the MEMORY.md hash.

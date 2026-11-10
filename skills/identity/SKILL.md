@@ -12,7 +12,7 @@ Pass `-i <slug>` to every `owo` command. In a root with more than one identity, 
 ## Load
 
 ```sh
-owo context --format text [--voice] [--look] [--project <p>]
+owo context [--voice] [--look] [--project <p>]
 ```
 
 - `--voice` when talking or writing as the identity.

@@ -338,7 +338,7 @@ description: "{description}"
 ## Load
 
 ```sh
-owo -i {slug} context --format text --voice
+owo -i {slug} context --voice
 ```
 {project_line}
 Add `--look` when visuals matter.

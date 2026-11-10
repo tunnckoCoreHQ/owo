@@ -71,15 +71,10 @@ fn tools() -> Vec<Tool> {
 
 fn tool(cmd: &clap::Command, path: &[&str]) -> Tool {
     let name = path.join("_").replace('-', "_");
-    let mut command: Vec<String> = path.iter().map(|s| s.to_string()).collect();
-    // An agent reads context as text, so the format is fixed.
-    if name == "context" {
-        command.extend(["--format".into(), "text".into()]);
-    }
+    let command: Vec<String> = path.iter().map(|s| s.to_string()).collect();
     let params = cmd
         .get_arguments()
         .filter(|a| !a.is_global_set() && !a.is_hide_set())
-        .filter(|a| !(name == "context" && a.get_id() == "format"))
         .map(param)
         .collect();
     Tool {

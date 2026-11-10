@@ -549,10 +549,7 @@ fn export_skill_wrapper() {
         .success();
     let text = fs::read_to_string(tmp.path().join("SKILL.md")).unwrap();
     assert!(text.starts_with("---\nname: nicole\ndescription: \"Be Nicole"));
-    assert!(
-        text.contains("owo -i nicole context --format text --voice")
-            && text.contains("`picture-book`")
-    );
+    assert!(text.contains("owo -i nicole context --voice") && text.contains("`picture-book`"));
 }
 
 #[test]

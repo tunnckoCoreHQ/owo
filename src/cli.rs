@@ -148,8 +148,8 @@ pub enum Command {
         /// Recent project notes to include
         #[arg(long, default_value_t = 3)]
         notes: usize,
-        /// paths: the list; text: file contents concatenated
-        #[arg(long, default_value = "paths", value_parser = ["paths", "text"])]
+        /// text: file contents concatenated; paths: the list
+        #[arg(long, default_value = "text", value_parser = ["paths", "text"])]
         format: String,
     },
     /// Derived current state: activity, recent days and events, open threads, review
