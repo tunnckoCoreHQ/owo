@@ -620,56 +620,39 @@ fn memory_review(c: &mut Ctx) {
     ));
 }
 
+/// The drift `owo stamp --check` reports, one warning per file.
 fn state_rule(c: &mut Ctx) {
-    let docs: HashMap<&str, Option<Json>> = state::SCOPES
-        .iter()
-        .map(|s| (*s, c.id.read_json(&format!("{s}/state.json"))))
-        .collect();
-    let mut found = vec![];
-    let mut on_disk: BTreeSet<(String, String)> = BTreeSet::new();
-    for e in state::tracked(c.id) {
-        let Some((scope, rel)) = state::scope_of(&e.rel) else {
-            continue;
-        };
-        on_disk.insert((scope.to_string(), rel.to_string()));
-        let recorded = docs
-            .get(scope)
-            .and_then(|d| d.as_ref())
-            .and_then(|d| d.get("files"))
-            .and_then(|f| f.get(rel))
-            .and_then(|r| r.get("hash"))
-            .and_then(Json::as_str);
-        match recorded {
-            None => found.push(warn(
-                "state",
-                &e.rel,
-                format!("not stamped in {scope}/state.json"),
-            )),
-            Some(h) if h != state::hash(&e.text) => {
-                found.push(warn("state", &e.rel, "changed since the last stamp"))
-            }
-            _ => {}
+    let report = match crate::stamp::run(c.id, true) {
+        Ok(r) => r,
+        Err(e) => {
+            // Only a state file that does not parse stops the check.
+            let path = state::SCOPES
+                .iter()
+                .map(|s| format!("{s}/state.json"))
+                .find(|p| c.id.read_object(p).is_err())
+                .unwrap_or_default();
+            return c.push(warn("state", &path, format!("{e:#}")));
         }
+    };
+    for rel in &report.added {
+        let scope = state::scope_of(rel).map_or("", |(s, _)| s);
+        c.push(warn(
+            "state",
+            rel,
+            format!("not stamped in {scope}/state.json"),
+        ));
     }
-    for (scope, doc) in &docs {
-        let Some(files) = doc
-            .as_ref()
-            .and_then(|d| d.get("files"))
-            .and_then(Json::as_object)
-        else {
-            continue;
-        };
-        for rel in files.keys() {
-            if !on_disk.contains(&(scope.to_string(), rel.clone())) {
-                found.push(warn(
-                    "state",
-                    &format!("{scope}/state.json"),
-                    format!("stamps {rel}, which is gone"),
-                ));
-            }
-        }
+    for rel in &report.changed {
+        c.push(warn("state", rel, "changed since the last stamp"));
     }
-    c.out.extend(found);
+    for gone in &report.removed {
+        let (scope, rel) = gone.split_once('/').expect("scope/rel");
+        c.push(warn(
+            "state",
+            &format!("{scope}/state.json"),
+            format!("stamps {rel}, which is gone"),
+        ));
+    }
 }
 
 fn budget(c: &mut Ctx) {
