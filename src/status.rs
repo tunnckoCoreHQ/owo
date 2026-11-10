@@ -280,7 +280,7 @@ pub fn now_block(s: &State, project: Option<&str>) -> String {
     let scopes: Vec<String> = s
         .last_activity_by_scope
         .iter()
-        .map(|(scope, t)| format!("{scope} {}", &t[..10.min(t.len())]))
+        .map(|(scope, t)| format!("{scope} {}", crate::state::day(t)))
         .collect();
     out.push_str(&format!(
         "- Last activity: {}\n",
@@ -291,10 +291,7 @@ pub fn now_block(s: &State, project: Option<&str>) -> String {
         }
     ));
     if let Some((p, t)) = &s.last_project {
-        out.push_str(&format!(
-            "- Last project: {p} ({})\n",
-            &t[..10.min(t.len())]
-        ));
+        out.push_str(&format!("- Last project: {p} ({})\n", crate::state::day(t)));
     }
     out.push_str(&format!("- Recent days: {}\n", join(&s.recent_logs)));
     out.push_str(&format!("- Recent events: {}\n", join(&s.recent_events)));
@@ -343,7 +340,7 @@ pub fn render(s: &State) -> String {
         let last = p
             .last_touched
             .as_deref()
-            .map(|t| &t[..10.min(t.len())])
+            .map(crate::state::day)
             .unwrap_or("never");
         out.push_str(&format!(
             "- Project {}: {} sessions, last {last}, notes {}\n",

@@ -11,6 +11,11 @@ pub fn hash(text: &str) -> String {
     format!("b3:{}", blake3::hash(text.as_bytes()).to_hex())
 }
 
+/// The `YYYY-MM-DD` part of a stamp, or the whole text when it is shorter.
+pub fn day(stamp: &str) -> &str {
+    stamp.get(..10).unwrap_or(stamp)
+}
+
 pub fn now() -> String {
     Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true)
 }

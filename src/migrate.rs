@@ -318,7 +318,7 @@ pub fn v1(src: &Path, out: &Path) -> Result<Report> {
         .unwrap_or_else(|| slug.clone());
     crate::create::new_identity(root, &name, &slug)?;
     let dir = root.join(&slug);
-    let today = crate::state::now()[..10].to_string();
+    let today = crate::state::day(&crate::state::now()).to_string();
     let mut r = Report {
         identity: slug.clone(),
         dir: dir.display().to_string(),

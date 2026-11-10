@@ -414,11 +414,7 @@ fn run(cli: &Cli, out: &Out) -> Result<i32> {
                 Envelope::ok(json!({ "root": r.root, "identities": rows })).print();
             } else {
                 for row in &rows {
-                    let last = row
-                        .last_activity
-                        .as_deref()
-                        .map(|t| &t[..10.min(t.len())])
-                        .unwrap_or("-");
+                    let last = row.last_activity.as_deref().map(state::day).unwrap_or("-");
                     println!(
                         "{:<16} {:<20} {:<10} {}",
                         row.slug,
@@ -752,7 +748,7 @@ fn run(cli: &Cli, out: &Out) -> Result<i32> {
                     eprintln!("owo: nothing stamped in the last {days} days");
                 }
                 for f in &list {
-                    println!("{}  {}", &f.updated[..10.min(f.updated.len())], f.path);
+                    println!("{}  {}", state::day(&f.updated), f.path);
                 }
             }
             Ok(exit::OK)

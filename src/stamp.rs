@@ -56,7 +56,7 @@ fn touch_updated(text: &str, today: &str) -> Option<String> {
 
 pub fn run(id: &Identity, check: bool) -> Result<Report> {
     let at = state::now();
-    let today = &at[..10];
+    let today = state::day(&at);
     let mut docs: Vec<(&str, Value)> = SCOPES.iter().map(|s| (*s, load(id, s))).collect();
     let mut report = Report::default();
     let mut soul_changed = false;
