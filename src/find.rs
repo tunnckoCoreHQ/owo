@@ -107,6 +107,22 @@ pub fn resolve(id: &Identity, name: &str, kind: Option<&str>) -> Resolution {
     }
 }
 
+/// The one entry a name resolves to; the error lists up to five candidates.
+pub fn one(id: &Identity, name: &str) -> anyhow::Result<usize> {
+    match resolve(id, name, None) {
+        Resolution::Found(i) => Ok(i),
+        Resolution::Ambiguous(v) | Resolution::Missing(v) => {
+            let c: Vec<&str> = v.iter().map(|i| id.entries[*i].rel.as_str()).collect();
+            let candidates = if c.is_empty() {
+                String::new()
+            } else {
+                format!("; candidates: {}", c.join(", "))
+            };
+            anyhow::bail!("{name:?} does not resolve to one entry{candidates}")
+        }
+    }
+}
+
 /// One section with its heading line (any heading level, case-insensitive).
 fn section_text(body: &str, name: &str) -> Option<String> {
     let (head, lines) = markdown::section(body, name)?;

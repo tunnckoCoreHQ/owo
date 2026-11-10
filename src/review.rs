@@ -1,7 +1,6 @@
 //! `owo review` (the packet the review skill compiles MEMORY from), `owo review done`,
 //! and the soul history: `owo soul note`, `owo soul history`.
 
-use crate::find::{resolve, Resolution};
 use crate::identity::{write_json, Identity, Kind};
 use crate::state::parse_day;
 use crate::status::{join, Link};
@@ -297,16 +296,11 @@ pub fn soul_note(id: &Identity, file: &str, change: &str, evidence: &[String]) -
     let mut defining = false;
     for raw in evidence {
         let name = raw.trim().trim_start_matches("[[").trim_end_matches("]]");
-        match resolve(id, name, None) {
-            Resolution::Found(i) => {
-                let e = &id.entries[i];
-                defining |=
-                    e.kind == Kind::Event && e.field("defining") == Some(&Value::Bool(true));
-                if seen.insert(i) {
-                    links.push(format!("[[{name}]]"));
-                }
-            }
-            _ => bail!("evidence [[{name}]] does not resolve"),
+        let i = crate::find::one(id, name).context("evidence")?;
+        let e = &id.entries[i];
+        defining |= e.kind == Kind::Event && e.field("defining") == Some(&Value::Bool(true));
+        if seen.insert(i) {
+            links.push(format!("[[{name}]]"));
         }
     }
     let warning = (links.len() < 2 && !defining)

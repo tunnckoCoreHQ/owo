@@ -142,13 +142,13 @@ pub fn build(id: &Identity, req: &Request) -> Result<Context> {
         }
     }
     for name in req.with {
-        match crate::find::resolve(id, name, None) {
-            crate::find::Resolution::Found(i) => items.push(item(
+        match crate::find::one(id, name) {
+            Ok(i) => items.push(item(
                 "with",
                 &id.entries[i].rel,
                 &format!("requested: {name}"),
             )),
-            _ => warnings.push(format!("--with {name:?} does not resolve")),
+            Err(e) => warnings.push(format!("--with {e}")),
         }
     }
     for it in &items {

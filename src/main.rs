@@ -349,7 +349,7 @@ fn run(cli: &Cli, out: &Out) -> Result<i32> {
             let (path, text) = match find::show_kb(&id, target, section.as_deref()) {
                 Some(shown) => shown?,
                 None => {
-                    let e = &id.entries[resolve_one(&id, &joined)?];
+                    let e = &id.entries[find::one(&id, &joined)?];
                     let text = find::show(e, section.as_deref()).ok_or_else(|| {
                         anyhow::anyhow!(
                             "no section {:?} in {}",
@@ -382,7 +382,7 @@ fn run(cli: &Cli, out: &Out) -> Result<i32> {
                     }
                 });
             }
-            let i = resolve_one(&id, &name.join(" "))?;
+            let i = find::one(&id, &name.join(" "))?;
             let both = !inbound && !outbound;
             let back = if *inbound || both {
                 find::backlinks(&id, i)
@@ -646,23 +646,6 @@ fn run(cli: &Cli, out: &Out) -> Result<i32> {
                     out.say(format!("wrote {f}"));
                 }
             })
-        }
-    }
-}
-
-fn resolve_one(id: &identity::Identity, name: &str) -> Result<usize> {
-    match find::resolve(id, name, None) {
-        find::Resolution::Found(i) => Ok(i),
-        find::Resolution::Ambiguous(v) | find::Resolution::Missing(v) => {
-            let c: Vec<String> = v.iter().map(|i| id.entries[*i].rel.clone()).collect();
-            anyhow::bail!(
-                "{name:?} does not resolve to one entry{}",
-                if c.is_empty() {
-                    String::new()
-                } else {
-                    format!("; candidates: {}", c.join(", "))
-                }
-            )
         }
     }
 }
