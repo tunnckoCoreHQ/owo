@@ -10,6 +10,7 @@ date: {{date}}
 era: ""
 places: []
 people: []
+defining: false
 sources: []
 ---
 

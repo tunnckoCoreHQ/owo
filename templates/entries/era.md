@@ -6,14 +6,12 @@ summary: ""
 status: canon
 created: {{today}}
 updated: {{today}}
-start: {{date}}
+start: null
 end: null
 sources: []
 ---
 
 # {{title}}
-
-## Summary
 
 ## Description
 

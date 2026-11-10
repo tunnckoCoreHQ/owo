@@ -12,8 +12,6 @@ sources: []
 
 # {{title}}
 
-## Summary
-
 ## Description
 
 ## Key facts

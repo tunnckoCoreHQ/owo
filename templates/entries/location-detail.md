@@ -14,6 +14,4 @@ sources: []
 
 Part of [[{{parent}}]].
 
-## Summary
-
 ## Description

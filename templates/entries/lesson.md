@@ -12,8 +12,6 @@ sources: []
 
 # {{title}}
 
-## Summary
-
 ## What I learned
 
 ## Guidance

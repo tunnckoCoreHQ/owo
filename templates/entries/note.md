@@ -13,8 +13,6 @@ sources: []
 
 # {{title}}
 
-## Summary
-
 ## What I did
 
 ## What I learned
