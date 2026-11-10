@@ -143,20 +143,27 @@ pub fn add(id: &Identity, req: &Request) -> Result<Added> {
 /// Writes the full text of one authored file, creating its folder. Returns true when the file
 /// is new. The path stays inside soul/, life/ or work/ and is never a generated file.
 pub fn write(id: &Identity, rel: &str, text: &str) -> Result<bool> {
-    let path = std::path::Path::new(rel);
-    let inside = path
+    if text.trim().is_empty() {
+        bail!("no text for {rel}; pass --content or pipe the full file on stdin");
+    }
+    let parts: Option<Vec<&str>> = std::path::Path::new(rel)
         .components()
-        .all(|c| matches!(c, std::path::Component::Normal(_)));
+        .map(|c| match c {
+            std::path::Component::Normal(s) => s.to_str(),
+            _ => None,
+        })
+        .collect();
+    let clean = parts.map(|p| p.join("/")).unwrap_or_default();
     let scoped = ["soul/", "life/", "work/"]
         .iter()
-        .any(|s| rel.starts_with(s));
-    if !inside || !scoped || !rel.ends_with(".md") {
+        .any(|s| clean.starts_with(s));
+    if !scoped || !clean.ends_with(".md") {
         bail!("{rel:?} must be an identity-relative .md path under soul/, life/ or work/");
     }
-    if crate::identity::classify(rel) == crate::identity::Kind::Generated {
-        bail!("{rel} is generated; run `owo index` instead");
+    if crate::identity::classify(&clean) == crate::identity::Kind::Generated {
+        bail!("{clean} is generated; run `owo index` instead");
     }
-    let file = id.dir.join(rel);
+    let file = id.dir.join(&clean);
     let created = !file.exists();
     fs::create_dir_all(file.parent().expect("has parent"))?;
     fs::write(&file, text).with_context(|| format!("writing {}", file.display()))?;

@@ -14,7 +14,7 @@ Each command with its flags and exit behavior.
 
 - `owo new <name> [--slug]` creates an identity from templates, writes indexes and state files. Exits 1 when the folder exists.
 - `owo add <type> <title> [--date] [--parent] [--alias]... [--kb]` creates one entry at its deterministic path. Uses `--project` for notes; `--parent` is only for location-detail and `--kb` only for project. A second `add log` for the same day succeeds and prints `exists <path>`; for other types an existing path exits 1 with an `exists` error.
-- `owo write <path> [--content <text>]` replaces the full text of one authored file under soul/, life/ or work/, from `--content` or stdin; it refuses generated files and paths outside the identity.
+- `owo write <path> [--content <text>]` replaces the full text of one authored file under soul/, life/ or work/, from `--content` or stdin; it refuses empty text, generated files (after it drops `.` parts of the path) and paths outside the identity.
 - `owo lint [--rule <code>]...` runs [[lint]] rules. Exits 1 when any error is found.
 - `owo index [--check]` writes generated files, or reports stale ones and exits 1.
 - `owo stamp [--check]` refreshes state files from hashes; see [[decisions#Stamp touches frontmatter]].

@@ -491,3 +491,33 @@ fn identifiers_stay_under_their_section() {
         vec!["identifiers:life/characters/sam.md"]
     );
 }
+
+#[test]
+fn write_refuses_empty_text_and_generated_files() {
+    let (tmp, dir) = aria();
+    let memory = fs::read_to_string(dir.join("soul/MEMORY.md")).unwrap();
+    owo(tmp.path())
+        .args(["-i", "aria", "write", "soul/MEMORY.md"])
+        .write_stdin("")
+        .assert()
+        .failure();
+    assert_eq!(
+        fs::read_to_string(dir.join("soul/MEMORY.md")).unwrap(),
+        memory
+    );
+    let timeline = fs::read_to_string(dir.join("life/timeline.md")).unwrap();
+    for path in [
+        "life/timeline.md",
+        "life/./timeline.md",
+        "./life/timeline.md",
+    ] {
+        owo(tmp.path())
+            .args(["-i", "aria", "write", path, "--content", "# Forged\n"])
+            .assert()
+            .failure();
+    }
+    assert_eq!(
+        fs::read_to_string(dir.join("life/timeline.md")).unwrap(),
+        timeline
+    );
+}
