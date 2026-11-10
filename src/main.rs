@@ -217,7 +217,7 @@ fn run(cli: &Cli, out: &Out) -> Result<i32> {
             let created = add::write(&id, path, &text)?;
             out.emit(
                 Envelope::ok(json!({ "path": path, "created": created })),
-                || println!("{path}"),
+                || out.say(path),
             )
         }
         Command::Add {
@@ -259,7 +259,9 @@ fn run(cli: &Cli, out: &Out) -> Result<i32> {
                 .with_errors((!ok).then(|| format!("exists: {path}")));
             out.emit(envelope, || {
                 if created {
-                    println!("{path}");
+                    out.say(&path);
+                } else if ok {
+                    out.say(format!("exists {path}"));
                 } else {
                     println!("exists {path}");
                 }
