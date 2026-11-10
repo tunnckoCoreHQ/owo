@@ -67,7 +67,6 @@ pub fn run(id: &Identity, check: bool) -> Result<Report> {
         .collect::<Result<Vec<(&str, Value)>>>()?;
     let mut report = Report::default();
     let mut soul_changed = false;
-    let mut life_changed = false;
     let mut seen: Vec<(String, String)> = vec![];
 
     for e in state::tracked(id) {
@@ -95,7 +94,6 @@ pub fn run(id: &Identity, check: bool) -> Result<Report> {
             report.changed.push(e.rel.clone());
         }
         soul_changed |= e.kind == Kind::Soul;
-        life_changed |= scope == "life";
         if check {
             continue;
         }
@@ -108,14 +106,9 @@ pub fn run(id: &Identity, check: bool) -> Result<Report> {
             }
         }
         let files = files_mut(doc);
-        let created = files
-            .get(rel)
-            .and_then(|r| r.get("created"))
-            .cloned()
-            .unwrap_or(json!(at));
         files.insert(
             rel.to_string(),
-            json!({ "created": created, "updated": at, "hash": hash(&text) }),
+            json!({ "updated": at, "hash": hash(&text) }),
         );
     }
 
@@ -135,10 +128,7 @@ pub fn run(id: &Identity, check: bool) -> Result<Report> {
     if check || report.is_clean() {
         return Ok(report);
     }
-    for (scope, mut doc) in docs {
-        if scope == "life" && life_changed {
-            doc["last_write"] = json!(at);
-        }
+    for (scope, doc) in docs {
         write_json(&id.dir.join(format!("{scope}/state.json")), &doc)?;
     }
     if soul_changed {

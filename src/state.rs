@@ -1,5 +1,5 @@
 //! State files: `soul/state.json`, `life/state.json`, `work/state.json`.
-//! Each tracks authored Markdown files by content hash with created/updated stamps.
+//! Each tracks authored Markdown files by content hash with an `updated` stamp.
 
 use crate::identity::{Identity, Kind};
 use chrono::{NaiveDate, SecondsFormat, Utc};
@@ -61,7 +61,7 @@ pub fn initial(identity: &Identity, at: &str) -> Vec<(String, Value)> {
             if let Some(Value::Object(m)) = files.get_mut(scope) {
                 m.insert(
                     rel.to_string(),
-                    json!({ "created": at, "updated": at, "hash": hash(&e.text) }),
+                    json!({ "updated": at, "hash": hash(&e.text) }),
                 );
             }
         }
@@ -75,7 +75,7 @@ pub fn initial(identity: &Identity, at: &str) -> Vec<(String, Value)> {
         "history": [],
         "review": { "last_reviewed": null, "reviewed_through": null, "memory_hash": memory_hash }
     });
-    let life = json!({ "files": take(&mut files, "life"), "last_write": at });
+    let life = json!({ "files": take(&mut files, "life") });
     let work = json!({ "projects": {}, "files": take(&mut files, "work") });
     vec![
         ("soul/state.json".into(), soul),
