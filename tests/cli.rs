@@ -2,7 +2,7 @@
 
 mod common;
 
-use common::{copy_tree, owo};
+use common::{copy_example, copy_tree, examples, json, owo};
 use serde_json::Value;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -500,4 +500,94 @@ fn write_refuses_empty_text_and_generated_files() {
         fs::read_to_string(dir.join("life/timeline.md")).unwrap(),
         timeline
     );
+}
+
+/// `owo` run from `cwd` with no `--root` and the user config folders inside `home`.
+fn owo_in(cwd: &Path, home: &Path) -> assert_cmd::Command {
+    let mut cmd = assert_cmd::Command::cargo_bin("owo").unwrap();
+    cmd.current_dir(cwd)
+        .env_remove("OWO_ROOT")
+        .env_remove("OWO_IDENTITY")
+        .env_remove("OWO_PROJECT")
+        .env("HOME", home)
+        .env("XDG_CONFIG_HOME", home.join(".config"))
+        .env("XDG_DATA_HOME", home.join(".local/share"));
+    cmd
+}
+
+#[test]
+fn owo_toml_in_a_parent_sets_identity_project_and_kb() {
+    let tmp = copy_example("reviewer");
+    copy_tree(&examples().join("nicole"), &tmp.path().join("nicole"));
+    owo(tmp.path())
+        .args(["-i", "reviewer", "add", "project", "Mural"])
+        .assert()
+        .success();
+    let repo = tmp.path().join("repo");
+    let home = tmp.path().join("home");
+    fs::create_dir_all(repo.join("sub")).unwrap();
+    fs::create_dir_all(repo.join("kb/mural")).unwrap();
+    fs::create_dir_all(&home).unwrap();
+    fs::write(repo.join("kb/mural/lat.md"), "# Mural\n").unwrap();
+    fs::write(
+        repo.join(".owo.toml"),
+        "identity = \"reviewer\"\nproject = \"mural\"\nkb = \"kb/mural\"\n",
+    )
+    .unwrap();
+    let mut cmd = owo_in(&repo.join("sub"), &home);
+    cmd.arg("--root").arg(tmp.path());
+    let out = cmd
+        .args(["context", "--no-touch", "--json"])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    assert!(
+        out.stderr.is_empty(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let v: Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert_eq!(v["data"]["identity"], "reviewer");
+    assert_eq!(v["data"]["project"], "mural");
+    assert_eq!(v["data"]["kb"]["exists"], true, "{v}");
+    assert!(v["data"]["kb"]["path"]
+        .as_str()
+        .unwrap()
+        .ends_with("repo/kb/mural"));
+    let v = json(
+        owo_in(&repo.join("sub"), &home)
+            .arg("--root")
+            .arg(tmp.path())
+            .args(["-i", "nicole", "config"]),
+    );
+    assert_eq!(v["data"]["identity"], "nicole", "the flag beats the file");
+}
+
+#[test]
+fn owo_toml_root_in_a_parent_warns() {
+    let tmp = copy_example("nicole");
+    let repo = tmp.path().join("repo");
+    let home = tmp.path().join("home");
+    fs::create_dir_all(repo.join("sub")).unwrap();
+    fs::create_dir_all(&home).unwrap();
+    fs::write(repo.join(".owo.toml"), "root = \"..\"\n").unwrap();
+    let out = owo_in(&repo.join("sub"), &home)
+        .args(["config", "--json"])
+        .output()
+        .unwrap();
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains("warning: the root comes from") && stderr.contains("repo/.owo.toml"),
+        "{stderr}"
+    );
+    let v: Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert_eq!(
+        v["data"]["identity"], "nicole",
+        "the only identity in the root"
+    );
+    let out = owo_in(&repo, &home)
+        .args(["config", "--json"])
+        .output()
+        .unwrap();
+    assert!(out.status.success() && out.stderr.is_empty());
 }

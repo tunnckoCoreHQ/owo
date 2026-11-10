@@ -770,3 +770,55 @@ fn kb_path_expands_home() {
     ]));
     assert_eq!(v["data"]["kb"]["exists"], true, "{v}");
 }
+
+#[test]
+fn context_look_and_with() {
+    let v = json(owo_as(&examples(), "nicole").args([
+        "context",
+        "--no-touch",
+        "--look",
+        "--with",
+        "First Firing",
+        "--with",
+        "Nope",
+    ]));
+    let items: Vec<(&str, &str)> = v["data"]["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|i| (i["tier"].as_str().unwrap(), i["path"].as_str().unwrap()))
+        .collect();
+    assert!(items.contains(&("look", "soul/LOOK.md")), "{v}");
+    assert!(
+        items.contains(&("with", "life/events/first-firing.md")),
+        "{v}"
+    );
+    assert!(!items.iter().any(|(_, p)| *p == "soul/VOICE.md"));
+    assert!(v["warnings"]
+        .to_string()
+        .contains("--with \\\"Nope\\\" does not resolve"));
+}
+
+#[test]
+fn review_done_through_a_date() {
+    let tmp = copy_example("reviewer");
+    let v =
+        json(owo_as(tmp.path(), "reviewer").args(["review", "done", "--through", "2026-10-28"]));
+    assert_eq!(v["data"]["reviewed_through"], "2026-10-28");
+    let p = json(owo_as(tmp.path(), "reviewer").arg("review"));
+    assert_eq!(p["data"]["reviewed_through"], "2026-10-28");
+    let days: Vec<&str> = p["data"]["unreviewed_days"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|d| d["date"].as_str().unwrap())
+        .collect();
+    assert!(
+        !days.is_empty() && days.iter().all(|d| *d > "2026-10-28"),
+        "{days:?}"
+    );
+    owo_as(tmp.path(), "reviewer")
+        .args(["review", "done", "--through", "nope"])
+        .assert()
+        .code(2);
+}
