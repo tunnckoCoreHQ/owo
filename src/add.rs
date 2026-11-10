@@ -20,11 +20,6 @@ pub struct Request<'a> {
     pub kb: Option<&'a str>,
 }
 
-pub enum Added {
-    Created(String),
-    Exists(String),
-}
-
 fn folder(kind: &str) -> Option<&'static str> {
     LIFE_CATEGORIES
         .iter()
@@ -32,7 +27,8 @@ fn folder(kind: &str) -> Option<&'static str> {
         .map(|(dir, _)| *dir)
 }
 
-pub fn add(id: &Identity, req: &Request) -> Result<Added> {
+/// Returns the entry path and true when the file is new.
+pub fn add(id: &Identity, req: &Request) -> Result<(String, bool)> {
     if req.parent.is_some() && req.kind != "location-detail" {
         bail!(
             "--parent is for location-detail; a {} has no parent",
@@ -92,21 +88,21 @@ pub fn add(id: &Identity, req: &Request) -> Result<Added> {
         "journal" | "writing" => {
             format!("life/{}/{date}_{slug}.md", folder(req.kind).expect("known"))
         }
-        other => match folder(other) {
-            Some(dir) => format!("life/{dir}/{slug}.md"),
-            None => bail!("unknown entry type {other:?}; run `owo templates` for the list"),
-        },
+        other => format!(
+            "life/{}/{slug}.md",
+            folder(other).expect("clap lists known types")
+        ),
     };
 
     let path = id.dir.join(&rel);
     if path.exists() {
-        return Ok(Added::Exists(rel));
+        return Ok((rel, false));
     }
     let builtin = templates::ENTRY_TEMPLATES
         .iter()
         .find(|(n, _)| *n == req.kind)
         .map(|(_, t)| *t)
-        .context("missing template")?;
+        .expect("clap lists known types");
     let root = id.dir.parent().unwrap_or(&id.dir);
     let mut text = templates::fill(
         &templates::get(root, &format!("{}.md", req.kind), builtin),
@@ -138,7 +134,7 @@ pub fn add(id: &Identity, req: &Request) -> Result<Added> {
         fs::create_dir_all(path.parent().expect("has parent").join("notes"))?;
     }
     fs::write(&path, text).with_context(|| format!("writing {}", path.display()))?;
-    Ok(Added::Created(rel))
+    Ok((rel, true))
 }
 
 /// Writes the full text of one authored file, creating its folder. Returns true when the file

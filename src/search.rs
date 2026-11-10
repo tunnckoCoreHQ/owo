@@ -50,7 +50,6 @@ pub struct Hit {
 }
 
 /// Which entries a search looks at.
-#[derive(Default)]
 pub struct Filter<'a> {
     /// soul, life or work
     pub scope: Option<&'a str>,

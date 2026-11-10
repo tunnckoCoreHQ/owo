@@ -554,7 +554,6 @@ fn fill(src: &Path, refs: &Path, root: &Path, slug: &str, manifest: &Value) -> R
 
     let id = crate::identity::Identity::load(root, slug)?;
     crate::index::write(&id)?;
-    let id = crate::identity::Identity::load(root, slug)?;
     crate::stamp::run(&id, false)?;
     r.checklist = vec![
         "Move MEMORY \"Moments\" into event links under \"Defining moments\".".into(),

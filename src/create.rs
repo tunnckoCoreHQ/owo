@@ -47,7 +47,6 @@ pub fn new_identity(root: &Path, name: &str, slug: &str) -> Result<Created> {
 
     let identity = Identity::load(root, slug)?;
     files.extend(index::write(&identity)?);
-    let identity = Identity::load(root, slug)?;
     for (rel, value) in state::initial(&identity, &state::now()) {
         crate::identity::write_json(&dir.join(&rel), &value)?;
         files.push(rel);

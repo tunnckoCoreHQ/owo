@@ -255,11 +255,8 @@ mod tests {
 }
 
 /// A `[[kb:<project>:<path>#<Section>]]` link resolved against the project KB.
-#[derive(Debug, Serialize)]
+#[derive(Debug)]
 pub struct KbLink {
-    pub project: String,
-    /// KB root folder, when the project has a KB path.
-    pub root: Option<String>,
     pub root_exists: bool,
     pub file: Option<String>,
     pub file_exists: bool,
@@ -298,8 +295,6 @@ pub fn kb_link(id: &Identity, target: &str) -> Option<Result<KbLink, String>> {
         return Some(Err(format!("[[{target}]]: no project {project:?}")));
     }
     let mut out = KbLink {
-        project: project.into(),
-        root: None,
         root_exists: false,
         file: None,
         file_exists: false,
@@ -317,7 +312,6 @@ pub fn kb_link(id: &Identity, target: &str) -> Option<Result<KbLink, String>> {
         kb.clone()
     };
     out.root_exists = base.is_dir();
-    out.root = Some(base.display().to_string());
     let mut file = base.join(path);
     if !file.is_file() && file.extension().is_none() {
         file.set_extension("md");

@@ -521,10 +521,7 @@ fn run(cli: &Cli, out: &Out) -> Result<i32> {
                 aliases,
                 kb: kb.as_deref(),
             };
-            let (path, created) = match add::add(&id, &req)? {
-                add::Added::Created(p) => (p, true),
-                add::Added::Exists(p) => (p, false),
-            };
+            let (path, created) = add::add(&id, &req)?;
             let ok = created || kind == "log";
             if out.json {
                 Envelope::new(ok, json!({ "path": path, "created": created }))

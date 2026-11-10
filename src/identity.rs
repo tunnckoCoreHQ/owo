@@ -5,7 +5,6 @@ use crate::markdown::Fields;
 use crate::slug::slugify;
 use anyhow::{Context, Result};
 use serde_json::Value as Json;
-use serde_json::Value as Yaml;
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -112,15 +111,15 @@ impl Entry {
         markdown::split(&self.text).body
     }
 
-    pub fn field(&self, key: &str) -> Option<&Yaml> {
+    pub fn field(&self, key: &str) -> Option<&Json> {
         self.frontmatter.as_ref()?.get(key)
     }
 
     pub fn field_str(&self, key: &str) -> Option<String> {
         match self.field(key)? {
-            Yaml::String(s) => Some(s.clone()),
-            Yaml::Number(n) => Some(n.to_string()),
-            Yaml::Bool(b) => Some(b.to_string()),
+            Json::String(s) => Some(s.clone()),
+            Json::Number(n) => Some(n.to_string()),
+            Json::Bool(b) => Some(b.to_string()),
             _ => None,
         }
     }
@@ -218,7 +217,7 @@ fn parse_entry(rel: String, text: String, lossy: bool) -> Entry {
         .field_str("title")
         .filter(|t| !t.trim().is_empty())
         .or(heading);
-    if let Some(Yaml::Array(items)) = entry.field("aliases") {
+    if let Some(Json::Array(items)) = entry.field("aliases") {
         entry.aliases = items
             .iter()
             .filter_map(|v| v.as_str().map(str::to_string))
@@ -262,9 +261,6 @@ pub fn write_json(path: &Path, doc: &Json) -> Result<()> {
 impl Identity {
     pub fn load(root: &Path, slug: &str) -> Result<Self> {
         let dir = root.join(slug);
-        if !dir.is_dir() {
-            anyhow::bail!("identity folder not found: {}", dir.display());
-        }
         let (manifest, manifest_error) = match fs::read_to_string(dir.join("identity.json")) {
             Ok(text) => match serde_json::from_str::<Json>(&text) {
                 Ok(v) => (Some(v), None),
