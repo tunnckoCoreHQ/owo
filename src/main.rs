@@ -796,13 +796,18 @@ fn run(cli: &Cli, out: &Out) -> Result<i32> {
         }
         Command::Sync {
             action:
-                SyncAction::Start {
+                action @ (SyncAction::Start {
                     session,
-                    transcript,
-                    format,
                     now,
                     every,
-                },
+                    ..
+                }
+                | SyncAction::Push {
+                    session,
+                    now,
+                    every,
+                    ..
+                }),
         } => {
             let r = resolved(cli)?;
             let slug = need_identity(&r)?;
@@ -817,17 +822,36 @@ fn run(cli: &Cli, out: &Out) -> Result<i32> {
                 })
                 .unwrap_or(6)
                 .max(1);
-            let req = sync::StartRequest {
+            let mut req = sync::StartRequest {
                 root: &r.root,
                 slug: &slug,
                 session,
-                transcript,
-                format,
+                transcript: Path::new(""),
+                format: "jsonl",
                 now: *now,
                 every,
                 project,
             };
-            let s = sync::start(&req)?;
+            let s = match action {
+                SyncAction::Start {
+                    transcript, format, ..
+                } => {
+                    req.transcript = transcript;
+                    req.format = format;
+                    sync::start(&req)?
+                }
+                SyncAction::Push { turns, .. } => {
+                    let turns = match turns {
+                        Some(t) => t.clone(),
+                        None => std::io::read_to_string(std::io::stdin())?,
+                    };
+                    sync::push(&req, &turns)?
+                }
+                SyncAction::Done { .. } => unreachable!("matched above"),
+            };
+            if let Some(n) = s.added.filter(|_| !out.json) {
+                out.say(format!("added {n}"));
+            }
             if out.json {
                 Envelope::ok(serde_json::to_value(&s)?).print();
             } else if let Some(src) = &s.source {
@@ -1128,6 +1152,21 @@ enum SyncAction {
         /// Transcript format; jsonl lines are {"role": ..., "text": ...}
         #[arg(long, default_value = "jsonl", value_parser = clap::builder::PossibleValuesParser::new(sync::FORMATS))]
         format: String,
+        /// Take any new turns now (session end)
+        #[arg(long)]
+        now: bool,
+        /// New user turns per run (default: identity.json sync_every, else 6)
+        #[arg(long)]
+        every: Option<usize>,
+    },
+    /// Store turns sent by the host, then run sync start on them (for hosts without a local transcript)
+    Push {
+        /// Session id from the host (letters, digits, -, _ or .)
+        #[arg(long)]
+        session: String,
+        /// JSON array of {"id", "role", "text"}; turns whose id is stored already are skipped (default: stdin)
+        #[arg(long, allow_hyphen_values = true)]
+        turns: Option<String>,
         /// Take any new turns now (session end)
         #[arg(long)]
         now: bool,

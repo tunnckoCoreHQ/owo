@@ -71,8 +71,8 @@ This document is the design. File formats, JSON and command lines appear as shor
 
 ```text
 <root>/                         # --root, OWO_ROOT, .owo.toml, user config, or XDG default
-├── .owo/                       # CLI working data: sync bookmarks
-│   └── sessions/<session>.json
+├── .owo/                       # CLI working data: sync bookmarks and pushed turns
+│   └── sessions/<session>.json, <session>.turns.jsonl
 ├── .templates/                 # optional overrides for built-in templates
 ├── sources/                    # raw source material, outside every identity
 │   └── <slug>/
@@ -490,6 +490,8 @@ Session sync works with any host that can run a command after a turn:
 4. On success the host calls `owo sync done --session <id> --until <n>`.
 5. A manual command or session-end hook calls `owo sync start --now`, which takes any new turns.
 
+A host with no transcript on this machine, such as a hosted chat that reaches owo over MCP, calls `owo sync push --session <id>` with its recent turns in place of step 1. Each turn is `{id, role, text}` with the host's own message id. owo appends the turns whose id it has not stored to `.owo/sessions/<id>.turns.jsonl`, so re-sent turns are safe, and continues from step 2 on that file. When a run is due, the reply also carries the slice and prompt text.
+
 Entries from a sync run cite the slice file in `sources/`.
 
 ### 6.4 Review: compiling MEMORY
@@ -675,7 +677,10 @@ kb = "lat.md"
   "prompt": ".owo/sessions/claude-7f3a.prompt.md" } }
 ```
 
-`jsonl` is the host-neutral format: one `{"role":"user","text":"..."}` object per line.
+`jsonl` is the host-neutral format: one `{"role":"user","text":"..."}` object per line, with an optional `id`. Slices show each message's id (`uuid` in claude-jsonl, `id` in opencode-json) next to its number.
+
+`owo sync push --session <id> [--turns <json>] [--now]`
+: Appends pushed `{id, role, text}` turns with new ids to `.owo/sessions/<id>.turns.jsonl` (stdin when `--turns` is left out), then works as `sync start` on that file. The reply adds `added` and, when due, `source_text` and `prompt_text`.
 
 `owo sync done --session <id> --until <n>`
 : Moves the bookmark.

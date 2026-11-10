@@ -124,7 +124,7 @@ fn sync_reads_claude_jsonl() {
     fs::write(
         &t,
         [
-            r#"{"type":"user","message":{"role":"user","content":"draw a cat"}}"#,
+            r#"{"type":"user","uuid":"u-1","message":{"role":"user","content":"draw a cat"}}"#,
             r#"{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"A cat it is."},{"type":"tool_use","name":"x"}]}}"#,
             r#"{"type":"user","message":{"role":"user","content":[{"type":"tool_result","content":"ok"}]}}"#,
             r#"{"type":"summary","summary":"x"}"#,
@@ -151,6 +151,7 @@ fn sync_reads_claude_jsonl() {
     assert_eq!(v["data"]["until"], 2);
     let src = fs::read_to_string(tmp.path().join(v["data"]["source"].as_str().unwrap())).unwrap();
     assert!(src.contains("A cat it is.") && !src.contains("tool_result"));
+    assert!(src.contains("## 0 user (u-1)"), "slice shows the host id");
 }
 
 #[test]
@@ -598,4 +599,109 @@ fn sync_done_and_prompt_guards() {
     );
     sync(&["done", "--session", "s3", "--until", "500"]).code(1);
     sync(&["done", "--session", "s3", "--until", "1"]).success();
+}
+
+#[test]
+fn sync_push_stores_turns_once() {
+    let tmp = copy_example("nicole");
+    let push = |turns: &str, extra: &[&str]| {
+        json(
+            owo(tmp.path())
+                .args(["-i", "nicole", "sync", "push", "--session", "g1"])
+                .args(extra)
+                .arg("--turns")
+                .arg(turns),
+        )
+    };
+    let v = push(
+        r#"[{"id":1,"role":"user","text":"hi"},{"id":2,"role":"assistant","text":"hello"}]"#,
+        &[],
+    );
+    assert_eq!(v["data"]["added"], 2);
+    assert_eq!(v["data"]["due"], false);
+    let v = push(
+        r#"[{"id":2,"role":"assistant","text":"hello"},{"id":3,"role":"user","text":"ok"},{"id":4,"role":"user","text":"ok"}]"#,
+        &["--every", "3"],
+    );
+    assert_eq!(
+        v["data"]["added"], 2,
+        "id 2 is stored already; a repeated text is kept"
+    );
+    assert_eq!(v["data"]["due"], true);
+    assert_eq!(v["data"]["until"], 4);
+    assert!(v["data"]["source_text"]
+        .as_str()
+        .unwrap()
+        .contains("## 3 user (4)"));
+    assert!(v["data"]["prompt_text"]
+        .as_str()
+        .unwrap()
+        .contains("--until 4"));
+    let stored = fs::read_to_string(tmp.path().join(".owo/sessions/g1.turns.jsonl")).unwrap();
+    assert_eq!(stored.lines().count(), 4);
+    owo(tmp.path())
+        .args([
+            "-i",
+            "nicole",
+            "sync",
+            "done",
+            "--session",
+            "g1",
+            "--until",
+            "4",
+        ])
+        .assert()
+        .success();
+    let v = json(
+        owo(tmp.path())
+            .args(["-i", "nicole", "sync", "push", "--session", "g1"])
+            .write_stdin(r#"[{"id":"5","role":"user","text":"from stdin"}]"#),
+    );
+    assert_eq!(v["data"]["added"], 1);
+    assert_eq!(
+        v["data"]["from"], 2,
+        "two overlap user turns before the bookmark"
+    );
+}
+
+#[test]
+fn sync_push_refuses_bad_turns_and_file_sessions() {
+    let tmp = copy_example("nicole");
+    let push = |session: &str, turns: &str| {
+        owo(tmp.path())
+            .args([
+                "-i",
+                "nicole",
+                "sync",
+                "push",
+                "--session",
+                session,
+                "--turns",
+                turns,
+            ])
+            .assert()
+            .code(1)
+    };
+    push(
+        "g1",
+        r#"[{"id":1,"role":"user","text":"hi"},{"role":"user","text":"no id"}]"#,
+    );
+    push("g1", r#"[{"id":1,"role":"system","text":"hi"}]"#);
+    assert!(!tmp.path().join(".owo/sessions/g1.turns.jsonl").exists());
+    let t = tmp.path().join("t.jsonl");
+    fs::write(&t, r#"{"role":"user","text":"hi"}"#).unwrap();
+    owo(tmp.path())
+        .args([
+            "-i",
+            "nicole",
+            "sync",
+            "start",
+            "--session",
+            "f1",
+            "--transcript",
+        ])
+        .arg(&t)
+        .assert()
+        .success();
+    push("f1", r#"[{"id":1,"role":"user","text":"hi"}]"#);
 }

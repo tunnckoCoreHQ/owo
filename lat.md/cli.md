@@ -28,7 +28,7 @@ The implemented command set; see `docs/design.md` section 7 for the full plan.
 - `owo soul note <file> --change <text> --evidence <name>...` appends to `soul/state.json` `history`. Evidence must resolve; fewer than two links and no defining event gives a warning. `owo soul history [file]` prints the trail.
 - `owo changes [--since]` lists changes by day; see [[decisions#Changes read Git, else stamps]]. `owo lint --changed` keeps diagnostics for changed files only.
 - `owo export card [--spec v3|v2] [--scenario <name>] [--png <avatar> --out <file>]`, `owo export soulspec --out <dir>`, `owo export skill --out <dir>`; see [[cli#Export]].
-- `owo sync start` and `owo sync done`; see [[cli#Sync]].
+- `owo sync start`, `owo sync push` and `owo sync done`; see [[cli#Sync]].
 - `owo migrate v1 <path> --out <root>/<slug>`; see [[decisions#Migrate is mechanical]].
 - `owo mcp [--remote [ADDR]] [--port N]` serves every command as an MCP tool (subcommands as `review_done`, `export_card` and so on). Without `--remote` it speaks over stdio. With `--remote` it listens on ADDR (default `127.0.0.1`), port N or 4224 (else the next free port), prints `http://<addr>:<port>/mcp`, and answers each POST with JSON. `--root`, `-i` and `--project` given to `owo mcp` are the defaults; each tool also takes `identity` and `project`. Paths in tool arguments are paths on the server.
 - `owo list` prints slug, name, last activity and projects per identity. Also `owo slug <text>`, `owo templates [list | show <name>]` (list marks overrides), `owo config`.
@@ -84,3 +84,7 @@ Host-agnostic session sync: the host calls `sync start` after each turn and `syn
 `owo sync start --session <id> --transcript <path> [--format jsonl|claude-jsonl|opencode-json] [--every N] [--now]` parses user and assistant text, reads the bookmark in `<root>/.owo/sessions/<id>.json`, and counts new user turns. A run is due at `--every` turns (default `identity.json` `sync_every`, else 6), or at any new turn with `--now`.
 
 When due it writes the slice, with two earlier user turns as overlap, to `<root>/sources/<slug>/<date>_<session>_<from>-<until>.md`, and the ingest prompt to `.owo/sessions/<id>.prompt.md`. `owo sync done --session <id> --until <n>` moves the bookmark forward; `--until` may not pass the message count the last `sync start` read. The prompt names the absolute root and runs `context --no-touch`, so ingest runs do not count as project sessions. `--project` must name an existing project. A file with no user or assistant messages for the chosen format fails. While a run is pending, a not-due `sync start` names its prompt.
+
+`owo sync push --session <id> [--turns <json>] [--every N] [--now]` is for hosts with no transcript on this machine, such as a hosted chat over MCP. It takes a JSON array of `{id, role, text}` turns (stdin when `--turns` is left out), appends those whose id is not stored yet to `.owo/sessions/<id>.turns.jsonl`, then runs the `sync start` logic on that file. One bad turn fails the push and stores nothing; a session that syncs a local file refuses pushes. The reply adds `added` and, when due, `source_text` and `prompt_text`.
+
+The readers keep each message's id (`id` in jsonl, `uuid` in claude-jsonl, `id` in opencode-json), and slice headings show it after the message number.

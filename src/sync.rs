@@ -7,7 +7,9 @@ use crate::identity::{read_json, write_json};
 use anyhow::{bail, Context, Result};
 use serde::Serialize;
 use serde_json::{json, Value};
+use std::collections::HashSet;
 use std::fs;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
@@ -16,6 +18,8 @@ const OVERLAP_TURNS: usize = 2;
 
 #[derive(Debug, Clone)]
 pub struct Message {
+    /// The host's id for the message, when the transcript has one.
+    pub id: Option<String>,
     pub role: String,
     pub text: String,
 }
@@ -37,13 +41,23 @@ fn text_of(content: &Value) -> String {
     }
 }
 
+/// A string or number id as text.
+fn id_of(v: &Value) -> Option<String> {
+    match v {
+        Value::String(s) if !s.is_empty() => Some(s.clone()),
+        Value::Number(n) => Some(n.to_string()),
+        _ => None,
+    }
+}
+
 /// Parses a transcript into user and assistant messages with text.
 pub fn parse(raw: &str, format: &str) -> Result<Vec<Message>> {
     let mut out = vec![];
-    let mut push = |role: Option<&str>, text: String| {
+    let mut push = |id: Option<String>, role: Option<&str>, text: String| {
         if let Some(role @ ("user" | "assistant")) = role {
             if !text.trim().is_empty() {
                 out.push(Message {
+                    id,
                     role: role.to_string(),
                     text: text.trim().to_string(),
                 });
@@ -61,13 +75,14 @@ pub fn parse(raw: &str, format: &str) -> Result<Vec<Message>> {
                     .with_context(|| format!("transcript line {}", n + 1))?;
                 if format == "jsonl" {
                     push(
+                        id_of(&v["id"]),
                         v["role"].as_str(),
                         v["text"].as_str().unwrap_or_default().to_string(),
                     );
                 } else {
                     let msg = &v["message"];
                     let role = msg["role"].as_str().or(v["type"].as_str());
-                    push(role, text_of(&msg["content"]));
+                    push(id_of(&v["uuid"]), role, text_of(&msg["content"]));
                 }
             }
         }
@@ -83,7 +98,8 @@ pub fn parse(raw: &str, format: &str) -> Result<Vec<Message>> {
                 } else {
                     text_of(&m["content"])
                 };
-                push(role, text);
+                let id = id_of(&m["id"]).or_else(|| m.pointer("/info/id").and_then(id_of));
+                push(id, role, text);
             }
         }
         other => bail!(
@@ -110,6 +126,14 @@ pub struct Start {
     /// The prompt of a run that started earlier and has no `sync done` yet.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub pending: Option<String>,
+    /// Push only: turns stored by this push.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub added: Option<usize>,
+    /// Push only, when due: the slice and prompt text, for agents that cannot read the files.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source_text: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub prompt_text: Option<String>,
 }
 
 pub struct StartRequest<'a> {
@@ -194,6 +218,77 @@ fn write_bookmark(root: &Path, session: &str, doc: &Value) -> Result<()> {
 pub fn start(req: &StartRequest) -> Result<Start> {
     check_session(req.session)?;
     let _lock = Lock::take(req.root, req.session)?;
+    run(req)
+}
+
+/// Stores pushed `{id, role, text}` turns in `<root>/.owo/sessions/<id>.turns.jsonl`,
+/// skipping ids already stored, then runs `start` on that file.
+pub fn push(req: &StartRequest, turns: &str) -> Result<Start> {
+    check_session(req.session)?;
+    let _lock = Lock::take(req.root, req.session)?;
+    let name = format!("{}.turns.jsonl", req.session);
+    let file = req.root.join(".owo/sessions").join(&name);
+    if let Some(t) = read_bookmark(req.root, req.session)["transcript"].as_str() {
+        if !t.ends_with(&format!(".owo/sessions/{name}")) {
+            bail!(
+                "session {:?} syncs the transcript {t}; use `owo sync start`",
+                req.session
+            );
+        }
+    }
+    let list: Value = serde_json::from_str(turns).context("turns are not JSON")?;
+    let list = list
+        .as_array()
+        .context("turns must be a JSON array of {id, role, text}")?;
+    let mut turns = vec![];
+    for (n, t) in list.iter().enumerate() {
+        let id =
+            id_of(&t["id"]).with_context(|| format!("turn {n}: id must be a string or number"))?;
+        let role = t["role"]
+            .as_str()
+            .filter(|r| matches!(*r, "user" | "assistant"))
+            .with_context(|| format!("turn {n}: role must be user or assistant"))?;
+        let text = t["text"]
+            .as_str()
+            .with_context(|| format!("turn {n}: text must be a string"))?;
+        if !text.trim().is_empty() {
+            turns.push(json!({ "id": id, "role": role, "text": text }));
+        }
+    }
+    let stored = fs::read_to_string(&file).unwrap_or_default();
+    let mut ids: HashSet<String> = parse(&stored, "jsonl")?
+        .into_iter()
+        .filter_map(|m| m.id)
+        .collect();
+    let mut lines = String::new();
+    for t in turns {
+        if ids.insert(t["id"].as_str().expect("id is text").to_string()) {
+            lines.push_str(&format!("{t}\n"));
+        }
+    }
+    let added = lines.lines().count();
+    fs::create_dir_all(file.parent().expect("has parent"))?;
+    fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&file)?
+        .write_all(lines.as_bytes())?;
+    let mut out = run(&StartRequest {
+        transcript: &file,
+        format: "jsonl",
+        ..*req
+    })?;
+    out.added = Some(added);
+    if let (Some(source), Some(prompt)) = (&out.source, &out.prompt) {
+        out.source_text = Some(fs::read_to_string(req.root.join(source))?);
+        out.prompt_text = Some(fs::read_to_string(req.root.join(prompt))?);
+    }
+    Ok(out)
+}
+
+/// Reads the transcript, decides whether a run is due and writes the slice and prompt.
+/// The caller holds the session lock.
+fn run(req: &StartRequest) -> Result<Start> {
     let raw = fs::read_to_string(req.transcript)
         .with_context(|| format!("reading {}", req.transcript.display()))?;
     let messages = parse(&raw, req.format)?;
@@ -237,6 +332,9 @@ pub fn start(req: &StartRequest) -> Result<Start> {
         source: None,
         prompt: None,
         pending: None,
+        added: None,
+        source_text: None,
+        prompt_text: None,
     };
     doc["session"] = json!(req.session);
     doc["identity"] = json!(req.slug);
@@ -257,7 +355,11 @@ pub fn start(req: &StartRequest) -> Result<Start> {
         );
         let mut body = format!("# Session {} ({from}-{until})\n\nIdentity: {}. Transcript: {}. Messages {from} to {until}.{}\n", req.session, req.slug, req.transcript.display(), if done == 0 { String::new() } else { format!(" Messages before {done} were synced already.") });
         for (i, m) in messages[from..until].iter().enumerate() {
-            body.push_str(&format!("\n## {} {}\n\n{}\n", from + i, m.role, m.text));
+            let id =
+                m.id.as_ref()
+                    .map(|id| format!(" ({id})"))
+                    .unwrap_or_default();
+            body.push_str(&format!("\n## {} {}{id}\n\n{}\n", from + i, m.role, m.text));
         }
         let path = req.root.join(&source);
         fs::create_dir_all(path.parent().expect("has parent"))?;
