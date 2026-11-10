@@ -4,7 +4,7 @@
 
 use crate::identity::{write_json, Identity, Kind};
 use crate::state::{self, hash, scope_of, SCOPES};
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use regex::Regex;
 use serde_json::{json, Map, Value};
 use std::fs;
@@ -56,6 +56,9 @@ fn touch_updated(text: &str, today: &str) -> Option<String> {
 }
 
 pub fn run(id: &Identity, check: bool) -> Result<Report> {
+    if let Some(e) = id.entries.iter().find(|e| e.lossy && !check) {
+        bail!("{} is not valid UTF-8; fix it before stamping", e.rel);
+    }
     let at = state::now();
     let today = state::day(&at);
     let mut docs = SCOPES

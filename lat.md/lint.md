@@ -6,7 +6,7 @@
 
 Each rule has a code usable with `--rule`.
 
-- `tree` (error): required files and folders; `identity.json` schema `owo/1` and slug; SoulSpec required fields; location folders have `overview.md`, slug names, one level deep; files outside the layout.
+- `tree` (error): required files and folders; `identity.json` schema `owo/1` and slug; SoulSpec required fields; location folders have `overview.md`, slug names, one level deep; files outside the layout; Markdown files that are not valid UTF-8 (owo reads them with U+FFFD in place of the bad bytes, and `owo stamp` refuses to run until they are fixed).
 - `schema` (error, empty summary warns): frontmatter per [[formats#Entry frontmatter]].
 - `soul-plain` (error): soul Markdown has no frontmatter.
 - `links` (error): every wiki-link in body and frontmatter resolves; ambiguous links warn, and so does a `#Section` the target lacks. `kb:` links belong to the `kb` rule.

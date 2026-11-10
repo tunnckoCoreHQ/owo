@@ -101,6 +101,8 @@ pub struct Entry {
     pub text: String,
     pub frontmatter: Option<Fields>,
     pub frontmatter_error: Option<String>,
+    /// True when the file is not valid UTF-8; `text` holds U+FFFD in place of the bad bytes.
+    pub lossy: bool,
     pub title: Option<String>,
     pub aliases: Vec<String>,
 }
@@ -190,7 +192,7 @@ pub fn classify(rel: &str) -> Kind {
     }
 }
 
-fn parse_entry(rel: String, text: String) -> Entry {
+fn parse_entry(rel: String, text: String, lossy: bool) -> Entry {
     let kind = classify(&rel);
     let split = markdown::split(&text);
     let mut frontmatter = None;
@@ -208,6 +210,7 @@ fn parse_entry(rel: String, text: String) -> Entry {
         text: String::new(),
         frontmatter,
         frontmatter_error,
+        lossy,
         title: None,
         aliases: vec![],
     };
@@ -285,9 +288,13 @@ impl Identity {
                 .unwrap_or(item.path())
                 .to_string_lossy()
                 .replace('\\', "/");
-            let text = fs::read_to_string(item.path())
+            let bytes = fs::read(item.path())
                 .with_context(|| format!("reading {}", item.path().display()))?;
-            entries.push(parse_entry(rel, text));
+            let (text, lossy) = match String::from_utf8(bytes) {
+                Ok(text) => (text, false),
+                Err(e) => (String::from_utf8_lossy(e.as_bytes()).into_owned(), true),
+            };
+            entries.push(parse_entry(rel, text, lossy));
         }
         Ok(Self {
             slug: slug.to_string(),

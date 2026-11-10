@@ -193,6 +193,19 @@ fn tree(c: &mut Ctx) {
     for rel in unknown {
         c.push(err("tree", &rel, "file sits outside the identity layout"));
     }
+    let lossy: Vec<String> =
+        c.id.entries
+            .iter()
+            .filter(|e| e.lossy)
+            .map(|e| e.rel.clone())
+            .collect();
+    for rel in lossy {
+        c.push(err(
+            "tree",
+            &rel,
+            "file is not valid UTF-8; owo reads the bad bytes as U+FFFD",
+        ));
+    }
 }
 
 fn schema(c: &mut Ctx) {
