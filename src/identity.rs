@@ -104,6 +104,22 @@ impl Kind {
         })
     }
 
+    /// The name of this kind in output and `--type`: its `type:` value, else a name for the file kind.
+    pub fn name(self) -> &'static str {
+        self.type_name().unwrap_or(match self {
+            Kind::Soul => "soul",
+            Kind::Example => "example",
+            Kind::WorkReadme => "work-readme",
+            Kind::Generated => "generated",
+            _ => "unknown",
+        })
+    }
+
+    /// Every kind name, for `--type` value lists.
+    pub fn names() -> impl Iterator<Item = &'static str> {
+        Kind::ALL.into_iter().map(Kind::name)
+    }
+
     /// Entries with YAML frontmatter.
     pub fn has_frontmatter(self) -> bool {
         self.type_name().is_some()
@@ -150,6 +166,11 @@ impl Entry {
             Json::Bool(b) => Some(b.to_string()),
             _ => None,
         }
+    }
+
+    /// The title, else the stem key.
+    pub fn label(&self) -> String {
+        self.title.clone().unwrap_or_else(|| self.stem_key())
     }
 
     /// Slug-like key from the path: the folder name for `overview.md` and `project.md`,

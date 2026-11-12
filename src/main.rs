@@ -234,7 +234,7 @@ fn run(cli: &Cli, out: &Out) -> Result<i32> {
                 Cli::command()
                     .error(
                         clap::error::ErrorKind::MissingRequiredArgument,
-                        format!("`owo add {}` needs a title", find::kind_name(*kind)),
+                        format!("`owo add {}` needs a title", kind.name()),
                     )
                     .exit();
             }

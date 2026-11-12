@@ -17,7 +17,7 @@ fn heading(category: &str) -> String {
 }
 
 fn line(e: &Entry) -> String {
-    let title = e.title.clone().unwrap_or_else(|| e.stem_key());
+    let title = e.label();
     let mut out = format!("- [[{title}]]");
     // A closed thread, resolved conflict or non-canon entry says so, so it does not read as current.
     let marks: Vec<String> = [
@@ -144,7 +144,7 @@ fn timeline(identity: &Identity) -> String {
     let mut sorted_eras = eras.clone();
     sorted_eras.sort_by_key(|e| (e.field_str("start").unwrap_or_default(), e.rel.clone()));
     for era in sorted_eras {
-        let title = era.title.clone().unwrap_or_else(|| era.stem_key());
+        let title = era.label();
         lines.push(format!("\n## {title}\n"));
         for (i, ev) in events.iter().enumerate() {
             if era_of[i].as_deref() == Some(era.rel.as_str()) {

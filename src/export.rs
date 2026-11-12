@@ -87,7 +87,7 @@ fn order(kind: Kind) -> Option<i64> {
 }
 
 fn lore(e: &Entry, n: usize) -> Value {
-    let title = e.title.clone().unwrap_or_else(|| e.stem_key());
+    let title = e.label();
     let mut keys = vec![title.clone()];
     keys.extend(e.aliases.iter().cloned());
     let summary = e.field_str("summary").unwrap_or_default();

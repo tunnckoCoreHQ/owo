@@ -17,8 +17,8 @@ impl Hit {
     pub fn of(e: &Entry) -> Self {
         Self {
             path: e.rel.clone(),
-            title: e.title.clone().unwrap_or_else(|| e.stem_key()),
-            kind: kind_name(e.kind).to_string(),
+            title: e.label(),
+            kind: e.kind.name().to_string(),
             summary: e
                 .field_str("summary")
                 .unwrap_or_default()
@@ -34,21 +34,6 @@ impl Hit {
             format!("{}  {}: {}", self.path, self.title, self.summary)
         }
     }
-}
-
-/// Every type name, for `--type` value lists.
-pub fn types() -> impl Iterator<Item = &'static str> {
-    Kind::ALL.into_iter().map(kind_name)
-}
-
-pub fn kind_name(kind: Kind) -> &'static str {
-    kind.type_name().unwrap_or(match kind {
-        Kind::Soul => "soul",
-        Kind::Example => "example",
-        Kind::WorkReadme => "work-readme",
-        Kind::Generated => "generated",
-        _ => "unknown",
-    })
 }
 
 pub enum Resolution {
@@ -73,7 +58,7 @@ fn levenshtein(a: &str, b: &str) -> usize {
 
 /// Resolves a name the way links do, optionally limited to one entry type.
 pub fn resolve(id: &Identity, name: &str, kind: Option<&str>) -> Resolution {
-    let matches_kind = |i: &usize| kind.is_none_or(|k| kind_name(id.entries[*i].kind) == k);
+    let matches_kind = |i: &usize| kind.is_none_or(|k| id.entries[*i].kind.name() == k);
     let hits: Vec<usize> = id
         .resolve_link(name)
         .into_iter()
