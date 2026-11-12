@@ -49,14 +49,13 @@ pub fn add(id: &Identity, req: &Request) -> Result<(String, bool)> {
     values.insert("today", today);
     values.insert("date", date.clone());
 
-    let mut parent_slug = None;
-    if req.kind == Kind::LocationDetail {
+    let parent_slug = if req.kind == Kind::LocationDetail {
         let parent = req
             .parent
             .context("location-detail needs --parent <location>")?;
-        let p = slugify(parent);
+        let parent_slug = slugify(parent);
         let overview = Kind::Location
-            .rel(&p, &date, None, None)
+            .rel(&parent_slug, &date, None, None)
             .expect("a location path");
         let parent_entry = id
             .entry(&overview)
@@ -68,12 +67,16 @@ pub fn add(id: &Identity, req: &Request) -> Result<(String, bool)> {
                 .clone()
                 .unwrap_or_else(|| parent.to_string()),
         );
-        parent_slug = Some(p);
-    }
+        Some(parent_slug)
+    } else {
+        None
+    };
+
     if req.kind == Kind::Note {
         let project = req.project.context("note needs --project <project>")?;
         values.insert("project", project.to_string());
     }
+
     let rel = req
         .kind
         .rel(&slug, &date, parent_slug.as_deref(), req.project)

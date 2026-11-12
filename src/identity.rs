@@ -152,8 +152,8 @@ impl Kind {
             Kind::Log => format!("life/log/{date}.md"),
             _ => {
                 let (dir, _) = LIFE_CATEGORIES.iter().find(|(_, k)| *k == self)?;
-                match self {
-                    Kind::Journal | Kind::Writing => format!("life/{dir}/{date}_{slug}.md"),
+                match self.dated() {
+                    Some(true) => format!("life/{dir}/{date}_{slug}.md"),
                     _ => format!("life/{dir}/{slug}.md"),
                 }
             }
