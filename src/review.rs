@@ -86,8 +86,7 @@ pub fn packet(id: &Identity) -> Packet {
     let git = crate::git::is_repo(&id.dir);
     let mut changed = vec![];
     for e in crate::state::tracked(id) {
-        let updated = crate::state::record(id, &e.rel)
-            .and_then(|r| r["updated"].as_str())
+        let updated = crate::state::updated(id, &e.rel)
             .unwrap_or_default()
             .to_string();
         // A file with no stamp yet is new since the last stamp, so it counts as changed.
@@ -160,9 +159,7 @@ pub fn packet(id: &Identity) -> Packet {
         open_threads: open(Kind::Thread),
         open_conflicts: open(Kind::Conflict),
         recurring: recurring(&days),
-        last_soul_change: crate::state::doc(id, "soul")["history"]
-            .as_array()
-            .and_then(|h| h.last().cloned()),
+        last_soul_change: crate::state::history(id).last().cloned(),
         unreviewed_days: days,
         changed,
         last_reviewed: last,
@@ -326,10 +323,8 @@ pub fn soul_note(id: &Identity, file: &str, change: &str, evidence: &[String]) -
 
 pub fn soul_history(id: &Identity, file: Option<&str>) -> Vec<Value> {
     let file = file.map(|f| f.trim_start_matches("soul/"));
-    crate::state::doc(id, "soul")["history"]
-        .as_array()
-        .into_iter()
-        .flatten()
+    crate::state::history(id)
+        .iter()
         .filter(|r| file.is_none_or(|f| r["file"].as_str() == Some(f)))
         .cloned()
         .collect()

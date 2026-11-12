@@ -84,8 +84,7 @@ pub fn changes(id: &Identity, since: Option<&str>) -> anyhow::Result<Changes> {
     // Each tracked file's state stamp, else its frontmatter `updated`; newest first.
     let mut stamped: Vec<(String, String)> = crate::state::tracked(id)
         .filter_map(|e| {
-            let at = crate::state::record(id, &e.rel)
-                .and_then(|r| r["updated"].as_str())
+            let at = crate::state::updated(id, &e.rel)
                 .map(str::to_string)
                 .or_else(|| e.field_str("updated"))?;
             Some((at, e.rel.clone()))
@@ -143,17 +142,9 @@ pub fn render(c: &Changes) -> String {
 pub fn changed_paths(id: &Identity) -> Vec<String> {
     let mut out = crate::git::dirty(&id.dir).unwrap_or_else(|| {
         let today = crate::state::today();
-        crate::state::SCOPES
-            .iter()
-            .flat_map(|scope| {
-                crate::state::doc(id, scope)["files"]
-                    .as_object()
-                    .into_iter()
-                    .flatten()
-                    .filter(|(_, v)| v["updated"].as_str().is_some_and(|u| u.starts_with(&today)))
-                    .map(|(rel, _)| format!("{scope}/{rel}"))
-                    .collect::<Vec<_>>()
-            })
+        crate::state::stamps(id)
+            .filter(|(_, _, at)| at.starts_with(&today))
+            .map(|(scope, rel, _)| format!("{scope}/{rel}"))
             .collect()
     });
     if let Ok(r) = crate::stamp::run(id, true) {
