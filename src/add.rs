@@ -1,6 +1,6 @@
 //! `owo add`: creates one entry from its template at its deterministic path.
 
-use crate::identity::{write_file, Identity, Kind, LIFE_CATEGORIES};
+use crate::identity::{write_file, Identity, Kind};
 use crate::slug::slugify;
 use crate::templates;
 use anyhow::{bail, Context, Result};
@@ -18,15 +18,6 @@ pub struct Request<'a> {
     pub aliases: &'a [String],
     /// KB path for a project (`kb:` in project.md)
     pub kb: Option<&'a str>,
-}
-
-/// The `life/` folder that holds a kind.
-fn folder(kind: Kind) -> &'static str {
-    LIFE_CATEGORIES
-        .iter()
-        .find(|(_, k)| *k == kind)
-        .map(|(dir, _)| *dir)
-        .expect("a life kind")
 }
 
 /// Returns the entry path and true when the file is new.
@@ -58,36 +49,38 @@ pub fn add(id: &Identity, req: &Request) -> Result<(String, bool)> {
     values.insert("today", today);
     values.insert("date", date.clone());
 
-    let rel = match req.kind {
-        Kind::Location => format!("life/locations/{slug}/overview.md"),
-        Kind::LocationDetail => {
-            let parent = req
-                .parent
-                .context("location-detail needs --parent <location>")?;
-            let parent_slug = slugify(parent);
-            let overview = format!("life/locations/{parent_slug}/overview.md");
-            let parent_entry = id
-                .entry(&overview)
-                .with_context(|| format!("parent location not found: {overview}"))?;
-            values.insert(
-                "parent",
-                parent_entry
-                    .title
-                    .clone()
-                    .unwrap_or_else(|| parent.to_string()),
-            );
-            format!("life/locations/{parent_slug}/{slug}.md")
-        }
-        Kind::Project => format!("work/projects/{slug}/project.md"),
-        Kind::Note => {
-            let project = req.project.context("note needs --project <project>")?;
-            values.insert("project", project.to_string());
-            format!("work/projects/{project}/notes/{date}_{slug}.md")
-        }
-        Kind::Log => format!("life/log/{date}.md"),
-        Kind::Journal | Kind::Writing => format!("life/{}/{date}_{slug}.md", folder(req.kind)),
-        other => format!("life/{}/{slug}.md", folder(other)),
+    let parent_slug = if req.kind == Kind::LocationDetail {
+        let parent = req
+            .parent
+            .context("location-detail needs --parent <location>")?;
+        let parent_slug = slugify(parent);
+        let overview = Kind::Location
+            .rel(&parent_slug, &date, None, None)
+            .expect("a location path");
+        let parent_entry = id
+            .entry(&overview)
+            .with_context(|| format!("parent location not found: {overview}"))?;
+        values.insert(
+            "parent",
+            parent_entry
+                .title
+                .clone()
+                .unwrap_or_else(|| parent.to_string()),
+        );
+        Some(parent_slug)
+    } else {
+        None
     };
+
+    if req.kind == Kind::Note {
+        let project = req.project.context("note needs --project <project>")?;
+        values.insert("project", project.to_string());
+    }
+
+    let rel = req
+        .kind
+        .rel(&slug, &date, parent_slug.as_deref(), req.project)
+        .expect("clap lists entry types with an add path");
 
     let path = id.dir.join(&rel);
     if path.exists() {

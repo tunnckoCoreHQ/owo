@@ -4,7 +4,7 @@ Implementation decisions and why they were made.
 
 ## Path decides kind
 
-The entry kind comes from its path, and frontmatter `type` must agree. One source of truth for placement keeps `add`, `lint` and `index` consistent.
+The entry kind comes from its path, and frontmatter `type` must agree. One source of truth for placement keeps `add`, `lint` and `index` consistent. Both directions of the map live in `identity.rs`; see [[architecture#Loading an identity]].
 
 ## Generated files carry no dates
 
