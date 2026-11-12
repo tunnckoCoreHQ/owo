@@ -250,13 +250,13 @@ pub fn write_card(
         return crate::identity::write_json(out, main);
     };
     let avatar = fs::read(png)?;
-    let cards = if main["spec"] == "chara_card_v3" {
+    let image = if main["spec"] == "chara_card_v3" {
         let v2 = card(id, "v2", project, scenario)?;
         embed_png(&avatar, &[("chara", &v2), ("ccv3", main)])?
     } else {
         embed_png(&avatar, &[("chara", main)])?
     };
-    fs::write(out, cards)?;
+    fs::write(out, image)?;
     Ok(())
 }
 

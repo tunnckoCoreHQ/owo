@@ -73,7 +73,7 @@ The KB path comes from `project.md` `kb`, relative to the identity folder, with 
 
 V3 adds `nickname` (`identity.json` `nickname`), `assets` (default icon), `creation_date`, `modification_date`, `source`, `group_only_greetings`, `creator_notes_multilingual`.
 
-The command builds the card once, warns when `first_mes` or `mes_example` is empty, and writes that same card, so `creation_date` in the output is the one that was checked.
+The command builds the card once, warns when `first_mes` or `mes_example` is empty, and writes that same card. Only a V3 PNG builds a second card, the V2 one for `chara`.
 
 `owo export soulspec` writes `soul.json`, `SOUL.md`, `IDENTITY.md` (LOOK appended), `STYLE.md` (from VOICE), `MEMORY.md` and `examples/`, and warns when the license is outside the allowlist in `export.rs`.
 
