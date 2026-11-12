@@ -153,8 +153,7 @@ pub fn show(
         let text = std::fs::read_to_string(&file)?;
         let body = match section.or(k.section.as_deref()) {
             None => text,
-            Some(s) => crate::find::section_text(&text, s)
-                .ok_or_else(|| anyhow::anyhow!("no section {s:?} in {file}"))?,
+            Some(s) => crate::find::section_text(&text, s, &file)?,
         };
         Ok((file, body))
     }))

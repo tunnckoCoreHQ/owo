@@ -320,12 +320,8 @@ fn run(cli: &Cli, out: &Out) -> Result<i32> {
                     })
                 }
                 find::Resolution::Ambiguous(v) | find::Resolution::Missing(v) => {
+                    let msg = find::unresolved(&name);
                     let hits: Vec<_> = v.iter().map(|i| find::Hit::of(&id.entries[*i])).collect();
-                    let msg = if hits.is_empty() {
-                        format!("{name:?} does not resolve")
-                    } else {
-                        format!("{name:?} does not resolve to one entry")
-                    };
                     let envelope = Envelope::new(false, json!({ "candidates": hits }))
                         .with_errors([msg.as_str()]);
                     out.emit(envelope, || {
@@ -339,22 +335,7 @@ fn run(cli: &Cli, out: &Out) -> Result<i32> {
         }
         Command::Show { name, section } => {
             let (_, id) = load(cli)?;
-            let joined = name.join(" ");
-            let target = joined.trim_start_matches("[[").trim_end_matches("]]");
-            let (path, text) = match kb::show(&id, target, section.as_deref()) {
-                Some(shown) => shown?,
-                None => {
-                    let e = &id.entries[find::one(&id, &joined)?];
-                    let text = find::show(e, section.as_deref()).ok_or_else(|| {
-                        anyhow::anyhow!(
-                            "no section {:?} in {}",
-                            section.as_deref().unwrap_or(""),
-                            e.rel
-                        )
-                    })?;
-                    (e.rel.clone(), text)
-                }
-            };
+            let (path, text) = find::show(&id, &name.join(" "), section.as_deref())?;
             out.emit(Envelope::ok(json!({ "path": path, "text": text })), || {
                 print!("{text}")
             })

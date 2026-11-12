@@ -17,7 +17,7 @@ Each module owns one job; `main.rs` parses arguments, dispatches each command, a
 - `index.rs` generates `_index.md` files and `life/timeline.md`.
 - `state.rs` and `stamp.rs` hash files and maintain the three `state.json` files; `state::parse_day` is the one strict `YYYY-MM-DD` parser. Readers go through `state::doc` for a whole file, and `state::updated`, `state::stamps`, `state::history` and `state::review` for its parts, over the copies `Identity::load` reads; writers read, change and write a fresh copy.
 - `lint.rs` runs the rules in [[lint]]; each rule appends findings and the runner names them after the rule.
-- `find.rs` resolves names, shows sections, and lists backlinks, outlinks and orphans.
+- `find.rs` resolves names, shows sections, and lists backlinks, outlinks and orphans. `find::show` picks a `kb:` link or an entry for `owo show`, and `find::section_text` writes the one "no section" error for both. `find::unresolved` writes the one "does not resolve" error for `owo resolve` and every other name lookup.
 - `kb.rs` finds a project KB, builds the pointer `owo context` prints, and resolves `[[kb:...]]` links for `owo show` and lint.
 - `status.rs` derives current state and the Now block; `context.rs` builds the tiered load set.
 - `search.rs` is the BM25 ranker; `review.rs` builds the review packet, records finished reviews, and keeps the soul history.

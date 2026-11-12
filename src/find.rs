@@ -97,6 +97,11 @@ pub fn resolve(id: &Identity, name: &str, kind: Option<&str>) -> Resolution {
     }
 }
 
+/// The error for a name that does not resolve to one entry, without the candidate list.
+pub fn unresolved(name: &str) -> String {
+    format!("{name:?} does not resolve to one entry")
+}
+
 /// The one entry a name resolves to; the error lists up to five candidates.
 pub fn one(id: &Identity, name: &str) -> anyhow::Result<usize> {
     match resolve(id, name, None) {
@@ -108,23 +113,32 @@ pub fn one(id: &Identity, name: &str) -> anyhow::Result<usize> {
             } else {
                 format!("; candidates: {}", c.join(", "))
             };
-            anyhow::bail!("{name:?} does not resolve to one entry{candidates}")
+            anyhow::bail!("{}{candidates}", unresolved(name))
         }
     }
 }
 
-/// One section with its heading line (any heading level, case-insensitive).
-pub fn section_text(body: &str, name: &str) -> Option<String> {
-    let (head, text) = markdown::section_text(body, name)?;
-    Some(format!("{head}\n{}\n", text.trim_end()))
+/// One section of `body` with its heading line (any heading level, case-insensitive);
+/// the error names `path`.
+pub fn section_text(body: &str, name: &str, path: &str) -> anyhow::Result<String> {
+    let (head, text) = markdown::section_text(body, name)
+        .ok_or_else(|| anyhow::anyhow!("no section {name:?} in {path}"))?;
+    Ok(format!("{head}\n{}\n", text.trim_end()))
 }
 
-/// Text of one section, or the whole file.
-pub fn show(e: &Entry, section: Option<&str>) -> Option<String> {
-    match section {
-        None => Some(e.text.clone()),
-        Some(name) => section_text(e.body(), name),
+/// What `owo show` prints for a name, as (path, text): a `kb:` link's file, else an entry.
+/// Either is the whole file or one section.
+pub fn show(id: &Identity, name: &str, section: Option<&str>) -> anyhow::Result<(String, String)> {
+    let target = name.trim_start_matches("[[").trim_end_matches("]]");
+    if let Some(shown) = crate::kb::show(id, target, section) {
+        return shown;
     }
+    let e = &id.entries[one(id, name)?];
+    let text = match section {
+        None => e.text.clone(),
+        Some(s) => section_text(e.body(), s, &e.rel)?,
+    };
+    Ok((e.rel.clone(), text))
 }
 
 #[derive(Debug, Serialize)]
