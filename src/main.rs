@@ -585,23 +585,14 @@ fn run(cli: &Cli, out: &Out) -> Result<i32> {
             let project = need_project(&id.dir, cli.project.as_deref())?;
             let scenario = scenario.as_deref();
             let card = export::card(&id, spec, project, scenario)?;
-            // A card without a greeting or an example message opens on nothing.
-            let warnings: Vec<String> = ["first_mes", "mes_example"]
-                .iter()
-                .filter(|k| {
-                    card["data"][**k]
-                        .as_str()
-                        .is_none_or(|s| s.trim().is_empty())
-                })
-                .map(|k| format!("{k} is empty; fill soul/examples/"))
-                .collect();
+            let warnings = export::warnings(&card);
             let Some(f) = file else {
                 let text = serde_json::to_string_pretty(&card)?;
                 return out.emit(Envelope::ok(card).with_warnings(warnings), || {
                     println!("{text}")
                 });
             };
-            export::write_card(&id, spec, project, scenario, f, png.as_deref())?;
+            export::write_card(&id, &card, project, scenario, f, png.as_deref())?;
             out.emit(
                 Envelope::ok(json!({ "path": f })).with_warnings(warnings),
                 || out.say(format!("wrote {}", f.display())),
