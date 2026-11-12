@@ -625,10 +625,7 @@ fn orphans(id: &Identity, out: &mut Vec<Diagnostic>) {
 }
 
 fn soul_evidence(id: &Identity, out: &mut Vec<Diagnostic>) {
-    let Some(history) = state::doc(id, "soul")["history"].as_array() else {
-        return;
-    };
-    for (n, record) in history.iter().enumerate() {
+    for (n, record) in state::history(id).iter().enumerate() {
         let evidence: std::collections::BTreeSet<usize> = record
             .get("evidence")
             .and_then(Json::as_array)

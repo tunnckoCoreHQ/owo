@@ -134,13 +134,11 @@ fn scope_activity(id: &Identity) -> Vec<(String, String)> {
     crate::state::SCOPES
         .iter()
         .filter_map(|s| {
-            let latest = crate::state::doc(id, s)
-                .get("files")?
-                .as_object()?
-                .values()
-                .filter_map(|r| r.get("updated")?.as_str().map(str::to_string))
+            let latest = crate::state::stamps(id)
+                .filter(|(scope, _, _)| scope == s)
+                .map(|(_, _, at)| at)
                 .max()?;
-            Some((s.to_string(), latest))
+            Some((s.to_string(), latest.to_string()))
         })
         .collect()
 }
@@ -148,15 +146,14 @@ fn scope_activity(id: &Identity) -> Vec<(String, String)> {
 /// Newest `work/state.json` stamp per project, from its files under `projects/<p>/`.
 fn project_stamps(id: &Identity) -> std::collections::BTreeMap<String, String> {
     let mut out = std::collections::BTreeMap::<String, String>::new();
-    let Some(files) = crate::state::doc(id, "work")["files"].as_object() else {
-        return out;
-    };
-    for (rel, rec) in files {
-        let (Some(rest), Some(at)) = (rel.strip_prefix("projects/"), rec["updated"].as_str())
-        else {
+    for (scope, rel, at) in crate::state::stamps(id) {
+        if scope != "work" {
             continue;
-        };
-        let Some((p, _)) = rest.split_once('/') else {
+        }
+        let Some((p, _)) = rel
+            .strip_prefix("projects/")
+            .and_then(|rest| rest.split_once('/'))
+        else {
             continue;
         };
         let newest = out.entry(p.to_string()).or_default();
@@ -220,9 +217,7 @@ pub fn compute(id: &Identity, days: i64, logs: usize) -> State {
             .collect(),
         open_threads: open(Kind::Thread, "open"),
         open_conflicts: open(Kind::Conflict, "open"),
-        last_soul_change: crate::state::doc(id, "soul")["history"]
-            .as_array()
-            .and_then(|h| h.last().cloned()),
+        last_soul_change: crate::state::history(id).last().cloned(),
         review: Review {
             last_reviewed: review.last_reviewed,
             days_since: review.days_since,

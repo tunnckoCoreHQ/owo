@@ -97,10 +97,28 @@ pub fn doc<'a>(id: &'a Identity, scope: &str) -> &'a Value {
         .expect("a known scope")]
 }
 
-/// The state record of an identity-relative path: `{ "updated", "hash" }`.
-pub fn record<'a>(id: &'a Identity, rel: &str) -> Option<&'a Value> {
+/// The `updated` stamp of an identity-relative path.
+pub fn updated<'a>(id: &'a Identity, rel: &str) -> Option<&'a str> {
     let (scope, rest) = scope_of(rel)?;
-    doc(id, scope).get("files")?.get(rest)
+    doc(id, scope)["files"][rest]["updated"].as_str()
+}
+
+/// Every `updated` stamp as (scope, scope-relative path, stamp), in `SCOPES` order.
+pub fn stamps(id: &Identity) -> impl Iterator<Item = (&'static str, &str, &str)> {
+    SCOPES.iter().flat_map(move |scope| {
+        doc(id, scope)["files"]
+            .as_object()
+            .into_iter()
+            .flatten()
+            .filter_map(move |(rel, r)| Some((*scope, rel.as_str(), r["updated"].as_str()?)))
+    })
+}
+
+/// The soul change records in `soul/state.json` → `history`, oldest first.
+pub fn history(id: &Identity) -> &[Value] {
+    doc(id, "soul")["history"]
+        .as_array()
+        .map_or(&[], Vec::as_slice)
 }
 
 /// The day at the start of a date or stamp, when it parses.
