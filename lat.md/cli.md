@@ -20,7 +20,7 @@ Each command with its flags and exit behavior.
 - `owo lint [--rule <code>]...` runs [[lint]] rules. Exits 1 when any error is found.
 - `owo index [--check]` writes generated files, or reports stale ones and exits 1.
 - `owo stamp [--check]` refreshes state files from hashes; see [[decisions#Stamp touches frontmatter]].
-- `owo resolve <name> [--type]` prints the path a name resolves to (a file path works too, absolute or relative to the working directory); on a miss it exits 1 with up to five candidates. The error is `"<name>" does not resolve to one entry`, the same text every command that takes a name uses. The `--type` value is a type name such as `character` or `soul`; an unknown one is a usage error (exit 2), here and in `search`.
+- `owo resolve <name> [--type]` prints the path a name resolves to (a file path works too, absolute or relative to the working directory); on a miss it exits 1 with up to five candidates. The error is `"<name>" does not resolve to one entry` with the candidates on the lines below; `show`, `links` and the other commands that take a name use the same sentence with `; candidates: <paths>` appended. The `--type` value is a type name such as `character` or `soul`; an unknown one is a usage error (exit 2), here and in `search`.
 - `owo show <name> [--section]` prints an entry or one section at any heading level; a `kb:<p>:<path>` name prints a file from the project KB.
 - `owo links <name> [--in] [--out]` lists backlinks and outlinks; `owo links --orphans` lists unlinked entries.
 - `owo context [--voice] [--look] [--with <name>]... [--notes N] [--format paths]` prints the load set as text, or the file list with `--format paths`; see [[cli#Context]].
