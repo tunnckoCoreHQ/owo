@@ -223,27 +223,40 @@ pub fn card(
     Ok(json!({ "spec": "chara_card_v3", "spec_version": "3.0", "data": data }))
 }
 
-/// Writes the card to `out`: JSON, or embedded in the `png` avatar (the V2 card as `chara`,
-/// plus the V3 card as `ccv3` for V3).
+/// Warnings for a built card: a card without a greeting or an example message opens on nothing.
+pub fn warnings(card: &Value) -> Vec<String> {
+    ["first_mes", "mes_example"]
+        .iter()
+        .filter(|k| {
+            card["data"][**k]
+                .as_str()
+                .is_none_or(|s| s.trim().is_empty())
+        })
+        .map(|k| format!("{k} is empty; fill soul/examples/"))
+        .collect()
+}
+
+/// Writes the built `main` card to `out`: JSON, or embedded in the `png` avatar (the V2 card
+/// as `chara`, plus the V3 card as `ccv3` for V3).
 pub fn write_card(
     id: &Identity,
-    spec: &str,
+    main: &Value,
     project: Option<&str>,
     scenario: Option<&str>,
     out: &Path,
     png: Option<&Path>,
 ) -> Result<()> {
-    let main = card(id, spec, project, scenario)?;
     let Some(png) = png else {
-        return crate::identity::write_json(out, &main);
+        return crate::identity::write_json(out, main);
     };
     let avatar = fs::read(png)?;
-    let v2 = card(id, "v2", project, scenario)?;
-    let mut cards = vec![("chara", &v2)];
-    if spec == "v3" {
-        cards.push(("ccv3", &main));
-    }
-    fs::write(out, embed_png(&avatar, &cards)?)?;
+    let image = if main["spec"] == "chara_card_v3" {
+        let v2 = card(id, "v2", project, scenario)?;
+        embed_png(&avatar, &[("chara", &v2), ("ccv3", main)])?
+    } else {
+        embed_png(&avatar, &[("chara", main)])?
+    };
+    fs::write(out, image)?;
     Ok(())
 }
 
