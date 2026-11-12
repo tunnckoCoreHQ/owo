@@ -33,6 +33,8 @@ Each module owns one job; `main.rs` parses arguments, dispatches each command, a
 
 Path decides the kind: `life/events/x.md` is an event, `life/locations/<slug>/overview.md` a location, any other file in that folder a location detail, `_index.md` and `life/timeline.md` are generated. Files outside the layout get `Kind::Unknown`, which lint reports.
 
+`classify` in `identity.rs` maps a path to its kind, and `Kind::rel` beside it maps a kind back to the path `owo add` writes. A unit test checks that `classify` returns the same kind for the `Kind::rel` path of every type `owo add` creates.
+
 ## Link resolution
 
 Links resolve through one lowercase key map, built once in `Identity::load`, from titles, aliases, file stems (folder name for `overview.md`), identity-relative paths and soul file names.

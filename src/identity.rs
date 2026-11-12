@@ -133,6 +133,32 @@ impl Kind {
             _ => None,
         }
     }
+
+    /// The identity-relative path `owo add` gives a new entry; `classify` maps it back to this
+    /// kind. None for a kind `owo add` does not create, a location detail without its parent
+    /// location slug, or a note without its project.
+    pub fn rel(
+        self,
+        slug: &str,
+        date: &str,
+        parent: Option<&str>,
+        project: Option<&str>,
+    ) -> Option<String> {
+        Some(match self {
+            Kind::Location => format!("life/locations/{slug}/overview.md"),
+            Kind::LocationDetail => format!("life/locations/{}/{slug}.md", parent?),
+            Kind::Project => format!("work/projects/{slug}/project.md"),
+            Kind::Note => format!("work/projects/{}/notes/{date}_{slug}.md", project?),
+            Kind::Log => format!("life/log/{date}.md"),
+            _ => {
+                let (dir, _) = LIFE_CATEGORIES.iter().find(|(_, k)| *k == self)?;
+                match self {
+                    Kind::Journal | Kind::Writing => format!("life/{dir}/{date}_{slug}.md"),
+                    _ => format!("life/{dir}/{slug}.md"),
+                }
+            }
+        })
+    }
 }
 
 /// One Markdown file of the identity.
@@ -484,6 +510,17 @@ impl Identity {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn add_paths_classify_to_their_kind() {
+        for (name, _) in crate::templates::ENTRY_TEMPLATES {
+            let kind = Kind::from_type(name).expect("an entry type");
+            let rel = kind
+                .rel("x", "2026-11-01", Some("flat"), Some("owo"))
+                .expect("an add path");
+            assert_eq!(classify(&rel), kind, "{rel}");
+        }
+    }
 
     #[test]
     fn classifies_paths() {
