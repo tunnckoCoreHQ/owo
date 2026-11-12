@@ -1,7 +1,7 @@
 //! The command line: every command, flag and help line. MCP tools are built from it.
 
 use crate::identity::Kind;
-use crate::{find, lint, state, sync, templates};
+use crate::{lint, state, sync, templates};
 use chrono::NaiveDate;
 use clap::builder::TypedValueParser;
 use clap::{Parser, Subcommand};
@@ -109,7 +109,7 @@ pub enum Command {
         /// Entry name, alias, path or [[link]]
         name: Vec<String>,
         /// Limit to one entry type
-        #[arg(long = "type", value_parser = clap::builder::PossibleValuesParser::new(find::types()))]
+        #[arg(long = "type", value_parser = clap::builder::PossibleValuesParser::new(Kind::names()))]
         kind: Option<String>,
     },
     /// Print an entry, or one section of it
@@ -166,7 +166,7 @@ pub enum Command {
         #[arg(long, value_parser = ["soul", "life", "work"])]
         scope: Option<String>,
         /// Limit to entry types (repeatable)
-        #[arg(long = "type", value_parser = clap::builder::PossibleValuesParser::new(find::types()))]
+        #[arg(long = "type", value_parser = clap::builder::PossibleValuesParser::new(Kind::names()))]
         types: Vec<String>,
         /// Only entries dated (or updated) on or after YYYY-MM-DD
         #[arg(long, value_parser = state::parse_day)]

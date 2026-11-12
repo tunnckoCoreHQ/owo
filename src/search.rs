@@ -19,7 +19,7 @@ pub fn tokens(text: &str) -> Vec<String> {
 
 fn doc_tokens(e: &Entry) -> Vec<String> {
     let mut out = vec![];
-    let mut head = e.title.clone().unwrap_or_else(|| e.stem_key());
+    let mut head = e.label();
     for a in &e.aliases {
         head.push(' ');
         head.push_str(a);
@@ -65,11 +65,7 @@ impl Filter<'_> {
     fn keep(&self, e: &Entry) -> bool {
         self.scope
             .is_none_or(|s| e.rel.starts_with(&format!("{s}/")))
-            && (self.types.is_empty()
-                || self
-                    .types
-                    .iter()
-                    .any(|t| t == crate::find::kind_name(e.kind)))
+            && (self.types.is_empty() || self.types.iter().any(|t| t == e.kind.name()))
             && self
                 .project
                 .is_none_or(|p| e.rel.starts_with(&format!("work/projects/{p}/")))
@@ -133,7 +129,7 @@ pub fn search(id: &Identity, query: &str, filter: &Filter, limit: usize) -> Vec<
             let best = best_in(true).or_else(|| best_in(false));
             hits.push(Hit {
                 path: e.rel.clone(),
-                title: e.title.clone().unwrap_or_else(|| e.stem_key()),
+                title: e.label(),
                 score: (score * 1000.0).round() / 1000.0,
                 line: best.map(|(_, i, _)| i + 1),
                 snippet: best.map(|(_, _, l)| l.trim().chars().take(160).collect()),

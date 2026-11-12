@@ -9,7 +9,7 @@ Each module owns one job; `main.rs` parses arguments, dispatches each command, a
 - `cli.rs` holds the clap definitions: every command, flag and help line.
 
 - `config.rs` resolves root, identity, project and KB, and checks the selected identity and project (exit 3). See [[formats#Config resolution]].
-- `identity.rs` walks one identity folder and parses every Markdown file into an `Entry` with a `Kind` decided by its path.
+- `identity.rs` walks one identity folder and parses every Markdown file into an `Entry` with a `Kind` decided by its path. `Kind::name` is the one name of a kind in output and `--type` values, and `Entry::label` gives the title, else the stem key.
 - `markdown.rs` splits frontmatter and parses it with `serde-saphyr` into `serde_json` values, reads sections, extracts wiki-links outside code, counts words.
 - `slug.rs` holds the one slug function.
 - `templates.rs` embeds every template with `include_str!` and fills `{{key}}` placeholders.

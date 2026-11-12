@@ -18,7 +18,7 @@ pub struct Link {
 impl Link {
     pub(crate) fn of(e: &Entry) -> Self {
         Self {
-            title: e.title.clone().unwrap_or_else(|| e.stem_key()),
+            title: e.label(),
             path: e.rel.clone(),
             date: e.field_str("date"),
         }

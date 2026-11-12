@@ -97,7 +97,7 @@ pub fn packet(id: &Identity) -> Packet {
         }
         changed.push(Changed {
             path: e.rel.clone(),
-            kind: crate::find::kind_name(e.kind),
+            kind: e.kind.name(),
             summary: e.field_str("summary").filter(|s| !s.is_empty()),
             words: crate::markdown::word_count(e.body()),
             git: match (&last, git) {
