@@ -58,7 +58,7 @@ Decision record: [ADR-0008](../docs/adr/0008-examples-are-built-with-owo.md).
 
 Decision record: [ADR-0009](../docs/adr/0009-changes-read-git-else-stamps.md).
 
-`owo changes` reads `git log --name-status` for the identity folder when it sits in a repo, and lists uncommitted paths separately. Outside a repo it groups state-file `updated` stamps by day, so the command always answers.
+`owo changes` reads `git log --name-status` for the identity folder when it sits in a repo, and lists uncommitted paths separately. Outside a repo it groups state-file `updated` stamps by local day, so the command always answers.
 
 Outside a repo `--since` takes only a `YYYY-MM-DD` day and exits 1 on anything else; in a repo it takes whatever `git log --since` accepts, and a plain day starts at its midnight.
 
@@ -128,4 +128,4 @@ The tool list is read from the clap definitions (`Cli::command()`): each subcomm
 
 Most tools add `--json` and return the envelope; `context` and `show` return text, which is what an agent reads. Positional values go after `--` and flag values are passed as `--flag=value`, so a value never parses as a flag. A failed command sets `isError`; an unknown tool name gets a -32602 error. `initialize` answers the client's protocol version when it is one the server speaks (2025-06-18, 2025-03-26, 2024-11-05), else 2025-06-18. A line that is not UTF-8 JSON gets a -32700 parse error and the server goes on.
 
-The `--remote` mode is a small HTTP/1.1 loop over `std::net`: one request at a time, `POST /mcp` with a JSON reply, 202 for notifications, 405 for other methods. It has no authentication, so whoever reaches the URL can read and write the identity. To keep web pages out, it answers 403 to a request with an `Origin` header and 415 to a POST without `Content-Type: application/json`, and 411 to a POST without `Content-Length` or with a chunked body. One request gets 30 seconds to arrive and its reply 30 seconds to leave; headers are capped at 16KB (431) and the body at 8MB (413).
+The `--remote` mode is a small HTTP/1.1 loop over `std::net`: one request at a time, `POST /mcp` with a JSON reply, 202 for notifications, 405 for other methods. It has no authentication, so whoever reaches the URL can read and write the identity. To keep web pages out, it answers 403 to a request with an `Origin` header and 415 to a POST without `Content-Type: application/json`, and 411 to a POST without `Content-Length` or with any `Transfer-Encoding` header. One request gets 30 seconds to arrive and its reply 30 seconds to leave; headers are capped at 16KB (431) and the body at 8MB (413).

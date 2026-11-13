@@ -99,7 +99,14 @@ pub fn changes(id: &Identity, since: Option<&str>) -> anyhow::Result<Changes> {
     stamped.sort_by(|a, b| (&b.0, &a.1).cmp(&(&a.0, &b.1)));
     let mut days: BTreeMap<String, Vec<Change>> = BTreeMap::new();
     for (at, path) in stamped {
-        let day = crate::state::day(&at).to_string();
+        // Group by the local day, which `--days` counts from; a plain day is already local.
+        let day = chrono::DateTime::parse_from_rfc3339(&at)
+            .map(|t| {
+                t.with_timezone(&chrono::Local)
+                    .format("%Y-%m-%d")
+                    .to_string()
+            })
+            .unwrap_or_else(|_| crate::state::day(&at).to_string());
         if since.as_ref().is_some_and(|s| &day < s) {
             continue;
         }
