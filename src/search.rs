@@ -1,7 +1,8 @@
 //! `owo search`: small in-crate BM25 over title, aliases, summary and body.
 //! Fields are weighted by repeating their tokens: title and aliases x3, summary x2, body x1.
 
-use crate::identity::{Entry, Identity};
+use crate::identity::{Entry, Identity, Kind};
+use chrono::NaiveDate;
 use serde::Serialize;
 use std::collections::HashMap;
 
@@ -49,35 +50,74 @@ pub struct Hit {
     exact: bool,
 }
 
-/// Which entries a search looks at.
-pub struct Filter<'a> {
-    /// soul, life or work
-    pub scope: Option<&'a str>,
-    /// entry type names, as in `owo add`
-    pub types: &'a [String],
-    /// only `work/projects/<p>/`
-    pub project: Option<&'a str>,
-    /// story `date`, else `updated`, on or after this YYYY-MM-DD
-    pub since: Option<&'a str>,
+/// One of the three folders of an identity.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Scope {
+    Soul,
+    Life,
+    Work,
 }
 
-impl Filter<'_> {
+impl Scope {
+    pub const ALL: [Scope; 3] = [Scope::Soul, Scope::Life, Scope::Work];
+
+    pub fn name(self) -> &'static str {
+        match self {
+            Scope::Soul => "soul",
+            Scope::Life => "life",
+            Scope::Work => "work",
+        }
+    }
+
+    pub fn from_name(name: &str) -> Option<Scope> {
+        Scope::ALL.into_iter().find(|s| s.name() == name)
+    }
+}
+
+/// Which entries a search looks at, and how many hits it returns.
+pub struct Request<'a> {
+    pub scope: Option<Scope>,
+    /// Every kind when empty.
+    pub types: &'a [Kind],
+    /// only `work/projects/<p>/`
+    pub project: Option<&'a str>,
+    /// story `date`, else `updated`, on or after this day
+    pub since: Option<NaiveDate>,
+    /// The most hits to return.
+    pub limit: usize,
+}
+
+impl Default for Request<'_> {
+    /// Every entry, and ten hits.
+    fn default() -> Self {
+        Self {
+            scope: None,
+            types: &[],
+            project: None,
+            since: None,
+            limit: 10,
+        }
+    }
+}
+
+impl Request<'_> {
     fn keep(&self, e: &Entry) -> bool {
+        let since = self.since.map(|d| d.to_string());
         self.scope
-            .is_none_or(|s| e.rel.starts_with(&format!("{s}/")))
-            && (self.types.is_empty() || self.types.iter().any(|t| t == e.kind.name()))
+            .is_none_or(|s| e.rel.starts_with(&format!("{}/", s.name())))
+            && (self.types.is_empty() || self.types.contains(&e.kind))
             && self
                 .project
                 .is_none_or(|p| e.rel.starts_with(&format!("work/projects/{p}/")))
-            && self.since.is_none_or(|s| {
+            && since.is_none_or(|s| {
                 e.field_str("date")
                     .or_else(|| e.field_str("updated"))
-                    .is_some_and(|d| d.as_str() >= s)
+                    .is_some_and(|d| d >= s)
             })
     }
 }
 
-pub fn search(id: &Identity, query: &str, filter: &Filter, limit: usize) -> Vec<Hit> {
+pub fn search(id: &Identity, query: &str, filter: &Request) -> Vec<Hit> {
     let q = tokens(query);
     let docs: Vec<(&Entry, Vec<String>)> = id
         .entries
@@ -142,7 +182,7 @@ pub fn search(id: &Identity, query: &str, filter: &Filter, limit: usize) -> Vec<
             .then(b.score.total_cmp(&a.score))
             .then(a.path.cmp(&b.path))
     });
-    hits.truncate(limit);
+    hits.truncate(filter.limit);
     hits
 }
 

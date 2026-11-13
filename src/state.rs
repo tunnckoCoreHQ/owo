@@ -12,7 +12,7 @@ pub fn hash(text: &str) -> String {
 }
 
 /// The `YYYY-MM-DD` part of a stamp, or the whole text when it is shorter.
-pub fn day(stamp: &str) -> &str {
+pub(crate) fn day(stamp: &str) -> &str {
     stamp.get(..10).unwrap_or(stamp)
 }
 
@@ -23,6 +23,13 @@ pub fn now() -> String {
 /// The local day, as `YYYY-MM-DD`: the day frontmatter dates name.
 pub fn local_today() -> String {
     chrono::Local::now().format("%Y-%m-%d").to_string()
+}
+
+/// The local day `days` ago, as `YYYY-MM-DD`, which Git reads a plain `--since` day in.
+pub fn local_day_ago(days: i64) -> String {
+    (chrono::Local::now() - chrono::Duration::days(days))
+        .format("%Y-%m-%d")
+        .to_string()
 }
 
 /// The UTC day of `now`, as `YYYY-MM-DD`.

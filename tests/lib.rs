@@ -1,7 +1,10 @@
 //! Tests that use only the library: the typed API with no binary, command line or rendered
 //! output, and the ACP proxy on in-memory streams.
 
-use owo::{acp, AddRequest, ContextRequest, Env, Error, Kind, Root, SearchFilter, Select};
+use owo::{
+    acp, AddRequest, ContextRequest, Env, ErrorKind, Fault, Kind, Root, Scope, SearchRequest,
+    Select,
+};
 use serde_json::{json, Value};
 use std::io::{BufRead, BufReader, Write};
 use std::path::Path;
@@ -59,10 +62,10 @@ fn a_root_lists_and_selects_identities() {
     assert_eq!(slugs, ["nicole", "reviewer"]);
     // Two identities and none picked: loading one is a config error.
     assert!(r.config.identity.is_none());
-    assert!(matches!(r.identity(), Err(Error::Config(_))));
+    assert!(matches!(r.identity(), Err(e) if e.kind == ErrorKind::Config));
 
     let r = open(tmp.path(), Some("nobody"));
-    assert!(matches!(r.identity(), Err(Error::Config(_))));
+    assert!(matches!(r.identity(), Err(e) if e.kind == ErrorKind::Config));
 
     // With one identity, it is selected.
     let one = root(&["nicole"]);
@@ -86,7 +89,7 @@ fn read_side_calls_return_typed_results() {
     assert!(text.contains("title: \"First Firing\""));
     assert!(matches!(
         id.show("First Firing", Some("no such section")),
-        Err(Error::Failed(_))
+        Err(e) if e.kind == ErrorKind::Failed
     ));
 
     let links = id.links("First Firing", true, false).unwrap();
@@ -94,13 +97,11 @@ fn read_side_calls_return_typed_results() {
 
     let hits = id.search(
         "glaze",
-        &SearchFilter {
-            scope: Some("life"),
-            types: &[],
-            project: None,
-            since: None,
+        &SearchRequest {
+            scope: Some(Scope::Life),
+            limit: 3,
+            ..Default::default()
         },
-        3,
     );
     assert!(!hits.is_empty() && hits.len() <= 3);
     assert!(hits.iter().all(|h| h.path.starts_with("life/")));
@@ -109,7 +110,6 @@ fn read_side_calls_return_typed_results() {
         .context(&ContextRequest {
             voice: true,
             look: false,
-            project: None,
             with: &[],
             notes: 3,
         })
@@ -128,12 +128,24 @@ fn read_side_calls_return_typed_results() {
     assert!(text.contains("<!-- owo: now -->\n## Now"));
     assert!(text.contains("<!-- owo: soul/VOICE.md (voice) -->"));
 
-    let state = id.state(14, None).unwrap();
-    assert_eq!(state.identity, "nicole");
+    let state = id.state(&owo::StateRequest::default()).unwrap();
     assert!(matches!(
-        id.state(14, Some("no-such-project")),
-        Err(Error::Config(_))
+        id.state(&owo::StateRequest { days: owo::MAX_DAYS + 1 }),
+        Err(e) if e.fault == Some(Fault::DaysOutOfRange(owo::MAX_DAYS + 1))
     ));
+    assert_eq!(state.identity, "nicole");
+    // The loaded identity carries the working project; a project that does not exist is a
+    // config error where a call uses it.
+    let mut other = open(tmp.path(), Some("nicole")).identity().unwrap();
+    other.project = Some("no-such-project".into());
+    assert!(matches!(
+        other.state(&owo::StateRequest::default()),
+        Err(e) if e.fault == Some(Fault::NoProject("no-such-project".into()))
+    ));
+    assert!(other
+        .lint(&[], false)
+        .iter()
+        .all(|d| d.level != owo::Level::Error));
 
     assert!(id
         .lint(&[], false)
@@ -142,18 +154,18 @@ fn read_side_calls_return_typed_results() {
     assert!(id.stamp(true).unwrap().is_clean());
     assert!(id.stale_index().is_empty());
     assert_eq!(id.review().identity, "nicole");
-    assert_eq!(id.changes(None).unwrap().source, "state");
-    assert!(id
-        .export_card(&owo::CardRequest {
-            spec: "v3",
-            project: None,
-            scenario: None,
-            out: None,
-            png: None,
-        })
-        .unwrap()
-        .card["data"]["name"]
-        .is_string());
+    assert_eq!(id.changes(&Default::default()).unwrap().source, "state");
+    let both = owo::ChangesRequest {
+        since: Some("2026-01-01"),
+        days: Some(3),
+    };
+    assert!(matches!(id.changes(&both), Err(e) if e.fault == Some(Fault::SinceWithDays)));
+    assert!(id.export_card(&owo::CardRequest::default()).unwrap().card["data"]["name"].is_string());
+    let png = owo::CardRequest {
+        png: Some(Path::new("avatar.png")),
+        ..Default::default()
+    };
+    assert!(matches!(id.export_card(&png), Err(e) if e.fault == Some(Fault::PngNeedsOut)));
 }
 
 #[test]
@@ -167,7 +179,6 @@ fn write_side_calls_change_the_identity() {
         title: "Find the glaze recipe",
         date: None,
         parent: None,
-        project: None,
         aliases: &[],
         kb: None,
     };
@@ -177,7 +188,7 @@ fn write_side_calls_change_the_identity() {
     assert!(!id.add(&req).unwrap().1, "a second add finds the file");
     assert!(matches!(
         id.add(&AddRequest { title: " ", ..req }),
-        Err(Error::Usage(_))
+        Err(e) if e.fault == Some(Fault::NeedsTitle(Kind::Thread))
     ));
 
     assert!(id
@@ -192,25 +203,38 @@ fn write_side_calls_change_the_identity() {
     assert!(r.identity().unwrap().stale_index().is_empty());
 
     let sync = r.sync().unwrap();
-    let run = sync
-        .push(
-            "s1",
-            r#"[{"id": "1", "role": "user", "text": "hi"}]"#,
-            false,
-            6,
-        )
-        .unwrap();
+    let turns = owo::parse_turns(r#"[{"id": 1, "role": "user", "text": "hi"}]"#).unwrap();
+    assert_eq!(
+        turns,
+        [owo::Turn {
+            id: "1".into(),
+            role: owo::Role::User,
+            text: "hi".into()
+        }]
+    );
+    let run = sync.push("s1", &turns, &Default::default()).unwrap();
     assert_eq!(run.added, Some(1));
     assert!(!run.due);
-    assert!(sync.push("s1", "not json", false, 6).is_err());
+    assert!(owo::parse_turns("not json").is_err());
+    let bad = owo::Turn {
+        id: "a\u{7}".into(),
+        ..turns[0].clone()
+    };
+    assert!(sync.push("s1", &[bad], &Default::default()).is_err());
+    assert!(matches!(
+        r.sync_done("s1", 9),
+        Err(e) if e.fault == Some(Fault::PastMessages { until: 9, seen: 1 })
+    ));
+    let bookmark = r.sync_done("s1", 1).unwrap();
+    assert_eq!((bookmark.until, bookmark.messages), (1, Some(1)));
 }
 
 #[test]
 fn free_functions_need_no_root() {
     assert_eq!(owo::slug("Hello World").unwrap(), "hello-world");
-    assert!(matches!(owo::slug("!!"), Err(Error::Failed(_))));
+    assert!(matches!(owo::slug("!!"), Err(e) if e.kind == ErrorKind::Failed));
     assert!(owo::entry_types().any(|t| t == "event"));
-    assert!(owo::lint_rules().any(|r| r == "links"));
+    assert!(owo::Rule::all().any(|r| r.name() == "links"));
 }
 /// A running proxy with a scripted agent thread. The test is the client.
 struct Session {
@@ -400,7 +424,6 @@ fn acp_inject_puts_the_context_in_the_first_prompt() {
         &id.context(&ContextRequest {
             voice: false,
             look: false,
-            project: None,
             with: &[],
             notes: 3,
         })

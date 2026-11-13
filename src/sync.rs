@@ -4,15 +4,65 @@
 //! The host runs the ingest agent and then calls `done --until <n>` to move the bookmark.
 
 use crate::identity::{read_object, write_file, write_json};
+use crate::Fault;
 use anyhow::{bail, Context, Result};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-pub const FORMATS: &[&str] = &["jsonl", "claude-jsonl", "opencode-json"];
+/// The format of a host transcript; `Jsonl` by default.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Format {
+    /// One `{"role", "text"}` object per line, with an optional turn `id`.
+    #[default]
+    Jsonl,
+    ClaudeJsonl,
+    OpencodeJson,
+}
+
+impl Format {
+    pub const ALL: [Format; 3] = [Format::Jsonl, Format::ClaudeJsonl, Format::OpencodeJson];
+
+    pub fn name(self) -> &'static str {
+        match self {
+            Format::Jsonl => "jsonl",
+            Format::ClaudeJsonl => "claude-jsonl",
+            Format::OpencodeJson => "opencode-json",
+        }
+    }
+
+    pub fn from_name(name: &str) -> Option<Format> {
+        Format::ALL.into_iter().find(|f| f.name() == name)
+    }
+}
+
+/// The bookmark of a session: where its transcript is, how far ingest got, and the run that
+/// waits for `Root::sync_done`.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Bookmark {
+    pub session: String,
+    pub transcript: String,
+    /// The messages the last sync step read.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub messages: Option<usize>,
+    /// The message index ingest reached.
+    pub until: usize,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pending: Option<PendingRun>,
+}
+
+/// A run whose slice and prompt are written, and that has no `Root::sync_done` yet.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct PendingRun {
+    pub from: usize,
+    pub until: usize,
+    pub source: String,
+    pub prompt: String,
+}
+
 const OVERLAP_TURNS: usize = 2;
 
 #[derive(Debug, Clone)]
@@ -50,7 +100,7 @@ fn id_of(v: &Value) -> Option<String> {
 }
 
 /// Parses a transcript into user and assistant messages with text.
-pub fn parse(raw: &str, format: &str) -> Result<Vec<Message>> {
+pub fn parse(raw: &str, format: Format) -> Result<Vec<Message>> {
     let mut out = vec![];
     let mut push = |id: Option<String>, role: Option<&str>, text: String| {
         if let Some(role @ ("user" | "assistant")) = role {
@@ -63,7 +113,7 @@ pub fn parse(raw: &str, format: &str) -> Result<Vec<Message>> {
             }
         }
     };
-    if format == "opencode-json" {
+    if format == Format::OpencodeJson {
         let v: Value = serde_json::from_str(raw).context("transcript is not JSON")?;
         let list = v.get("messages").cloned().unwrap_or(v);
         for m in list.as_array().context("expected an array of messages")? {
@@ -87,7 +137,7 @@ pub fn parse(raw: &str, format: &str) -> Result<Vec<Message>> {
     {
         let v: Value =
             serde_json::from_str(line).with_context(|| format!("transcript line {}", n + 1))?;
-        if format == "jsonl" {
+        if format == Format::Jsonl {
             push(
                 id_of(&v["id"]),
                 v["role"].as_str(),
@@ -178,10 +228,11 @@ impl Lock {
                 Err(e) => return Err(e.into()),
             }
         }
-        bail!(
-            "session {session:?} is busy: another `owo sync` holds {}",
-            path.display()
-        )
+        Err(Fault::SessionBusy {
+            session: session.into(),
+            lock: path,
+        }
+        .into())
     }
 }
 
@@ -208,57 +259,92 @@ fn store(session: &str) -> String {
     format!(".owo/sessions/{session}.turns.jsonl")
 }
 
-pub fn start(req: &StartRequest, transcript: &Path, format: &str) -> Result<Start> {
+pub fn start(req: &StartRequest, transcript: &Path, format: Format) -> Result<Start> {
     check_session(req.session)?;
     let _lock = Lock::take(req.root, req.session)?;
     if let Some(t) = read_bookmark(req.root, req.session)?["transcript"].as_str() {
         if t.ends_with(&store(req.session)) {
-            bail!(
-                "session {:?} stores pushed turns; use `owo sync push`",
-                req.session
-            );
+            return Err(Fault::PushedSession(req.session.into()).into());
         }
     }
     run(req, transcript, format)
 }
 
-/// Stores pushed `{id, role, text}` turns in `<root>/.owo/sessions/<id>.turns.jsonl`,
-/// skipping ids already stored, then runs `start` on that file.
-pub fn push(req: &StartRequest, turns: &str) -> Result<Start> {
-    check_session(req.session)?;
-    let _lock = Lock::take(req.root, req.session)?;
-    let file = req.root.join(store(req.session));
-    if let Some(t) = read_bookmark(req.root, req.session)?["transcript"].as_str() {
-        if !t.ends_with(&store(req.session)) {
-            bail!(
-                "session {:?} syncs the transcript {t}; use `owo sync start`",
-                req.session
-            );
+/// One turn a host pushes: its id (the host's id for the message), role and text.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Turn {
+    pub id: String,
+    pub role: Role,
+    pub text: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Role {
+    User,
+    Assistant,
+}
+
+impl Role {
+    pub fn name(self) -> &'static str {
+        match self {
+            Role::User => "user",
+            Role::Assistant => "assistant",
         }
     }
-    let list: Value = serde_json::from_str(turns).context("turns are not JSON")?;
+}
+
+/// A turn id is not empty and has no control characters.
+fn check_turn_id(n: usize, id: &str) -> Result<()> {
+    if id.is_empty() || id.chars().any(char::is_control) {
+        bail!("turn {n}: the turn id must be a number or a string with no control characters");
+    }
+    Ok(())
+}
+
+/// Parses a JSON array of `{id, role, text}` turns; an id is a string or a number.
+pub fn parse_turns(json: &str) -> Result<Vec<Turn>> {
+    let list: Value = serde_json::from_str(json).context("turns are not JSON")?;
     let list = list
         .as_array()
         .context("turns must be a JSON array of {id, role, text}")?;
     let mut turns = vec![];
     for (n, t) in list.iter().enumerate() {
-        let id = id_of(&t["id"])
-            .filter(|id| !id.chars().any(char::is_control))
-            .with_context(|| {
-                format!(
-                    "turn {n}: the turn id must be a number or a string with no control characters"
-                )
-            })?;
-        let role = t["role"]
-            .as_str()
-            .filter(|r| matches!(*r, "user" | "assistant"))
-            .with_context(|| format!("turn {n}: role must be user or assistant"))?;
+        let id = id_of(&t["id"]).unwrap_or_default();
+        check_turn_id(n, &id)?;
+        let role = match t["role"].as_str() {
+            Some("user") => Role::User,
+            Some("assistant") => Role::Assistant,
+            _ => bail!("turn {n}: role must be user or assistant"),
+        };
         let text = t["text"]
             .as_str()
             .with_context(|| format!("turn {n}: text must be a string"))?;
-        if !text.trim().is_empty() {
-            turns.push(json!({ "id": id, "role": role, "text": text }));
+        turns.push(Turn {
+            id,
+            role,
+            text: text.to_string(),
+        });
+    }
+    Ok(turns)
+}
+
+/// Stores pushed turns in `<root>/.owo/sessions/<id>.turns.jsonl`, skipping ids already
+/// stored and turns with no text, then runs `start` on that file.
+pub fn push(req: &StartRequest, turns: &[Turn]) -> Result<Start> {
+    check_session(req.session)?;
+    let _lock = Lock::take(req.root, req.session)?;
+    let file = req.root.join(store(req.session));
+    if let Some(t) = read_bookmark(req.root, req.session)?["transcript"].as_str() {
+        if !t.ends_with(&store(req.session)) {
+            return Err(Fault::TranscriptSession {
+                session: req.session.into(),
+                transcript: t.into(),
+            }
+            .into());
         }
+    }
+    for (n, t) in turns.iter().enumerate() {
+        check_turn_id(n, &t.id)?;
     }
     let mut bytes = match fs::read(&file) {
         Ok(b) => b,
@@ -270,21 +356,22 @@ pub fn push(req: &StartRequest, turns: &str) -> Result<Start> {
     bytes.truncate(bytes.iter().rposition(|b| *b == b'\n').map_or(0, |i| i + 1));
     let mut stored = String::from_utf8(bytes)
         .with_context(|| format!("{} is not UTF-8; fix it by hand", file.display()))?;
-    let mut ids: HashSet<String> = parse(&stored, "jsonl")?
+    let mut ids: HashSet<String> = parse(&stored, Format::Jsonl)?
         .into_iter()
         .filter_map(|m| m.id)
         .collect();
     let mut added = 0;
-    for t in turns {
-        if ids.insert(t["id"].as_str().expect("id is text").to_string()) {
-            stored.push_str(&format!("{t}\n"));
+    for t in turns.iter().filter(|t| !t.text.trim().is_empty()) {
+        if ids.insert(t.id.clone()) {
+            let line = json!({ "id": t.id, "role": t.role.name(), "text": t.text });
+            stored.push_str(&format!("{line}\n"));
             added += 1;
         }
     }
     let tmp = file.with_extension("jsonl.tmp");
     write_file(&tmp, &stored)?;
     fs::rename(&tmp, &file)?;
-    let mut out = run(req, &file, "jsonl")?;
+    let mut out = run(req, &file, Format::Jsonl)?;
     out.added = Some(added);
     if let (Some(source), Some(prompt)) = (&out.source, &out.prompt) {
         out.source_text = Some(fs::read_to_string(req.root.join(source))?);
@@ -295,7 +382,7 @@ pub fn push(req: &StartRequest, turns: &str) -> Result<Start> {
 
 /// Reads the transcript, decides whether a run is due and writes the slice and prompt.
 /// The caller holds the session lock.
-fn run(req: &StartRequest, transcript: &Path, format: &str) -> Result<Start> {
+fn run(req: &StartRequest, transcript: &Path, format: Format) -> Result<Start> {
     let raw = fs::read_to_string(transcript)
         .with_context(|| format!("reading {}", transcript.display()))?;
     let messages = parse(&raw, format)?;
@@ -303,7 +390,7 @@ fn run(req: &StartRequest, transcript: &Path, format: &str) -> Result<Start> {
         bail!(
             "no user or assistant messages in {} as {}; check --format",
             transcript.display(),
-            format
+            format.name()
         );
     }
     let mut doc = read_bookmark(req.root, req.session)?;
@@ -394,19 +481,19 @@ fn run(req: &StartRequest, transcript: &Path, format: &str) -> Result<Start> {
     Ok(out)
 }
 
-pub fn done(root: &Path, session: &str, until: usize) -> Result<Value> {
+pub fn done(root: &Path, session: &str, until: usize) -> Result<Bookmark> {
     check_session(session)?;
     let _lock = Lock::take(root, session)?;
     let mut doc = read_bookmark(root, session)?;
     if doc.get("session").is_none() {
-        bail!("no sync bookmark for session {session:?}; run `owo sync start` first");
+        return Err(Fault::NoBookmark(session.into()).into());
     }
     let prev = doc["until"].as_u64().unwrap_or(0) as usize;
     if until < prev {
         bail!("--until {until} is behind the bookmark ({prev})");
     }
     if let Some(seen) = doc["messages"].as_u64().filter(|n| until as u64 > *n) {
-        bail!("--until {until} is past the {seen} messages the last `sync start` read");
+        return Err(Fault::PastMessages { until, seen }.into());
     }
     doc["until"] = json!(until);
     if doc
@@ -415,6 +502,8 @@ pub fn done(root: &Path, session: &str, until: usize) -> Result<Value> {
     {
         doc.as_object_mut().expect("object").remove("pending");
     }
+    let bookmark = Bookmark::deserialize(&doc)
+        .with_context(|| format!("the bookmark of session {session:?} does not parse"))?;
     write_bookmark(root, session, &doc)?;
-    Ok(doc)
+    Ok(bookmark)
 }

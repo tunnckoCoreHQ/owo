@@ -11,9 +11,21 @@ use std::fs;
 pub struct Request<'a> {
     pub voice: bool,
     pub look: bool,
-    pub project: Option<&'a str>,
     pub with: &'a [String],
+    /// Recent project notes to include.
     pub notes: usize,
+}
+
+impl Default for Request<'_> {
+    /// The core files and three recent project notes.
+    fn default() -> Self {
+        Self {
+            voice: false,
+            look: false,
+            with: &[],
+            notes: 3,
+        }
+    }
 }
 
 #[derive(Debug, Serialize)]
@@ -41,7 +53,8 @@ fn item(tier: &'static str, path: &str, reason: &str) -> Item {
     }
 }
 
-pub fn build(id: &Identity, req: &Request) -> Result<Context> {
+/// The load set; `project` is checked to exist.
+pub fn build(id: &Identity, req: &Request, project: Option<&str>) -> Result<Context> {
     let mut items = vec![
         item("core", "soul/IDENTITY.md", "who the identity is"),
         item("core", "soul/SOUL.md", "first-person core"),
@@ -59,7 +72,7 @@ pub fn build(id: &Identity, req: &Request) -> Result<Context> {
     }
     let mut warnings = vec![];
     let mut kb = None;
-    if let Some(p) = req.project {
+    if let Some(p) = project {
         let project_md = format!("work/projects/{p}/project.md");
         items.push(item("project", "work/README.md", "work profile"));
         items.push(item("project", &project_md, "role on this project"));
@@ -90,9 +103,9 @@ pub fn build(id: &Identity, req: &Request) -> Result<Context> {
     let state = status::compute(id, 14, 3);
     Ok(Context {
         identity: id.slug.clone(),
-        project: req.project.map(str::to_string),
+        project: project.map(str::to_string),
         items,
-        now: status::now_block(&state, req.project),
+        now: status::now_block(&state, project),
         kb,
         warnings,
     })

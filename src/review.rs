@@ -6,8 +6,8 @@ use crate::state::parse_day;
 use crate::status::Link;
 use anyhow::{bail, Context, Result};
 use chrono::NaiveDate;
-use serde::Serialize;
-use serde_json::{json, Value};
+use serde::{Deserialize, Serialize};
+use serde_json::{json, Map, Value};
 use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(Debug, Serialize)]
@@ -47,7 +47,7 @@ pub struct Packet {
     pub open_threads: Vec<Link>,
     pub open_conflicts: Vec<Link>,
     pub recurring: Vec<(String, usize)>,
-    pub last_soul_change: Option<Value>,
+    pub last_soul_change: Option<SoulChange>,
 }
 
 /// Short function words; a recurring phrase may not start or end with one.
@@ -162,7 +162,7 @@ pub fn packet(id: &Identity) -> Packet {
         open_threads: open(Kind::Thread),
         open_conflicts: open(Kind::Conflict),
         recurring: recurring(&days),
-        last_soul_change: crate::state::history(id).last().cloned(),
+        last_soul_change: last_soul_change(id),
         unreviewed_days: days,
         changed,
         last_reviewed: last,
@@ -170,12 +170,22 @@ pub fn packet(id: &Identity) -> Packet {
     }
 }
 
+/// The review record in `soul/state.json` → `review`.
+#[derive(Debug, Serialize)]
+pub struct ReviewRecord {
+    pub last_reviewed: String,
+    /// The last story day the review covered.
+    pub reviewed_through: Option<String>,
+    /// The hash of `soul/MEMORY.md` at the review.
+    pub memory_hash: Option<String>,
+}
+
 /// Records a review: last_reviewed = now, reviewed_through = `through` or the newest
 /// story date among logs, events and journal entries, memory_hash = current MEMORY.md hash.
-pub fn done(id: &Identity, through: Option<NaiveDate>) -> Result<Value> {
+pub fn done(id: &Identity, through: Option<NaiveDate>) -> Result<ReviewRecord> {
     let mut doc = id
         .read_object("soul/state.json")?
-        .context("soul/state.json missing; run `owo stamp`")?;
+        .ok_or(crate::Fault::NoSoulState)?;
     let through = match through {
         Some(t) => Some(t.to_string()),
         None => id
@@ -190,14 +200,48 @@ pub fn done(id: &Identity, through: Option<NaiveDate>) -> Result<Value> {
     let memory = id
         .entry("soul/MEMORY.md")
         .map(|e| crate::state::hash(&e.text));
-    let review = json!({ "last_reviewed": crate::state::now(), "reviewed_through": through, "memory_hash": memory });
-    doc["review"] = review.clone();
+    let review = ReviewRecord {
+        last_reviewed: crate::state::now(),
+        reviewed_through: through,
+        memory_hash: memory,
+    };
+    doc["review"] = serde_json::to_value(&review)?;
     write_json(&id.dir.join("soul/state.json"), &doc)?;
     Ok(review)
 }
 
+/// One record of the soul history in `soul/state.json` → `history`. A record written by hand
+/// may lack a field or carry others.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SoulChange {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub at: Option<String>,
+    /// The soul file, such as `SOUL.md`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub file: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub change: Option<String>,
+    /// The evidence entries as `[[link]]`s.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub evidence: Option<Vec<String>>,
+    #[serde(flatten)]
+    pub other: Map<String, Value>,
+}
+
+/// The soul history records, oldest first; a record that does not parse is left out.
+fn soul_changes(id: &Identity) -> impl Iterator<Item = SoulChange> + '_ {
+    crate::state::history(id)
+        .iter()
+        .filter_map(|r| SoulChange::deserialize(r).ok())
+}
+
+/// The newest soul history record.
+pub fn last_soul_change(id: &Identity) -> Option<SoulChange> {
+    soul_changes(id).last()
+}
+
 pub struct Note {
-    pub record: Value,
+    pub record: SoulChange,
     pub warning: Option<String>,
 }
 
@@ -230,7 +274,7 @@ pub fn soul_note(id: &Identity, file: &str, change: &str, evidence: &[String]) -
         .then(|| "soul changes need two evidence links or one defining event".to_string());
     let mut doc = id
         .read_object("soul/state.json")?
-        .context("soul/state.json missing; run `owo stamp`")?;
+        .ok_or(crate::Fault::NoSoulState)?;
     let recorded = doc["history"].as_array().is_some_and(|h| {
         h.iter()
             .any(|r| r["file"] == file && r["change"] == change.trim())
@@ -238,21 +282,26 @@ pub fn soul_note(id: &Identity, file: &str, change: &str, evidence: &[String]) -
     if recorded {
         bail!("{file} already records {:?}", change.trim());
     }
-    let record = json!({ "at": crate::state::now(), "file": file, "change": change.trim(), "evidence": links });
+    let record = SoulChange {
+        at: Some(crate::state::now()),
+        file: Some(file.to_string()),
+        change: Some(change.trim().to_string()),
+        evidence: Some(links),
+        other: Map::new(),
+    };
+    let value = serde_json::to_value(&record)?;
     match doc.get_mut("history").and_then(Value::as_array_mut) {
-        Some(h) => h.push(record.clone()),
-        None => doc["history"] = json!([record.clone()]),
+        Some(h) => h.push(value),
+        None => doc["history"] = json!([value]),
     }
     write_json(&id.dir.join("soul/state.json"), &doc)?;
     Ok(Note { record, warning })
 }
 
-pub fn soul_history(id: &Identity, file: Option<&str>) -> Vec<Value> {
+pub fn soul_history(id: &Identity, file: Option<&str>) -> Vec<SoulChange> {
     let file = file.map(|f| f.trim_start_matches("soul/"));
-    crate::state::history(id)
-        .iter()
-        .filter(|r| file.is_none_or(|f| r["file"].as_str() == Some(f)))
-        .cloned()
+    soul_changes(id)
+        .filter(|r| file.is_none_or(|f| r.file.as_deref() == Some(f)))
         .collect()
 }
 

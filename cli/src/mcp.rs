@@ -1,7 +1,9 @@
-//! The MCP server. Each tool is a command, read from the clap definitions. A tool call maps its
-//! JSON arguments to the typed library call and renders the result with `render`, as the
-//! command does. Messages are JSON-RPC 2.0: one per line with `serve`, or one per POST to
-//! `/mcp` with `serve_http`. `reply` answers one message.
+//! The MCP server, a consumer of the library. Each tool is a command, read from the clap
+//! definitions. A tool call maps its JSON arguments to the library request of its command, with
+//! the library's defaults for the arguments it leaves out, and renders the result with `render`,
+//! as the command does. The library checks the rules on arguments. Messages are JSON-RPC 2.0:
+//! one per line with `serve`, or one per POST to `/mcp` with `serve_http`. `reply` answers one
+//! message.
 
 use crate::output::{Out, Output};
 use crate::render::{self, load, open};
@@ -27,8 +29,6 @@ struct Param {
     about: String,
     /// Allowed values, when the flag has a fixed list.
     values: Vec<String>,
-    /// The value the command takes when the argument is left out.
-    default: Option<String>,
 }
 
 struct Tool {
@@ -121,13 +121,8 @@ fn param(a: &clap::Arg) -> Param {
                 .map(|v| v.get_name().to_string())
                 .collect()
         },
-        default: a
-            .get_default_values()
-            .first()
-            .map(|v| v.to_string_lossy().into_owned()),
     }
 }
-
 fn schema(tool: &Tool) -> Value {
     let mut props = Map::new();
     props.insert(
@@ -172,7 +167,6 @@ fn scalar(v: &Value) -> Option<String> {
 
 /// The arguments of one tool call, checked against the tool's parameters.
 struct Args<'a> {
-    tool: &'a Tool,
     map: &'a Map<String, Value>,
 }
 
@@ -185,7 +179,7 @@ impl<'a> Args<'a> {
         }) {
             return Err(format!("unknown argument {k:?} for {}", tool.name));
         }
-        let args = Args { tool, map };
+        let args = Args { map };
         for prm in &tool.params {
             if prm.required && args.get(&prm.name).is_none() {
                 return Err(format!("missing argument {:?}", prm.name));
@@ -210,11 +204,6 @@ impl<'a> Args<'a> {
         self.map.get(name).filter(|v| !v.is_null())
     }
 
-    fn default(&self, name: &str) -> Option<String> {
-        let prm = self.tool.params.iter().find(|p| p.name == name);
-        prm.and_then(|p| p.default.clone())
-    }
-
     /// The scalar values of an argument: each item of an array, or the one value.
     fn strings(&self, name: &str) -> Vec<String> {
         match self.get(name) {
@@ -224,14 +213,21 @@ impl<'a> Args<'a> {
         }
     }
 
-    /// A string argument, else its default.
+    /// A single-value argument: a scalar, or an array of one scalar.
     fn text(&self, name: &str) -> Result<Option<String>, String> {
-        match self.get(name) {
-            None => Ok(self.default(name)),
-            Some(v) => scalar(v)
-                .map(Some)
-                .ok_or_else(|| format!("argument {name:?} must be a string")),
-        }
+        let one = match self.get(name) {
+            None => return Ok(None),
+            Some(Value::Array(items)) if items.len() == 1 => &items[0],
+            Some(v) => v,
+        };
+        scalar(one)
+            .map(Some)
+            .ok_or_else(|| format!("argument {name:?} must be a string"))
+    }
+
+    /// A required single-value argument; `Args::new` checked it is there.
+    fn required(&self, name: &str) -> Result<String, String> {
+        Ok(self.text(name)?.unwrap_or_default())
     }
 
     /// A positional argument of several words: a string, or an array of words.
@@ -243,7 +239,7 @@ impl<'a> Args<'a> {
         self.get(name).and_then(Value::as_bool) == Some(true)
     }
 
-    /// An integer argument (a number, or a string of one), else its default.
+    /// An integer argument: a number, or a string of one.
     fn int<T: std::str::FromStr>(&self, name: &str) -> Result<Option<T>, String> {
         self.text(name)?
             .map(|s| {
@@ -260,13 +256,14 @@ impl<'a> Args<'a> {
             .transpose()
     }
 
-    /// A number of days from 0 to 36500.
-    fn days(&self, name: &str) -> Result<Option<i64>, String> {
-        let days = self.int::<i64>(name)?;
-        if days.is_some_and(|d| !(0..=36500).contains(&d)) {
-            return Err(format!("argument {name:?} must be from 0 to 36500"));
-        }
-        Ok(days)
+    /// A value of a fixed list, as its library type. `Args::new` checked the name.
+    fn named<T>(&self, name: &str, from: fn(&str) -> Option<T>) -> Result<Option<T>, String> {
+        Ok(self.text(name)?.and_then(|s| from(&s)))
+    }
+
+    /// The values of a repeatable flag with a fixed list, as their library type.
+    fn all_named<T>(&self, name: &str, from: fn(&str) -> Option<T>) -> Vec<T> {
+        self.strings(name).iter().filter_map(|s| from(s)).collect()
     }
 }
 
@@ -316,7 +313,8 @@ fn run_tool(tool: &Tool, params: &Value, select: &Select, env: &Env) -> Value {
             identity: pick("identity", &select.identity),
             project: pick("project", &select.project),
         };
-        dispatch(tool, &args, &select, env)
+        dispatch(tool, &args, &select, env)?
+            .ok_or_else(|| format!("no library call for the tool {:?}", tool.name))
     });
     let out = match output {
         Ok(out) => out,
@@ -331,8 +329,10 @@ fn run_tool(tool: &Tool, params: &Value, select: &Select, env: &Env) -> Value {
     result(text, out.code != 0)
 }
 
-/// The library call of one tool. An argument error is the error text.
-fn dispatch(tool: &Tool, a: &Args, sel: &Select, env: &Env) -> Result<Output, String> {
+/// The library call of one tool, or None for a tool with none. An argument error is the error
+/// text.
+fn dispatch(tool: &Tool, a: &Args, sel: &Select, env: &Env) -> Result<Option<Output>, String> {
+    use owo::{Kind, Rule, Scope, Spec, SyncFormat};
     let out = Out {
         json: tool.json,
         quiet: false,
@@ -348,7 +348,7 @@ fn dispatch(tool: &Tool, a: &Args, sel: &Select, env: &Env) -> Result<Output, St
             render::templates(out, &root.templates())
         }),
         "templates_show" => {
-            let name = a.text("name")?.unwrap_or_default();
+            let name = a.required("name")?;
             render::finish(out, |out| {
                 let (tpl, text) = open(sel, env, out)?.template(&name)?;
                 render::template(out, &tpl, &text)
@@ -359,7 +359,7 @@ fn dispatch(tool: &Tool, a: &Args, sel: &Select, env: &Env) -> Result<Output, St
             render::config(out, &r)
         }),
         "new" => {
-            let (name, slug) = (a.text("name")?.unwrap_or_default(), a.text("slug")?);
+            let (name, slug) = (a.required("name")?, a.text("slug")?);
             render::finish(out, |out| {
                 let c = open(sel, env, out)?.create(&name, slug.as_deref())?;
                 render::created(out, &c)
@@ -370,35 +370,34 @@ fn dispatch(tool: &Tool, a: &Args, sel: &Select, env: &Env) -> Result<Output, St
             render::list(out, root.path(), &root.list())
         }),
         "lint" => {
-            let (rules, changed) = (a.strings("rule"), a.flag("changed"));
+            let (rules, changed) = (a.all_named("rule", Rule::from_name), a.flag("changed"));
             render::finish(out, |out| {
-                let (_, id) = load(sel, env, out)?;
+                let id = load(sel, env, out)?;
                 render::lint(out, &id.slug, &id.lint(&rules, changed))
             })
         }
         "write" => {
-            let path = a.text("path")?.unwrap_or_default();
+            let path = a.required("path")?;
             let content = a.text("content")?.unwrap_or_default();
             render::finish(out, |out| {
-                let (_, id) = load(sel, env, out)?;
+                let id = load(sel, env, out)?;
                 render::write(out, &path, id.write(&path, &content)?)
             })
         }
         "add" => {
-            let kind = a.text("kind")?.unwrap_or_default();
-            let kind =
-                owo::Kind::from_type(&kind).ok_or_else(|| format!("unknown type {kind:?}"))?;
+            let kind = a
+                .named("kind", Kind::from_type)?
+                .ok_or("missing argument \"kind\"")?;
             let title = a.words("title");
             let (date, parent, kb) = (a.day("date")?, a.text("parent")?, a.text("kb")?);
             let aliases = a.strings("alias");
             render::finish(out, |out| {
-                let (root, id) = load(sel, env, out)?;
+                let id = load(sel, env, out)?;
                 let (path, created) = id.add(&owo::AddRequest {
                     kind,
                     title: &title,
                     date,
                     parent: parent.as_deref(),
-                    project: root.config.project.as_deref(),
                     aliases: &aliases,
                     kb: kb.as_deref(),
                 })?;
@@ -408,29 +407,29 @@ fn dispatch(tool: &Tool, a: &Args, sel: &Select, env: &Env) -> Result<Output, St
         "stamp" => {
             let check = a.flag("check");
             render::finish(out, |out| {
-                let (_, id) = load(sel, env, out)?;
+                let id = load(sel, env, out)?;
                 render::stamp(out, check, &id.stamp(check)?)
             })
         }
         "index" => {
             let check = a.flag("check");
             render::finish(out, |out| {
-                let (_, id) = load(sel, env, out)?;
+                let id = load(sel, env, out)?;
                 let paths = if check { id.stale_index() } else { id.index()? };
                 render::index(out, check, &paths)
             })
         }
         "resolve" => {
-            let (name, kind) = (a.words("name"), a.text("type")?);
+            let (name, kind) = (a.words("name"), a.named("type", Kind::from_name)?);
             render::finish(out, |out| {
-                let (_, id) = load(sel, env, out)?;
-                render::resolve(out, &name, id.resolve(&name, kind.as_deref()))
+                let id = load(sel, env, out)?;
+                render::resolve(out, &name, id.resolve(&name, kind))
             })
         }
         "show" => {
             let (name, section) = (a.words("name"), a.text("section")?);
             render::finish(out, |out| {
-                let (_, id) = load(sel, env, out)?;
+                let id = load(sel, env, out)?;
                 let (path, text) = id.show(&name, section.as_deref())?;
                 render::show(out, &path, &text)
             })
@@ -439,7 +438,7 @@ fn dispatch(tool: &Tool, a: &Args, sel: &Select, env: &Env) -> Result<Output, St
             let name = a.words("name");
             let (inbound, outbound, orphans) = (a.flag("in"), a.flag("out"), a.flag("orphans"));
             render::finish(out, |out| {
-                let (_, id) = load(sel, env, out)?;
+                let id = load(sel, env, out)?;
                 if orphans {
                     return render::orphans(out, &id.orphans());
                 }
@@ -447,161 +446,179 @@ fn dispatch(tool: &Tool, a: &Args, sel: &Select, env: &Env) -> Result<Output, St
             })
         }
         "context" => {
-            let (voice, look, with) = (a.flag("voice"), a.flag("look"), a.strings("with"));
-            let notes = a.int("notes")?.unwrap_or(3);
-            let format = a.text("format")?.unwrap_or_default();
+            let with = a.strings("with");
+            let mut req = owo::ContextRequest {
+                voice: a.flag("voice"),
+                look: a.flag("look"),
+                with: &with,
+                ..Default::default()
+            };
+            if let Some(n) = a.int("notes")? {
+                req.notes = n;
+            }
+            // The text, unless the paths are asked for.
+            let paths = a.text("format")?.as_deref() == Some("paths");
             render::finish(out, |out| {
-                let (root, id) = load(sel, env, out)?;
-                let ctx = id.context(&owo::ContextRequest {
-                    voice,
-                    look,
-                    project: root.config.project.as_deref(),
-                    with: &with,
-                    notes,
-                })?;
-                render::context(out, &id, &ctx, &format)
+                let id = load(sel, env, out)?;
+                let ctx = id.context(&req)?;
+                render::context(out, &id, &ctx, paths)
             })
         }
         "state" => {
-            let days = a.days("days")?.unwrap_or(14);
+            let mut req = owo::StateRequest::default();
+            if let Some(days) = a.int("days")? {
+                req.days = days;
+            }
             render::finish(out, |out| {
-                let (root, id) = load(sel, env, out)?;
-                render::state(out, &id.state(days, root.config.project.as_deref())?)
+                let id = load(sel, env, out)?;
+                render::state(out, &id.state(&req)?)
             })
         }
         "search" => {
-            let (query, scope, types) = (a.words("query"), a.text("scope")?, a.strings("type"));
-            let since = a.day("since")?.map(|d| d.to_string());
-            let limit = a.int("limit")?.unwrap_or(10);
+            let (query, types) = (a.words("query"), a.all_named("type", Kind::from_name));
+            let mut req = owo::SearchRequest {
+                scope: a.named("scope", Scope::from_name)?,
+                types: &types,
+                // The project filter is the picked project, as the `--project` flag.
+                project: sel.project.as_deref(),
+                since: a.day("since")?,
+                ..Default::default()
+            };
+            if let Some(limit) = a.int("limit")? {
+                req.limit = limit;
+            }
             render::finish(out, |out| {
-                let (_, id) = load(sel, env, out)?;
-                let filter = owo::SearchFilter {
-                    scope: scope.as_deref(),
-                    types: &types,
-                    // The project filter is the picked project, as the `--project` flag.
-                    project: sel.project.as_deref(),
-                    since: since.as_deref(),
-                };
-                render::search(out, &id.search(&query, &filter, limit))
+                let id = load(sel, env, out)?;
+                render::search(out, &id.search(&query, &req))
             })
         }
         "review" => render::finish(out, |out| {
-            let (_, id) = load(sel, env, out)?;
+            let id = load(sel, env, out)?;
             render::review(out, &id.review())
         }),
         "review_done" => {
             let through = a.day("through")?;
             render::finish(out, |out| {
-                let (_, id) = load(sel, env, out)?;
-                render::review_done(out, id.review_done(through)?)
+                let id = load(sel, env, out)?;
+                render::review_done(out, &id.review_done(through)?)
             })
         }
         "soul_note" => {
-            let file = a.text("file")?.unwrap_or_default();
-            let change = a.text("change")?.unwrap_or_default();
+            let (file, change) = (a.required("file")?, a.required("change")?);
             let evidence = a.strings("evidence");
             render::finish(out, |out| {
-                let (_, id) = load(sel, env, out)?;
+                let id = load(sel, env, out)?;
                 render::soul_note(out, id.soul_note(&file, &change, &evidence)?)
             })
         }
         "soul_history" => {
             let file = a.text("file")?;
             render::finish(out, |out| {
-                let (_, id) = load(sel, env, out)?;
+                let id = load(sel, env, out)?;
                 render::soul_history(out, &id.soul_history(file.as_deref()))
             })
         }
         "changes" => {
-            let (since, days) = (a.text("since")?, a.days("days")?);
-            if since.is_some() && days.is_some() {
-                return Err("arguments \"since\" and \"days\" cannot be used together".into());
-            }
-            let since = since.or_else(|| days.map(render::days_ago));
+            let (since, days) = (a.text("since")?, a.int("days")?);
             render::finish(out, |out| {
-                let (_, id) = load(sel, env, out)?;
-                render::changes(out, &id.changes(since.as_deref())?)
+                let id = load(sel, env, out)?;
+                let req = owo::ChangesRequest {
+                    since: since.as_deref(),
+                    days,
+                };
+                render::changes(out, &id.changes(&req)?)
             })
         }
         "export_card" => {
-            let (spec, scenario) = (a.text("spec")?.unwrap_or_default(), a.text("scenario")?);
+            let scenario = a.text("scenario")?;
             let file = a.text("out")?.map(PathBuf::from);
             let png = a.text("png")?.map(PathBuf::from);
-            if png.is_some() && file.is_none() {
-                return Err("argument \"png\" needs \"out\"".into());
+            let mut req = owo::CardRequest {
+                // The project filter is the picked project, as the `--project` flag.
+                project: sel.project.as_deref(),
+                scenario: scenario.as_deref(),
+                out: file.as_deref(),
+                png: png.as_deref(),
+                ..Default::default()
+            };
+            if let Some(spec) = a.named("spec", Spec::from_name)? {
+                req.spec = spec;
             }
             render::finish(out, |out| {
-                let (_, id) = load(sel, env, out)?;
-                let card = id.export_card(&owo::CardRequest {
-                    spec: &spec,
-                    // The project filter is the picked project, as the `--project` flag.
-                    project: sel.project.as_deref(),
-                    scenario: scenario.as_deref(),
-                    out: file.as_deref(),
-                    png: png.as_deref(),
-                })?;
+                let id = load(sel, env, out)?;
+                let card = id.export_card(&req)?;
                 render::card(out, card, file.as_deref())
             })
         }
         "export_skill" => {
-            let dir = PathBuf::from(a.text("out")?.unwrap_or_default());
+            let dir = PathBuf::from(a.required("out")?);
             render::finish(out, |out| {
-                let (_, id) = load(sel, env, out)?;
+                let id = load(sel, env, out)?;
                 render::skill(out, &id.export_skill(&dir)?)
             })
         }
         "export_soulspec" => {
-            let dir = PathBuf::from(a.text("out")?.unwrap_or_default());
+            let dir = PathBuf::from(a.required("out")?);
             render::finish(out, |out| {
-                let (_, id) = load(sel, env, out)?;
+                let id = load(sel, env, out)?;
                 render::soulspec(out, &dir, id.export_soulspec(&dir)?)
             })
         }
         "sync_start" => {
-            let session = a.text("session")?.unwrap_or_default();
-            let transcript = PathBuf::from(a.text("transcript")?.unwrap_or_default());
-            let format = a.text("format")?.unwrap_or_default();
-            let (now, every) = (a.flag("now"), a.int("every")?.unwrap_or(6));
+            let session = a.required("session")?;
+            let transcript = PathBuf::from(a.required("transcript")?);
+            let format = a
+                .named("format", SyncFormat::from_name)?
+                .unwrap_or_default();
+            let opts = sync_options(a)?;
             render::finish(out, |out| {
-                let s = open(sel, env, out)?.sync()?.start(
-                    &session,
-                    &transcript,
-                    &format,
-                    now,
-                    every,
-                )?;
+                let s = open(sel, env, out)?
+                    .sync()?
+                    .start(&session, &transcript, format, &opts)?;
                 render::synced(out, &s)
             })
         }
         "sync_push" => {
-            let session = a.text("session")?.unwrap_or_default();
+            let session = a.required("session")?;
             let turns = a.get("turns").map(Value::to_string).unwrap_or_default();
-            let (now, every) = (a.flag("now"), a.int("every")?.unwrap_or(6));
+            let opts = sync_options(a)?;
             render::finish(out, |out| {
-                let s = open(sel, env, out)?
-                    .sync()?
-                    .push(&session, &turns, now, every)?;
-                render::synced(out, &s)
+                let root = open(sel, env, out)?;
+                let sync = root.sync()?;
+                let turns = owo::parse_turns(&turns)?;
+                render::synced(out, &sync.push(&session, &turns, &opts)?)
             })
         }
         "sync_done" => {
-            let session = a.text("session")?.unwrap_or_default();
-            let until = a.int("until")?.unwrap_or(0);
+            let session = a.required("session")?;
+            let until = a.int("until")?.unwrap_or_default();
             render::finish(out, |out| {
                 let doc = open(sel, env, out)?.sync_done(&session, until)?;
-                render::sync_done(out, &session, until, doc)
+                render::sync_done(out, &session, until, &doc)
             })
         }
         "migrate_v1" => {
-            let path = PathBuf::from(a.text("path")?.unwrap_or_default());
-            let dest = PathBuf::from(a.text("out")?.unwrap_or_default());
+            let path = PathBuf::from(a.required("path")?);
+            let dest = PathBuf::from(a.required("out")?);
             render::finish(out, |out| {
                 render::migrate(out, &owo::migrate_v1(&path, &dest)?)
             })
         }
-        other => return Err(format!("no library call for the tool {other:?}")),
+        _ => return Ok(None),
     };
-    Ok(output)
+    Ok(Some(output))
+}
+
+/// The `now` and `every` arguments, else the library's defaults.
+fn sync_options(a: &Args) -> Result<owo::SyncOptions, String> {
+    let mut opts = owo::SyncOptions {
+        now: a.flag("now"),
+        ..Default::default()
+    };
+    if let Some(every) = a.int("every")? {
+        opts.every = every;
+    }
+    Ok(opts)
 }
 
 fn respond(id: &Value, method: &str, params: &Value, select: &Select, env: &Env) -> Option<Value> {
@@ -814,5 +831,44 @@ mod tests {
         assert_eq!(failed["content"][0]["text"], "owo panicked: boom");
         let next = guarded(|| result("ok".into(), false));
         assert_eq!(next["isError"], false);
+    }
+
+    /// Each tool maps to a library call: `dispatch` gives no `None` for any tool of the list.
+    #[test]
+    fn every_tool_has_a_library_call() {
+        let root = tempfile::TempDir::new().unwrap();
+        let sel = Select {
+            root: Some(root.path().to_path_buf()),
+            ..Select::default()
+        };
+        let env = Env {
+            cwd: root.path().to_path_buf(),
+            ..Env::default()
+        };
+        let tools = tools();
+        assert!(tools.len() > 20);
+        for tool in &tools {
+            let map: Map<String, Value> = tool
+                .params
+                .iter()
+                .filter(|p| p.required)
+                .map(|p| {
+                    let value = match (p.values.first(), p.kind) {
+                        (Some(v), _) => json!(v),
+                        (None, "integer") => json!(1),
+                        // A path stays inside the temporary root.
+                        (None, _) => json!(root.path().join("x")),
+                    };
+                    (p.name.clone(), value)
+                })
+                .collect();
+            let args = Args::new(tool, &map).unwrap();
+            let called = dispatch(tool, &args, &sel, &env);
+            assert!(
+                !matches!(called, Ok(None)),
+                "{} has no library call",
+                tool.name
+            );
+        }
     }
 }

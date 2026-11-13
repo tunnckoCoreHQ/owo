@@ -111,7 +111,7 @@ struct Session {
 }
 
 /// The identity, the sync session name and the turns of one store.
-type Job = (String, String, Vec<Value>);
+type Job = (String, String, Vec<crate::Turn>);
 
 #[derive(Default)]
 struct State {
@@ -171,7 +171,7 @@ impl State {
 
 /// The store of the turns of one finished turn, for the identity it started with. None when
 /// it had no identity or there is nothing to store.
-fn job(identity: Option<String>, session: &str, turns: Vec<Value>) -> Option<Job> {
+fn job(identity: Option<String>, session: &str, turns: Vec<crate::Turn>) -> Option<Job> {
     let id = identity?;
     let name = format!("{session}.{id}");
     (!turns.is_empty()).then_some((id, name, turns))
@@ -204,25 +204,22 @@ impl Owo {
 
     /// The text of the default load set of `identity`, as `owo context` prints it.
     fn context(&self, identity: &str) -> crate::Result<String> {
-        let root = self.root(identity)?;
-        let id = root.identity()?;
-        let ctx = id.context(&crate::ContextRequest {
-            voice: false,
-            look: false,
-            project: root.config.project.as_deref(),
-            with: &[],
-            notes: 3,
-        })?;
+        let id = self.root(identity)?.identity()?;
+        let ctx = id.context(&crate::ContextRequest::default())?;
         Ok(id.context_text(&ctx))
     }
 
     /// Stores `turns` for `identity` in `session`. The proxy only stores turns: with this run
     /// size an ingest run is never due.
-    fn push(&self, identity: &str, session: &str, turns: Vec<Value>) -> crate::Result<()> {
-        let turns = Value::from(turns).to_string();
-        self.root(identity)?
-            .sync()?
-            .push(session, &turns, false, usize::MAX)?;
+    fn push(&self, identity: &str, session: &str, turns: Vec<crate::Turn>) -> crate::Result<()> {
+        self.root(identity)?.sync()?.push(
+            session,
+            &turns,
+            &crate::SyncOptions {
+                now: false,
+                every: usize::MAX,
+            },
+        )?;
         Ok(())
     }
 
@@ -270,9 +267,7 @@ impl Proxy {
         let identities: Vec<_> = rows.into_iter().map(|r| (r.slug, r.name)).collect();
         let context = options.inject;
         if identities.is_empty() && context {
-            return Err(crate::Error::Usage(
-                "--inject needs an identity in the root".into(),
-            ));
+            return Err(crate::Fault::InjectNeedsIdentity.into());
         }
         let setup = (!identities.is_empty()).then(|| {
             let args = match &start {
@@ -403,7 +398,7 @@ fn identity(owo: &Owo, select: &crate::Select) -> Result<(Option<String>, Vec<cr
     let start = match &root.config.identity {
         Some(slug) => {
             let id = root.identity()?;
-            id.check_project(root.config.project.as_deref())?;
+            id.working_project()?;
             Some(slug.clone())
         }
         None => None,
@@ -745,7 +740,7 @@ fn finish(st: &mut State, session: &str, request: &str, error: bool) -> Option<J
 
 /// The `{id, role, text}` turns of a finished turn. The user turn's id is the first agent
 /// `messageId` plus `.user`. A live message with no id gets a clock id; a replayed one is left out.
-fn turns(turn: Turn) -> Vec<Value> {
+fn turns(turn: Turn) -> Vec<crate::Turn> {
     let mut out = vec![];
     if !turn.replay {
         let id = turn
@@ -754,7 +749,11 @@ fn turns(turn: Turn) -> Vec<Value> {
             .find_map(|(id, _)| id.as_ref())
             .map(|id| format!("{id}.user"))
             .unwrap_or_else(clock_id);
-        out.push(json!({ "id": id, "role": "user", "text": turn.user }));
+        out.push(crate::Turn {
+            id,
+            role: crate::Role::User,
+            text: turn.user,
+        });
     }
     for (id, text) in turn.agent {
         let id = match id {
@@ -762,7 +761,11 @@ fn turns(turn: Turn) -> Vec<Value> {
             None if !turn.replay => clock_id(),
             None => continue,
         };
-        out.push(json!({ "id": id, "role": "assistant", "text": text }));
+        out.push(crate::Turn {
+            id,
+            role: crate::Role::Assistant,
+            text,
+        });
     }
     out
 }
@@ -792,7 +795,7 @@ fn emit(out: &Mutex<impl Write>, bytes: &[u8]) -> std::io::Result<()> {
 }
 
 /// Stores the turns for `identity`. A failure is one warning line.
-fn push(owo: &Owo, identity: &str, session: &str, turns: Vec<Value>) {
+fn push(owo: &Owo, identity: &str, session: &str, turns: Vec<crate::Turn>) {
     if let Err(e) = owo.push(identity, session, turns) {
         owo.warn(&e.to_string());
     }

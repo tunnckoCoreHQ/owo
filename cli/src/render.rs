@@ -6,11 +6,11 @@ use crate::output::{Envelope, Out, Output};
 use crate::text;
 use anyhow::Result;
 use owo::{
-    Card, Changes, Context, Created, Diagnostic, Env, Hit, Identity, Kind, Level, Links,
-    MigrateReport, Packet, Resolved, Root, Row, SearchHit, Select, SoulNote, Soulspec, StampReport,
-    State, SyncRun, Template,
+    Bookmark, Card, Changes, Context, Created, Diagnostic, Env, Hit, Identity, Kind, Level, Links,
+    MigrateReport, Packet, Resolved, ReviewRecord, Root, Row, SearchHit, Select, SoulChange,
+    SoulNote, Soulspec, StampReport, State, SyncRun, Template,
 };
-use serde_json::{json, Value};
+use serde_json::json;
 use std::path::Path;
 
 /// The output of one command run by `f`. A failure keeps the warnings found before it.
@@ -31,18 +31,9 @@ pub fn open(select: &Select, env: &Env, out: &mut Out) -> Result<Root> {
     Ok(root)
 }
 
-/// The root and its selected identity.
-pub fn load(select: &Select, env: &Env, out: &mut Out) -> Result<(Root, Identity)> {
-    let root = open(select, env, out)?;
-    let id = root.identity()?;
-    Ok((root, id))
-}
-
-/// The local day `days` ago, which Git reads a plain `--since` day in.
-pub fn days_ago(days: i64) -> String {
-    (chrono::Local::now() - chrono::Duration::days(days))
-        .format("%Y-%m-%d")
-        .to_string()
+/// The selected identity of the root `select` picks.
+pub fn load(select: &Select, env: &Env, out: &mut Out) -> Result<Identity> {
+    Ok(open(select, env, out)?.identity()?)
 }
 
 pub fn slug(out: &mut Out, value: &str) -> Result<Output> {
@@ -171,7 +162,7 @@ pub fn resolve(out: &mut Out, name: &str, found: Result<Hit, Vec<Hit>>) -> Resul
             t.line(&hit.path)
         }),
         Err(hits) => {
-            let msg = owo::unresolved(name);
+            let msg = text::unresolved(name);
             let envelope =
                 Envelope::new(false, json!({ "candidates": hits })).with_errors([msg.as_str()]);
             let lines: String = hits
@@ -206,11 +197,11 @@ pub fn links(out: &mut Out, l: &Links) -> Result<Output> {
     )
 }
 
-/// The load set: its text with `format` `text`, else the file list.
-pub fn context(out: &mut Out, id: &Identity, ctx: &Context, format: &str) -> Result<Output> {
+/// The load set: its text, or with `paths` the file list.
+pub fn context(out: &mut Out, id: &Identity, ctx: &Context, paths: bool) -> Result<Output> {
     let envelope = Envelope::ok(serde_json::to_value(ctx)?).with_warnings(ctx.warnings.clone());
     out.emit(envelope, |t| {
-        if format == "text" {
+        if !paths {
             t.push(id.context_text(ctx));
         } else {
             t.push(text::context_paths(ctx));
@@ -247,8 +238,8 @@ pub fn synced(out: &mut Out, s: &SyncRun) -> Result<Output> {
     })
 }
 
-pub fn sync_done(out: &mut Out, session: &str, until: usize, doc: Value) -> Result<Output> {
-    out.emit(Envelope::ok(doc), |t| {
+pub fn sync_done(out: &mut Out, session: &str, until: usize, b: &Bookmark) -> Result<Output> {
+    out.emit(Envelope::ok(serde_json::to_value(b)?), |t| {
         t.say(format!("session {session} synced until {until}"))
     })
 }
@@ -268,12 +259,9 @@ pub fn review(out: &mut Out, p: &Packet) -> Result<Output> {
     })
 }
 
-pub fn review_done(out: &mut Out, review: Value) -> Result<Output> {
-    let through = review["reviewed_through"]
-        .as_str()
-        .unwrap_or("-")
-        .to_string();
-    out.emit(Envelope::ok(review), |t| {
+pub fn review_done(out: &mut Out, review: &ReviewRecord) -> Result<Output> {
+    let through = review.reviewed_through.as_deref().unwrap_or("-");
+    out.emit(Envelope::ok(serde_json::to_value(review)?), |t| {
         t.say(format!("review recorded through {through}"))
     })
 }
@@ -281,15 +269,14 @@ pub fn review_done(out: &mut Out, review: Value) -> Result<Output> {
 pub fn soul_note(out: &mut Out, note: SoulNote) -> Result<Output> {
     let line = format!(
         "noted {}: {}",
-        note.record["file"].as_str().unwrap_or(""),
-        note.record["change"].as_str().unwrap_or("")
+        note.record.file.as_deref().unwrap_or(""),
+        note.record.change.as_deref().unwrap_or("")
     );
-    out.emit(Envelope::ok(note.record).with_warnings(note.warning), |t| {
-        t.say(line)
-    })
+    let envelope = Envelope::ok(serde_json::to_value(&note.record)?).with_warnings(note.warning);
+    out.emit(envelope, |t| t.say(line))
 }
 
-pub fn soul_history(out: &mut Out, list: &[Value]) -> Result<Output> {
+pub fn soul_history(out: &mut Out, list: &[SoulChange]) -> Result<Output> {
     out.emit(Envelope::ok(json!({ "history": list })), |t| {
         t.push(text::soul_history(list));
         if list.is_empty() {

@@ -120,6 +120,11 @@ impl Kind {
         Kind::ALL.into_iter().map(Kind::name)
     }
 
+    /// The kind `name` names, as `--type` takes it.
+    pub fn from_name(name: &str) -> Option<Kind> {
+        Kind::ALL.into_iter().find(|k| k.name() == name)
+    }
+
     /// Entries with YAML frontmatter.
     pub fn has_frontmatter(self) -> bool {
         self.type_name().is_some()
@@ -245,6 +250,9 @@ pub struct Identity {
     pub entries: Vec<Entry>,
     /// Lowercase link key to the entries it can point at; see `resolve_link`.
     pub keys: BTreeMap<String, Vec<usize>>,
+    /// The working project that `Root::identity` selects, not yet checked to exist; see
+    /// `Identity::working_project`.
+    pub project: Option<String>,
     /// The home folder for `~/` in a project KB path; the caller sets it.
     pub home: Option<PathBuf>,
 }
@@ -392,6 +400,7 @@ impl Identity {
             state,
             keys: Self::link_keys(&entries),
             home: None,
+            project: None,
             entries,
         })
     }

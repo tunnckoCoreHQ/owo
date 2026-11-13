@@ -5,7 +5,6 @@ use crate::identity::{Entry, Identity, Kind};
 use crate::state::date_of;
 use chrono::{Duration, Utc};
 use serde::Serialize;
-use serde_json::Value;
 
 #[derive(Debug, Serialize)]
 pub struct Link {
@@ -24,7 +23,7 @@ impl Link {
         }
     }
 
-    pub fn wiki(&self) -> String {
+    pub(crate) fn wiki(&self) -> String {
         match &self.date {
             Some(d) if !self.title.starts_with(d.as_str()) => format!("[[{}]] ({d})", self.title),
             _ => format!("[[{}]]", self.title),
@@ -53,7 +52,7 @@ pub struct State {
     pub open_threads: Vec<Link>,
     pub open_conflicts: Vec<Link>,
     pub review: Review,
-    pub last_soul_change: Option<Value>,
+    pub last_soul_change: Option<crate::review::SoulChange>,
     /// With `--project`: last update and recent notes for that project.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub project: Option<ProjectState>,
@@ -200,7 +199,7 @@ pub fn compute(id: &Identity, days: i64, logs: usize) -> State {
             .collect(),
         open_threads: open(Kind::Thread, "open"),
         open_conflicts: open(Kind::Conflict, "open"),
-        last_soul_change: crate::state::history(id).last().cloned(),
+        last_soul_change: crate::review::last_soul_change(id),
         review: Review {
             last_reviewed: review.last_reviewed,
             days_since: review.days_since,
@@ -214,7 +213,7 @@ pub fn compute(id: &Identity, days: i64, logs: usize) -> State {
 }
 
 /// The links as `[[title]]` wiki-links joined with commas, or "none".
-pub fn join(links: &[Link]) -> String {
+pub(crate) fn join(links: &[Link]) -> String {
     if links.is_empty() {
         "none".into()
     } else {

@@ -46,16 +46,31 @@ const CHECKS: &[(&str, Check)] = &[
     ("kb", kb_links),
 ];
 
-/// Rule names for `--rule`.
-pub fn rules() -> impl Iterator<Item = &'static str> {
-    CHECKS.iter().map(|(name, _)| *name)
+/// One lint rule.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Rule(usize);
+
+impl Rule {
+    /// Every rule, in run order.
+    pub fn all() -> impl Iterator<Item = Rule> {
+        (0..CHECKS.len()).map(Rule)
+    }
+
+    pub fn name(self) -> &'static str {
+        CHECKS[self.0].0
+    }
+
+    pub fn from_name(name: &str) -> Option<Rule> {
+        Rule::all().find(|r| r.name() == name)
+    }
 }
 
-/// Runs the named rules, or every rule when `rules` is empty.
-pub fn run(id: &Identity, rules: &[String]) -> Vec<Diagnostic> {
+/// Runs the `rules`, or every rule when `rules` is empty.
+pub fn run(id: &Identity, rules: &[Rule]) -> Vec<Diagnostic> {
     let mut out = vec![];
-    for (name, check) in CHECKS {
-        if rules.is_empty() || rules.iter().any(|r| r == name) {
+    for rule in Rule::all() {
+        if rules.is_empty() || rules.contains(&rule) {
+            let (name, check) = CHECKS[rule.0];
             let start = out.len();
             check(id, &mut out);
             for d in &mut out[start..] {

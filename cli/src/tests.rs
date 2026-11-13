@@ -10,7 +10,7 @@ use tempfile::TempDir;
 /// A temporary root holding a copy of each example identity in `ids`.
 fn root(ids: &[&str]) -> TempDir {
     let tmp = TempDir::new().unwrap();
-    let examples = Path::new(env!("CARGO_MANIFEST_DIR")).join("examples");
+    let examples = Path::new(env!("CARGO_MANIFEST_DIR")).join("../examples");
     for id in ids {
         let from = examples.join(id);
         for entry in walkdir::WalkDir::new(&from) {

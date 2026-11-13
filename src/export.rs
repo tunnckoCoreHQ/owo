@@ -7,6 +7,29 @@ use serde_json::{json, Value};
 use std::fs;
 use std::path::Path;
 
+/// The Character Card spec version of a card.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Spec {
+    V2,
+    /// V3, with the V2 fields too.
+    V3,
+}
+
+impl Spec {
+    pub const ALL: [Spec; 2] = [Spec::V2, Spec::V3];
+
+    pub fn name(self) -> &'static str {
+        match self {
+            Spec::V2 => "v2",
+            Spec::V3 => "v3",
+        }
+    }
+
+    pub fn from_name(name: &str) -> Option<Spec> {
+        Spec::ALL.into_iter().find(|s| s.name() == name)
+    }
+}
+
 /// Licenses `export soulspec` accepts without a warning.
 pub const LICENSES: &[&str] = &[
     "MIT",
@@ -117,7 +140,7 @@ fn lore(e: &Entry, n: usize) -> Value {
 
 pub fn card(
     id: &Identity,
-    spec: &str,
+    spec: Spec,
     project: Option<&str>,
     scenario_from: Option<&str>,
 ) -> Result<Value> {
@@ -215,7 +238,7 @@ pub fn card(
             "recursive_scanning": false, "extensions": {}, "entries": entries
         }
     });
-    if spec == "v2" {
+    if spec == Spec::V2 {
         return Ok(json!({ "spec": "chara_card_v2", "spec_version": "2.0", "data": data }));
     }
     let now = chrono::Utc::now().timestamp();
@@ -263,7 +286,7 @@ pub fn write_card(
     };
     let avatar = fs::read(png)?;
     let image = if main["spec"] == "chara_card_v3" {
-        let v2 = card(id, "v2", project, scenario)?;
+        let v2 = card(id, Spec::V2, project, scenario)?;
         embed_png(&avatar, &[("chara", &v2), ("ccv3", main)])?
     } else {
         embed_png(&avatar, &[("chara", main)])?

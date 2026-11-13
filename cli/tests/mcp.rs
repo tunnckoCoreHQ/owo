@@ -284,6 +284,25 @@ fn mcp_tool_results_equal_the_cli_output() {
             String::new(),
         ),
         (
+            "search",
+            json!({ "query": ["kiln"], "scope": ["life"], "limit": [2] }),
+            vec![
+                "--json",
+                "search",
+                "--scope=life",
+                "--limit=2",
+                "--",
+                "kiln",
+            ],
+            String::new(),
+        ),
+        (
+            "show",
+            json!({ "name": ["life/events/first-firing.md"] }),
+            vec!["show", "--", "life/events/first-firing.md"],
+            String::new(),
+        ),
+        (
             "sync_push",
             json!({ "session": "m1", "turns": turns, "now": true }),
             vec!["--json", "sync", "push", "--session=m1", "--now"],
@@ -309,12 +328,17 @@ fn mcp_tool_results_equal_the_cli_output() {
         errors += failed as usize;
     }
     assert_eq!(errors, 1, "the failing call");
-    // A bad argument is refused before the library call, with its own text.
-    let bad = call(0, "search", json!({ "query": "kiln", "limit": "many" }));
-    let reply = &raw_session(mcp_root.path(), "nicole", lines(&[bad]))[0];
+    // A bad argument is refused before the library call, with its own text, and a library
+    // rule gives the library's usage error.
+    let bad = [
+        call(0, "search", json!({ "query": "kiln", "limit": "many" })),
+        call(1, "changes", json!({ "since": "2026-01-01", "days": 3 })),
+    ];
+    let replies = raw_session(mcp_root.path(), "nicole", lines(&bad));
     assert_eq!(
-        text(reply),
+        text(&replies[0]),
         "argument \"limit\" must be an integer, not \"many\""
     );
-    assert_eq!(reply["result"]["isError"], true);
+    assert!(text(&replies[1]).contains("since and days cannot be used together"));
+    assert!(replies.iter().all(|r| r["result"]["isError"] == true));
 }

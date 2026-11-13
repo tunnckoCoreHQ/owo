@@ -1,10 +1,9 @@
 //! The text each command prints without `--json`, built from the typed results of the library.
 
 use owo::{
-    Changes, Context, Diagnostic, Hit, Level, LinkRef, MigrateReport, Packet, Row, SearchHit,
-    State, SyncRun,
+    Changes, Context, Diagnostic, Hit, Level, Link, LinkRef, MigrateReport, Packet, Row, SearchHit,
+    SoulChange, State, SyncRun,
 };
-use serde_json::Value;
 
 /// One finding as `level[rule] path:line: message`.
 pub fn diagnostic(d: &Diagnostic) -> String {
@@ -23,7 +22,7 @@ pub fn diagnostic(d: &Diagnostic) -> String {
 pub fn list(rows: &[Row]) -> String {
     rows.iter()
         .map(|row| {
-            let last = row.last_activity.as_deref().map(owo::day).unwrap_or("-");
+            let last = row.last_activity.as_deref().map(day).unwrap_or("-");
             format!(
                 "{:<16} {:<20} {:<10} {}\n",
                 row.slug,
@@ -41,16 +40,16 @@ pub fn state(s: &State) -> String {
     if let Some(change) = &s.last_soul_change {
         out.push_str(&format!(
             "- Last soul change: {} {}\n",
-            change.get("file").and_then(Value::as_str).unwrap_or("?"),
-            change.get("change").and_then(Value::as_str).unwrap_or("")
+            change.file.as_deref().unwrap_or("?"),
+            change.change.as_deref().unwrap_or("")
         ));
     }
     if let Some(p) = &s.project {
-        let last = p.last_updated.as_deref().map(owo::day).unwrap_or("never");
+        let last = p.last_updated.as_deref().map(day).unwrap_or("never");
         out.push_str(&format!(
             "- Project {}: last {last}, notes {}\n",
             p.slug,
-            owo::join_links(&p.notes)
+            join_links(&p.notes)
         ));
     }
     if s.review.memory_changed_outside_review {
@@ -177,11 +176,11 @@ pub fn review(p: &Packet) -> String {
     }
     o.push_str(&format!(
         "\n## Events in window\n\n{}\n",
-        owo::join_links(&p.events)
+        join_links(&p.events)
     ));
     o.push_str(&format!(
         "\n## Lessons changed\n\n{}\n",
-        owo::join_links(&p.lessons)
+        join_links(&p.lessons)
     ));
     o.push_str(&format!(
         "\n## Journal in window\n\n{}\n",
@@ -193,8 +192,8 @@ pub fn review(p: &Packet) -> String {
     ));
     o.push_str(&format!(
         "\n## Open\n\n- Threads: {}\n- Conflicts: {}\n",
-        owo::join_links(&p.open_threads),
-        owo::join_links(&p.open_conflicts)
+        join_links(&p.open_threads),
+        join_links(&p.open_conflicts)
     ));
     if !p.recurring.is_empty() {
         o.push_str("\n## Recurring phrases\n\n");
@@ -205,33 +204,28 @@ pub fn review(p: &Packet) -> String {
     if let Some(c) = &p.last_soul_change {
         o.push_str(&format!(
             "\n## Last soul change\n\n{} {}: {}\n",
-            c["at"].as_str().unwrap_or("?"),
-            c["file"].as_str().unwrap_or("?"),
-            c["change"].as_str().unwrap_or("")
+            c.at.as_deref().unwrap_or("?"),
+            c.file.as_deref().unwrap_or("?"),
+            c.change.as_deref().unwrap_or("")
         ));
     }
     o.push_str("\nWhen MEMORY is compiled: `owo stamp && owo index && owo lint`, then `owo review done`.\n");
     o
 }
 
-pub fn soul_history(list: &[Value]) -> String {
+pub fn soul_history(list: &[SoulChange]) -> String {
     let mut out = String::new();
     for r in list {
-        let ev: Vec<&str> = r["evidence"]
-            .as_array()
-            .map(|a| a.iter().filter_map(|v| v.as_str()).collect())
-            .unwrap_or_default();
         out.push_str(&format!(
             "{}  {}  {}\n    evidence: {}\n",
-            r["at"].as_str().unwrap_or("?"),
-            r["file"].as_str().unwrap_or("?"),
-            r["change"].as_str().unwrap_or(""),
-            ev.join(", ")
+            r.at.as_deref().unwrap_or("?"),
+            r.file.as_deref().unwrap_or("?"),
+            r.change.as_deref().unwrap_or(""),
+            r.evidence.as_deref().unwrap_or_default().join(", ")
         ));
     }
     out
 }
-
 pub fn changes(c: &Changes) -> String {
     let mut o = String::new();
     for (day, list) in c.days.iter().rev() {
@@ -282,4 +276,26 @@ pub fn links(back: &[LinkRef], fwd: &[LinkRef]) -> String {
         ));
     }
     out
+}
+
+/// The `YYYY-MM-DD` part of a stamp, or the whole text when it is shorter.
+fn day(stamp: &str) -> &str {
+    stamp.get(..10).unwrap_or(stamp)
+}
+
+/// The links as `[[title]]` wiki-links joined with commas, or "none".
+fn join_links(links: &[Link]) -> String {
+    if links.is_empty() {
+        return "none".into();
+    }
+    let wiki = |l: &Link| match &l.date {
+        Some(d) if !l.title.starts_with(d.as_str()) => format!("[[{}]] ({d})", l.title),
+        _ => format!("[[{}]]", l.title),
+    };
+    links.iter().map(wiki).collect::<Vec<_>>().join(", ")
+}
+
+/// The error text for a name that does not resolve to one entry, without the candidates.
+pub fn unresolved(name: &str) -> String {
+    format!("{name:?} does not resolve to one entry")
 }

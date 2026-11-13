@@ -248,11 +248,7 @@ pub fn need_identity(r: &Resolved) -> Result<String> {
         .into());
     }
     if !r.root.join(&slug).is_dir() {
-        return Err(ConfigError(format!(
-            "identity folder not found: {}; `owo list` shows the identities in this root",
-            r.root.join(&slug).display()
-        ))
-        .into());
+        return Err(crate::Fault::NoIdentityFolder(r.root.join(&slug)).into());
     }
     Ok(slug)
 }
@@ -269,10 +265,7 @@ pub fn need_project<'a>(dir: &Path, project: Option<&'a str>) -> Result<Option<&
         .into());
     }
     if !dir.join(format!("work/projects/{p}/project.md")).is_file() {
-        return Err(ConfigError(format!(
-            "project not found: work/projects/{p}/project.md (run `owo add project`)"
-        ))
-        .into());
+        return Err(crate::Fault::NoProject(p.to_string()).into());
     }
     Ok(Some(p))
 }

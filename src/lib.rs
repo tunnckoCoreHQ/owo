@@ -13,6 +13,7 @@ mod changes;
 mod config;
 mod context;
 mod create;
+mod error;
 mod export;
 mod find;
 mod git;
@@ -37,20 +38,24 @@ pub use changes::{Change, Changes};
 pub use config::{Resolved, Source};
 pub use context::{Context, Item as ContextItem, Request as ContextRequest};
 pub use create::Created;
-pub use export::Report as Soulspec;
-pub use find::{unresolved, Hit, LinkRef};
+pub use error::{Error, ErrorKind, Fault, Result};
+pub use export::{Report as Soulspec, Spec};
+pub use find::{Hit, LinkRef};
 pub use identity::{Identity, Kind};
 pub use kb::Kb;
+pub use lint::Rule;
 pub use migrate::Report as MigrateReport;
 pub use output::{Diagnostic, Level};
-pub use review::{Changed, Day, Note as SoulNote, Packet};
-pub use search::{Filter as SearchFilter, Hit as SearchHit};
+pub use review::{Changed, Day, Note as SoulNote, Packet, ReviewRecord, SoulChange};
+pub use search::{Hit as SearchHit, Request as SearchRequest, Scope};
 pub use stamp::Report as StampReport;
-pub use state::{day, parse_day};
-pub use status::{join as join_links, now_block, Link, ProjectState, Review, Row, State};
-pub use sync::{Start as SyncRun, FORMATS as SYNC_FORMATS};
+pub use state::parse_day;
+pub use status::{now_block, Link, ProjectState, Review, Row, State};
+pub use sync::{
+    parse_turns, Bookmark, Format as SyncFormat, PendingRun, Role, Start as SyncRun, Turn,
+};
 
-use config::{need_identity, need_project, ConfigError};
+use config::{need_identity, need_project};
 use serde_json::Value;
 use std::path::{Path, PathBuf};
 
@@ -78,51 +83,14 @@ pub struct Select {
     pub project: Option<String>,
 }
 
-/// Why a call failed. The message is the whole error text.
-#[derive(Debug)]
-pub enum Error {
-    /// A bad argument, such as `add` with no title.
-    Usage(String),
-    /// A root, identity or project that does not resolve or does not exist.
-    Config(String),
-    /// A file that cannot be read or written.
-    Io(String),
-    /// Anything else the call could not do.
-    Failed(String),
-}
-
-impl std::fmt::Display for Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Error::Usage(m) | Error::Config(m) | Error::Io(m) | Error::Failed(m) => f.write_str(m),
-        }
-    }
-}
-
-impl std::error::Error for Error {}
-
-impl From<anyhow::Error> for Error {
-    fn from(e: anyhow::Error) -> Self {
-        let message = format!("{e:#}");
-        if e.downcast_ref::<ConfigError>().is_some() {
-            Error::Config(message)
-        } else if e.downcast_ref::<std::io::Error>().is_some() {
-            Error::Io(message)
-        } else {
-            Error::Failed(message)
-        }
-    }
-}
-
-pub type Result<T, E = Error> = std::result::Result<T, E>;
-
 /// The slug of a text; an error when the text has no letters or digits.
 pub fn slug(text: &str) -> Result<String> {
     let value = slug::slugify(text);
     if value.is_empty() {
-        return Err(Error::Failed(format!(
-            "{text:?} has no letters or digits to make a slug"
-        )));
+        return Err(Error::new(
+            ErrorKind::Failed,
+            format!("{text:?} has no letters or digits to make a slug"),
+        ));
     }
     Ok(value)
 }
@@ -130,11 +98,6 @@ pub fn slug(text: &str) -> Result<String> {
 /// The names of the entry types `add` creates.
 pub fn entry_types() -> impl Iterator<Item = &'static str> {
     templates::ENTRY_TEMPLATES.iter().map(|(n, _)| *n)
-}
-
-/// The names of the lint rules.
-pub fn lint_rules() -> impl Iterator<Item = &'static str> {
-    lint::rules()
 }
 
 /// Moves a v1 identity folder at `path` into a new identity folder `out` (`<root>/<slug>`).
@@ -167,8 +130,7 @@ pub struct Card {
 
 /// What `export_card` builds, and where it writes the card.
 pub struct CardRequest<'a> {
-    /// `v2` or `v3`.
-    pub spec: &'a str,
+    pub spec: Spec,
     /// The project whose notes join the card; it must exist.
     pub project: Option<&'a str>,
     /// The event or location whose summary becomes the scenario.
@@ -177,6 +139,72 @@ pub struct CardRequest<'a> {
     pub out: Option<&'a Path>,
     /// Embeds the card in this PNG avatar; needs `out`.
     pub png: Option<&'a Path>,
+}
+
+impl Default for CardRequest<'_> {
+    /// A V3 card of the whole identity, not written.
+    fn default() -> Self {
+        Self {
+            spec: Spec::V3,
+            project: None,
+            scenario: None,
+            out: None,
+            png: None,
+        }
+    }
+}
+
+/// The largest number of days `state` and `changes` take.
+pub const MAX_DAYS: i64 = 36500;
+
+/// A number of days from 0 to `MAX_DAYS`.
+fn check_days(days: i64) -> Result<i64> {
+    if !(0..=MAX_DAYS).contains(&days) {
+        return Err(Fault::DaysOutOfRange(days).into());
+    }
+    Ok(days)
+}
+
+/// What `state` derives.
+#[derive(Debug, Clone, Copy)]
+pub struct StateRequest {
+    /// The window for recent events, from 0 to `MAX_DAYS`.
+    pub days: i64,
+}
+
+impl Default for StateRequest {
+    /// Events of the last 14 days.
+    fn default() -> Self {
+        Self { days: 14 }
+    }
+}
+
+/// Which changes `changes` lists: all by default.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct ChangesRequest<'a> {
+    /// A day, or what `git log --since` takes.
+    pub since: Option<&'a str>,
+    /// Only the last N days, from 0 to `MAX_DAYS`; not with `since`.
+    pub days: Option<i64>,
+}
+
+/// When a sync step writes a slice for ingest.
+#[derive(Debug, Clone, Copy)]
+pub struct SyncOptions {
+    /// Take any new turns now (session end).
+    pub now: bool,
+    /// New user turns per run.
+    pub every: usize,
+}
+
+impl Default for SyncOptions {
+    /// A run every six new user turns.
+    fn default() -> Self {
+        Self {
+            now: false,
+            every: 6,
+        }
+    }
 }
 
 /// An opened root: where it is, which identity and project it selects, and the warnings found
@@ -193,7 +221,8 @@ impl Root {
     /// reads no identity yet.
     pub fn open(select: &Select, env: &Env) -> Result<Root> {
         let inputs = config::Inputs::new(select, env);
-        let config = config::resolve(&inputs).map_err(|e| Error::Config(format!("{e:#}")))?;
+        let config = config::resolve(&inputs)
+            .map_err(|e| Error::new(ErrorKind::Config, format!("{e:#}")))?;
         let mut warnings = vec![];
         if let Source::ProjectFile(file) = &config.root_source {
             if file.parent() != Some(inputs.cwd.as_path()) {
@@ -214,10 +243,11 @@ impl Root {
         &self.config.root
     }
 
-    /// Loads the selected identity.
+    /// Loads the selected identity, with the selected project as its working project.
     pub fn identity(&self) -> Result<Identity> {
         let mut id = Identity::load(&self.config.root, &need_identity(&self.config)?)?;
         id.home = self.home.clone();
+        id.project = self.config.project.clone();
         Ok(id)
     }
 
@@ -247,9 +277,7 @@ impl Root {
     pub fn template(&self, name: &str) -> Result<(Template, String)> {
         let all = templates::all();
         let Some((name, file, builtin)) = all.into_iter().find(|(n, _, _)| *n == name) else {
-            return Err(Error::Failed(format!(
-                "unknown template {name:?}; run `owo templates` for the list"
-            )));
+            return Err(Fault::UnknownTemplate(name.to_string()).into());
         };
         let root = &self.config.root;
         let template = Template {
@@ -276,7 +304,7 @@ impl Root {
 
     /// Moves the bookmark of `session` to message `until` after an ingest run. Returns the
     /// bookmark.
-    pub fn sync_done(&self, session: &str, until: usize) -> Result<Value> {
+    pub fn sync_done(&self, session: &str, until: usize) -> Result<Bookmark> {
         Ok(sync::done(&self.config.root, session, until)?)
     }
 }
@@ -289,50 +317,54 @@ pub struct SessionSync<'a> {
 }
 
 impl SessionSync<'_> {
-    fn request<'a>(&'a self, session: &'a str, now: bool, every: usize) -> sync::StartRequest<'a> {
+    fn request<'a>(&'a self, session: &'a str, opts: &SyncOptions) -> sync::StartRequest<'a> {
         sync::StartRequest {
             root: self.root,
             slug: &self.slug,
             session,
-            now,
-            every: every.max(1),
+            now: opts.now,
+            every: opts.every.max(1),
             project: self.project.as_deref(),
         }
     }
 
-    /// Reads the host's transcript of `session` in `format` (one of `SYNC_FORMATS`) and, when
-    /// `every` new user turns arrived or `now` is set, writes the slice and the ingest prompt.
+    /// Reads the host's transcript of `session` in `format` and, when `opts.every` new user
+    /// turns arrived or `opts.now` is set, writes the slice and the ingest prompt.
     pub fn start(
         &self,
         session: &str,
         transcript: &Path,
-        format: &str,
-        now: bool,
-        every: usize,
+        format: SyncFormat,
+        opts: &SyncOptions,
     ) -> Result<SyncRun> {
         Ok(sync::start(
-            &self.request(session, now, every),
+            &self.request(session, opts),
             transcript,
             format,
         )?)
     }
 
-    /// Stores `turns`, a JSON array of `{id, role, text}`, skipping stored ids, then runs
-    /// `start` on the stored turns.
-    pub fn push(&self, session: &str, turns: &str, now: bool, every: usize) -> Result<SyncRun> {
-        Ok(sync::push(&self.request(session, now, every), turns)?)
+    /// Stores `turns`, skipping stored ids and turns with no text, then runs `start` on the
+    /// stored turns.
+    pub fn push(&self, session: &str, turns: &[Turn], opts: &SyncOptions) -> Result<SyncRun> {
+        Ok(sync::push(&self.request(session, opts), turns)?)
     }
 }
 
 impl Identity {
     /// `project` when it is a project of this identity; an error when it is not.
-    pub fn check_project<'a>(&self, project: Option<&'a str>) -> Result<Option<&'a str>> {
+    fn check_project<'a>(&self, project: Option<&'a str>) -> Result<Option<&'a str>> {
         Ok(need_project(&self.dir, project)?)
+    }
+
+    /// The working project, checked to be a project of this identity.
+    pub fn working_project(&self) -> Result<Option<&str>> {
+        self.check_project(self.project.as_deref())
     }
 
     /// The lint findings of the `rules` (every rule when empty). With `changed`, only the
     /// findings in files changed since the last commit or stamp.
-    pub fn lint(&self, rules: &[String], changed: bool) -> Vec<Diagnostic> {
+    pub fn lint(&self, rules: &[Rule], changed: bool) -> Vec<Diagnostic> {
         let mut found = lint::run(self, rules);
         if changed {
             let paths = changes::changed_paths(self);
@@ -347,26 +379,26 @@ impl Identity {
     }
 
     /// Creates an entry from its template. Returns its path and true when the file is new. A
-    /// note goes under `req.project`, which must exist; other types ignore it.
+    /// note goes under the working project, which must exist; other types ignore it.
     pub fn add(&self, req: &AddRequest) -> Result<(String, bool)> {
         if req.kind.type_name().is_none() {
-            return Err(Error::Usage(format!(
-                "{} is not an entry type; `entry_types` lists them",
-                req.kind.name()
-            )));
+            return Err(Error::new(
+                ErrorKind::Usage,
+                format!(
+                    "{} is not an entry type; `entry_types` lists them",
+                    req.kind.name()
+                ),
+            ));
         }
         if req.title.trim().is_empty() && req.kind != Kind::Log {
-            return Err(Error::Usage(format!(
-                "`owo add {}` needs a title",
-                req.kind.name()
-            )));
+            return Err(Fault::NeedsTitle(req.kind).into());
         }
         let project = if req.kind == Kind::Note {
-            self.check_project(req.project)?
+            self.working_project()?
         } else {
             None
         };
-        Ok(add::add(self, &AddRequest { project, ..*req })?)
+        Ok(add::add(self, req, project)?)
     }
 
     /// Refreshes the state files, or with `check` only reports the drift.
@@ -385,7 +417,7 @@ impl Identity {
     }
 
     /// The entry `name` resolves to, optionally of one type; else the candidates.
-    pub fn resolve(&self, name: &str, kind: Option<&str>) -> Result<Hit, Vec<Hit>> {
+    pub fn resolve(&self, name: &str, kind: Option<Kind>) -> Result<Hit, Vec<Hit>> {
         let hits = |v: Vec<usize>| v.iter().map(|i| Hit::of(&self.entries[*i])).collect();
         match find::resolve(self, name, kind) {
             find::Resolution::Found(i) => Ok(Hit::of(&self.entries[i])),
@@ -425,10 +457,10 @@ impl Identity {
             .collect()
     }
 
-    /// The tiered load set. `req.project` must exist.
+    /// The tiered load set, with the working project, which must exist.
     pub fn context(&self, req: &ContextRequest) -> Result<Context> {
-        let project = self.check_project(req.project)?;
-        Ok(context::build(self, &ContextRequest { project, ..*req })?)
+        let project = self.working_project()?;
+        Ok(context::build(self, req, project)?)
     }
 
     /// The text of a load set: each file after an `<!-- owo: ... -->` line, the Now block and the
@@ -437,19 +469,19 @@ impl Identity {
         context::render_text(self, ctx)
     }
 
-    /// The derived current state, with events of the last `days`, and the state of `project`,
-    /// which must exist.
-    pub fn state(&self, days: i64, project: Option<&str>) -> Result<State> {
-        let mut s = status::compute(self, days, 5);
-        if let Some(p) = self.check_project(project)? {
+    /// The derived current state, with events of the last `req.days`, and the state of the
+    /// working project, which must exist.
+    pub fn state(&self, req: &StateRequest) -> Result<State> {
+        let mut s = status::compute(self, check_days(req.days)?, 5);
+        if let Some(p) = self.working_project()? {
             s.project = Some(status::project(self, p));
         }
         Ok(s)
     }
 
-    /// The BM25 hits for `query`, best first, at most `limit`.
-    pub fn search(&self, query: &str, filter: &SearchFilter, limit: usize) -> Vec<SearchHit> {
-        search::search(self, query, filter, limit)
+    /// The BM25 hits for `query`, best first, at most `req.limit`.
+    pub fn search(&self, query: &str, req: &SearchRequest) -> Vec<SearchHit> {
+        search::search(self, query, req)
     }
 
     /// The review packet.
@@ -459,7 +491,7 @@ impl Identity {
 
     /// Records a finished review through the story day `through`, else the newest one. Returns
     /// the review record.
-    pub fn review_done(&self, through: Option<chrono::NaiveDate>) -> Result<Value> {
+    pub fn review_done(&self, through: Option<chrono::NaiveDate>) -> Result<ReviewRecord> {
         Ok(review::done(self, through)?)
     }
 
@@ -469,17 +501,27 @@ impl Identity {
     }
 
     /// The soul history, of one soul file or of all.
-    pub fn soul_history(&self, file: Option<&str>) -> Vec<Value> {
+    pub fn soul_history(&self, file: Option<&str>) -> Vec<SoulChange> {
         review::soul_history(self, file)
     }
 
-    /// What changed, grouped by day, since `since` (a day, or what `git log --since` takes).
-    pub fn changes(&self, since: Option<&str>) -> Result<Changes> {
-        Ok(changes::changes(self, since)?)
+    /// What changed, grouped by day, since `req.since`, or in the last `req.days` (from the
+    /// local day that many days ago).
+    pub fn changes(&self, req: &ChangesRequest) -> Result<Changes> {
+        let since = match (req.since, req.days) {
+            (Some(_), Some(_)) => return Err(Fault::SinceWithDays.into()),
+            (Some(s), None) => Some(s.to_string()),
+            (None, Some(days)) => Some(state::local_day_ago(check_days(days)?)),
+            (None, None) => None,
+        };
+        Ok(changes::changes(self, since.as_deref())?)
     }
 
     /// Builds a character card, and writes it when `req.out` is set.
     pub fn export_card(&self, req: &CardRequest) -> Result<Card> {
+        if req.png.is_some() && req.out.is_none() {
+            return Err(Fault::PngNeedsOut.into());
+        }
         let project = self.check_project(req.project)?;
         let card = export::card(self, req.spec, project, req.scenario)?;
         let warnings = export::warnings(&card);

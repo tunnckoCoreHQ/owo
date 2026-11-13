@@ -1,5 +1,6 @@
 //! Output envelope shared by every command: text for people, JSON for agents.
 
+use owo::{ErrorKind, Fault};
 use serde::Serialize;
 use serde_json::Value;
 
@@ -115,23 +116,28 @@ pub fn usage_text(usage: &clap::Error, mut stderr: String) -> (String, String) {
 }
 
 impl From<anyhow::Error> for Output {
-    /// A failed command: a fail envelope, and the exit code for the error kind. A library usage
-    /// error becomes a clap error, so it is worded as clap words its own.
+    /// A failed command: a fail envelope, and the exit code for the error kind. A library error
+    /// takes the CLI's words for its fault; a library usage error becomes a clap error, so it is
+    /// worded as clap words its own.
     fn from(e: anyhow::Error) -> Self {
-        let e = match e.downcast_ref::<owo::Error>() {
-            Some(owo::Error::Usage(m)) => <crate::cli::Cli as clap::CommandFactory>::command()
-                .error(clap::error::ErrorKind::MissingRequiredArgument, m)
-                .into(),
-            _ => e,
-        };
-        let code = match e.downcast_ref::<owo::Error>() {
-            _ if e.downcast_ref::<clap::Error>().is_some() => exit::USAGE,
-            Some(owo::Error::Usage(_)) => exit::USAGE,
-            Some(owo::Error::Config(_)) => exit::CONFIG,
-            Some(owo::Error::Io(_)) => exit::IO,
-            Some(owo::Error::Failed(_)) => exit::PROBLEMS,
-            None if e.downcast_ref::<std::io::Error>().is_some() => exit::IO,
-            None => exit::PROBLEMS,
+        let (e, code) = match e.downcast_ref::<owo::Error>() {
+            Some(err) => {
+                let text = cli_text(err);
+                match err.kind {
+                    ErrorKind::Usage => (
+                        <crate::cli::Cli as clap::CommandFactory>::command()
+                            .error(clap::error::ErrorKind::MissingRequiredArgument, text)
+                            .into(),
+                        exit::USAGE,
+                    ),
+                    ErrorKind::Config => (anyhow::anyhow!(text), exit::CONFIG),
+                    ErrorKind::Io => (anyhow::anyhow!(text), exit::IO),
+                    ErrorKind::Failed => (anyhow::anyhow!(text), exit::PROBLEMS),
+                }
+            }
+            None if e.downcast_ref::<clap::Error>().is_some() => (e, exit::USAGE),
+            None if e.downcast_ref::<std::io::Error>().is_some() => (e, exit::IO),
+            None => (e, exit::PROBLEMS),
         };
         let envelope = Envelope::fail(&format!("{e:#}"));
         Self {
@@ -142,6 +148,38 @@ impl From<anyhow::Error> for Output {
             code,
         }
     }
+}
+
+/// The text of a library error, with the fault worded in CLI terms: the command to run.
+fn cli_text(e: &owo::Error) -> String {
+    let Some(fault) = &e.fault else {
+        return e.to_string();
+    };
+    let cli = match fault {
+        Fault::NeedsTitle(kind) => format!("`owo add {}` needs a title", kind.name()),
+        Fault::UnknownTemplate(_) => format!("{fault}; run `owo templates` for the list"),
+        Fault::NoIdentityFolder(_) => {
+            format!("{fault}; `owo list` shows the identities in this root")
+        }
+        Fault::NoProject(_) => format!("{fault} (run `owo add project`)"),
+        Fault::Generated(_) => format!("{fault}; run `owo index` instead"),
+        Fault::NoSoulState => format!("{fault}; run `owo stamp`"),
+        Fault::SessionBusy { session, lock } => format!(
+            "session {session:?} is busy: another `owo sync` holds {}",
+            lock.display()
+        ),
+        Fault::PushedSession(_) => format!("{fault}; use `owo sync push`"),
+        Fault::TranscriptSession { .. } => format!("{fault}; use `owo sync start`"),
+        Fault::NoBookmark(_) => format!("{fault}; run `owo sync start` first"),
+        Fault::PastMessages { until, seen } => {
+            format!("--until {until} is past the {seen} messages the last `sync start` read")
+        }
+        // Clap refuses these before the call, with its own text.
+        Fault::DaysOutOfRange(_) | Fault::SinceWithDays | Fault::PngNeedsOut => fault.to_string(),
+        Fault::InjectNeedsIdentity => "--inject needs an identity in the root".into(),
+    };
+    // The library text may carry a context before the fault; keep it.
+    e.to_string().replace(&fault.to_string(), &cli)
 }
 
 /// How a command's result is collected: the envelope with `--json`, else text for people.

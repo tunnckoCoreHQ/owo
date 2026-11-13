@@ -61,8 +61,8 @@ fn identity_rel(id: &Identity, name: &str) -> Option<String> {
 }
 
 /// Resolves a name the way links do, optionally limited to one entry type.
-pub fn resolve(id: &Identity, name: &str, kind: Option<&str>) -> Resolution {
-    let matches_kind = |i: &usize| kind.is_none_or(|k| id.entries[*i].kind.name() == k);
+pub fn resolve(id: &Identity, name: &str, kind: Option<Kind>) -> Resolution {
+    let matches_kind = |i: &usize| kind.is_none_or(|k| id.entries[*i].kind == k);
     let hits: Vec<usize> = id
         .resolve_link(identity_rel(id, name).as_deref().unwrap_or(name))
         .into_iter()
@@ -102,7 +102,7 @@ pub fn resolve(id: &Identity, name: &str, kind: Option<&str>) -> Resolution {
 }
 
 /// The error for a name that does not resolve to one entry, without the candidate list.
-pub fn unresolved(name: &str) -> String {
+pub(crate) fn unresolved(name: &str) -> String {
     format!("{name:?} does not resolve to one entry")
 }
 

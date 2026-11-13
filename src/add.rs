@@ -13,15 +13,14 @@ pub struct Request<'a> {
     pub title: &'a str,
     pub date: Option<NaiveDate>,
     pub parent: Option<&'a str>,
-    /// Project slug for a note, already checked to exist
-    pub project: Option<&'a str>,
     pub aliases: &'a [String],
     /// KB path for a project (`kb:` in project.md)
     pub kb: Option<&'a str>,
 }
 
 /// Returns the entry path and true when the file is new.
-pub fn add(id: &Identity, req: &Request) -> Result<(String, bool)> {
+/// `project` is the project of a note, checked to exist.
+pub fn add(id: &Identity, req: &Request, project: Option<&str>) -> Result<(String, bool)> {
     let name = req
         .kind
         .type_name()
@@ -81,13 +80,13 @@ pub fn add(id: &Identity, req: &Request) -> Result<(String, bool)> {
     };
 
     if req.kind == Kind::Note {
-        let project = req.project.context("note needs --project <project>")?;
+        let project = project.context("note needs --project <project>")?;
         values.insert("project", project.to_string());
     }
 
     let rel = req
         .kind
-        .rel(&slug, &date, parent_slug.as_deref(), req.project)
+        .rel(&slug, &date, parent_slug.as_deref(), project)
         .expect("every entry type has an add path");
 
     let path = id.dir.join(&rel);
@@ -151,7 +150,7 @@ pub fn write(id: &Identity, rel: &str, text: &str) -> Result<bool> {
         bail!("{rel:?} must be an identity-relative .md path under soul/, life/ or work/");
     }
     if crate::identity::classify(&clean) == crate::identity::Kind::Generated {
-        bail!("{clean} is generated; run `owo index` instead");
+        return Err(crate::Fault::Generated(clean).into());
     }
     let file = id.dir.join(&clean);
     let created = !file.exists();

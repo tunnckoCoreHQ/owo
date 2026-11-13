@@ -3,7 +3,7 @@
 use chrono::NaiveDate;
 use clap::builder::TypedValueParser;
 use clap::{Parser, Subcommand};
-use owo::Kind;
+use owo::{Kind, Rule, Scope, Spec, SyncFormat};
 use std::path::PathBuf;
 
 #[derive(Parser)]
@@ -55,7 +55,7 @@ pub enum Command {
     /// Create an entry from its template at its deterministic path
     Add {
         /// Entry type
-        #[arg(value_name = "TYPE", value_parser = clap::builder::PossibleValuesParser::new(owo::entry_types()).map(|s| Kind::from_type(&s).expect("an entry type")))]
+        #[arg(value_name = "TYPE", value_parser = named(owo::entry_types(), Kind::from_type))]
         kind: Kind,
         /// Title (a log without one is titled by its date)
         title: Vec<String>,
@@ -81,8 +81,8 @@ pub enum Command {
     /// Validate an identity
     Lint {
         /// Run only these rules (repeatable)
-        #[arg(long = "rule", value_parser = clap::builder::PossibleValuesParser::new(owo::lint_rules()))]
-        rules: Vec<String>,
+        #[arg(long = "rule", value_parser = named(Rule::all().map(Rule::name), Rule::from_name))]
+        rules: Vec<Rule>,
         /// Report only files changed since the last commit or stamp
         #[arg(long)]
         changed: bool,
@@ -108,8 +108,8 @@ pub enum Command {
         /// Entry name, alias, path or [[link]]
         name: Vec<String>,
         /// Limit to one entry type
-        #[arg(long = "type", value_parser = clap::builder::PossibleValuesParser::new(Kind::names()))]
-        kind: Option<String>,
+        #[arg(long = "type", value_parser = named(Kind::names(), Kind::from_name))]
+        kind: Option<Kind>,
     },
     /// Print an entry, or one section of it
     Show {
@@ -145,7 +145,7 @@ pub enum Command {
         #[arg(long = "with")]
         with: Vec<String>,
         /// Recent project notes to include
-        #[arg(long, default_value_t = 3)]
+        #[arg(long, default_value_t = owo::ContextRequest::default().notes)]
         notes: usize,
         /// text: file contents concatenated; paths: the list
         #[arg(long, default_value = "text", value_parser = ["paths", "text"])]
@@ -154,7 +154,7 @@ pub enum Command {
     /// Derived current state: activity, recent days and events, open threads, review
     State {
         /// Window for recent events
-        #[arg(long, default_value_t = 14, value_parser = clap::value_parser!(i64).range(0..=36500))]
+        #[arg(long, default_value_t = owo::StateRequest::default().days, value_parser = days())]
         days: i64,
     },
     /// BM25 search over titles, aliases, summaries and bodies
@@ -162,16 +162,16 @@ pub enum Command {
         /// Search words
         query: Vec<String>,
         /// Limit to soul, life or work
-        #[arg(long, value_parser = ["soul", "life", "work"])]
-        scope: Option<String>,
+        #[arg(long, value_parser = named(Scope::ALL.map(Scope::name), Scope::from_name))]
+        scope: Option<Scope>,
         /// Limit to entry types (repeatable)
-        #[arg(long = "type", value_parser = clap::builder::PossibleValuesParser::new(Kind::names()))]
-        types: Vec<String>,
+        #[arg(long = "type", value_parser = named(Kind::names(), Kind::from_name))]
+        types: Vec<Kind>,
         /// Only entries dated (or updated) on or after YYYY-MM-DD
         #[arg(long, value_parser = owo::parse_day)]
         since: Option<NaiveDate>,
         /// Most hits to print
-        #[arg(long, default_value_t = 10)]
+        #[arg(long, default_value_t = owo::SearchRequest::default().limit)]
         limit: usize,
     },
     /// Print the review packet, or record a finished review with `done`
@@ -190,7 +190,7 @@ pub enum Command {
         #[arg(long, conflicts_with = "days")]
         since: Option<String>,
         /// Only the last N days
-        #[arg(long, value_parser = clap::value_parser!(i64).range(0..=36500))]
+        #[arg(long, value_parser = days())]
         days: Option<i64>,
     },
     /// Export the identity to another format
@@ -281,8 +281,8 @@ pub enum ExportFormat {
         #[arg(long)]
         scenario: Option<String>,
         /// Card spec version
-        #[arg(long, default_value = "v3", value_parser = ["v2", "v3"])]
-        spec: String,
+        #[arg(long, default_value = owo::CardRequest::default().spec.name(), value_parser = named(Spec::ALL.map(Spec::name), Spec::from_name))]
+        spec: Spec,
         /// Write to a file instead of stdout
         #[arg(long)]
         out: Option<PathBuf>,
@@ -312,13 +312,13 @@ pub enum SyncAction {
         #[arg(long)]
         transcript: PathBuf,
         /// Transcript format; jsonl lines are {"role": ..., "text": ...} with an optional turn "id"
-        #[arg(long, default_value = "jsonl", value_parser = clap::builder::PossibleValuesParser::new(owo::SYNC_FORMATS))]
-        format: String,
+        #[arg(long, default_value = SyncFormat::default().name(), value_parser = named(SyncFormat::ALL.map(SyncFormat::name), SyncFormat::from_name))]
+        format: SyncFormat,
         /// Take any new turns now (session end)
         #[arg(long)]
         now: bool,
         /// New user turns per run
-        #[arg(long, default_value_t = 6)]
+        #[arg(long, default_value_t = owo::SyncOptions::default().every)]
         every: usize,
     },
     /// Store turns sent by the host, then run sync start on them (for hosts without a local transcript)
@@ -333,7 +333,7 @@ pub enum SyncAction {
         #[arg(long)]
         now: bool,
         /// New user turns per run
-        #[arg(long, default_value_t = 6)]
+        #[arg(long, default_value_t = owo::SyncOptions::default().every)]
         every: usize,
     },
     /// Move the bookmark after a successful ingest run
@@ -357,4 +357,17 @@ pub enum MigrateFrom {
         /// New identity folder, <root>/<slug>
         out: PathBuf,
     },
+}
+
+/// A value parser that takes one of `names` and maps it to its typed value with `from`.
+fn named<T: Clone + Send + Sync + 'static>(
+    names: impl IntoIterator<Item = &'static str>,
+    from: fn(&str) -> Option<T>,
+) -> impl TypedValueParser<Value = T> {
+    clap::builder::PossibleValuesParser::new(names).map(move |s| from(&s).expect("a listed name"))
+}
+
+/// The parser of a number of days: 0 to `owo::MAX_DAYS`.
+fn days() -> clap::builder::RangedI64ValueParser<i64> {
+    clap::value_parser!(i64).range(0..=owo::MAX_DAYS)
 }
