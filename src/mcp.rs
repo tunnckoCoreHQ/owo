@@ -45,12 +45,12 @@ struct Tool {
 }
 
 /// Every command as a tool, read from the clap definitions: `review done` becomes `review_done`.
-/// A command with optional subcommands (`review`) is a tool itself too. `mcp` is left out.
+/// A command with optional subcommands (`review`) is a tool itself too. `mcp` and `acp` are left out.
 fn tools() -> Vec<Tool> {
     fn walk(cmd: &clap::Command, path: &[&str], out: &mut Vec<Tool>) {
         for sub in cmd
             .get_subcommands()
-            .filter(|s| !matches!(s.get_name(), "mcp" | "help"))
+            .filter(|s| !matches!(s.get_name(), "mcp" | "acp" | "help"))
         {
             let mut path = path.to_vec();
             path.push(sub.get_name());
@@ -196,19 +196,14 @@ fn argv(
     {
         return Err(format!("unknown argument {k:?} for {}", tool.name));
     }
-    let mut out: Vec<String> = vec![];
-    if let Some(root) = &cli.root {
-        out.extend(["--root".into(), root.display().to_string()]);
-    }
     let pick = |key: &str, default: &Option<String>| {
         args.get(key).and_then(scalar).or_else(|| default.clone())
     };
-    if let Some(i) = pick("identity", &cli.identity) {
-        out.extend(["-i".into(), i]);
-    }
-    if let Some(p) = pick("project", &cli.project) {
-        out.extend(["--project".into(), p]);
-    }
+    let mut out = crate::global_args(
+        cli,
+        pick("identity", &cli.identity),
+        pick("project", &cli.project),
+    );
     if tool.json {
         out.push("--json".into());
     }
@@ -273,15 +268,10 @@ fn run_tool(tool: &Tool, params: &Value, cli: &owo::Cli) -> Value {
         Ok(a) => a,
         Err(e) => return result(e, true),
     };
-    let ((stdout, stderr), code) =
-        match <owo::Cli as clap::Parser>::try_parse_from(std::iter::once("owo".into()).chain(argv))
-        {
-            Ok(parsed) => {
-                let out = owo::run(&parsed, crate::env(&parsed, || Ok(stdin)));
-                (crate::render(&parsed, &out), out.code)
-            }
-            Err(e) => (crate::usage_text(&e, String::new()), e.exit_code()),
-        };
+    let ((stdout, stderr), code) = match crate::run_argv(argv, stdin) {
+        Ok((parsed, out)) => (crate::render(&parsed, &out), out.code),
+        Err(e) => (crate::usage_text(&e, String::new()), e.exit_code()),
+    };
     let text = match (stdout.trim().is_empty(), stderr.trim().is_empty()) {
         (true, _) => stderr,
         (false, true) => stdout,

@@ -59,8 +59,8 @@ pub struct Env {
     pub stdin: Option<std::io::Result<String>>,
 }
 
-/// Runs one command and returns what it produced. `Command::Mcp` is a server, not a command,
-/// so it returns an error here.
+/// Runs one command and returns what it produced. `Command::Mcp` is a server and `Command::Acp`
+/// a proxy, not commands, so they return an error here.
 pub fn run(cli: &Cli, mut env: Env) -> Output {
     let mut out = Out {
         json: cli.json,
@@ -151,6 +151,7 @@ fn dispatch(cli: &Cli, env: &mut Env, out: &mut Out) -> Result<Output> {
         }
         Command::Templates { action } => templates_cmd(cli, action.as_ref(), env, out),
         Command::Mcp { .. } => anyhow::bail!("`owo mcp` is a server; run it from the owo binary"),
+        Command::Acp { .. } => anyhow::bail!("`owo acp` is a proxy; run it from the owo binary"),
         Command::Config => {
             let r = resolved(cli, env, out)?;
             out.emit(Envelope::ok(serde_json::to_value(&r)?), |t| {

@@ -1,6 +1,7 @@
 //! owo: one world, one identity. The CLI: it parses arguments, calls `owo::run`, and prints
-//! the output. `owo mcp` is a server, so it runs here instead.
+//! the output. `owo mcp` is a server and `owo acp` a proxy, so they run here instead.
 
+mod acp;
 mod mcp;
 
 use clap::Parser;
@@ -26,6 +27,10 @@ fn main() -> ExitCode {
                 Err(e) => Output::from(e),
             }
         }
+        Command::Acp { mcp, agent } => match acp::serve(&cli, agent, *mcp) {
+            Ok(code) => return ExitCode::from(code),
+            Err(e) => Output::from(e),
+        },
         _ => owo::run(
             &cli,
             env(&cli, || std::io::read_to_string(std::io::stdin())),
@@ -66,6 +71,29 @@ fn env(cli: &Cli, stdin: impl FnOnce() -> std::io::Result<String>) -> owo::Env {
         xdg_data_home: non_empty("XDG_DATA_HOME").map(PathBuf::from),
         stdin: reads_stdin.then(stdin),
     }
+}
+
+/// The global `--root`, `-i` and `--project` flags of a command line that runs in process.
+fn global_args(cli: &Cli, identity: Option<String>, project: Option<String>) -> Vec<String> {
+    let mut out = vec![];
+    if let Some(root) = &cli.root {
+        out.extend(["--root".into(), root.display().to_string()]);
+    }
+    if let Some(i) = identity {
+        out.extend(["-i".into(), i]);
+    }
+    if let Some(p) = project {
+        out.extend(["--project".into(), p]);
+    }
+    out
+}
+
+/// Parses `argv` (without the program name) with clap and calls `owo::run` in process,
+/// with `stdin` as the stdin text.
+fn run_argv(argv: Vec<String>, stdin: String) -> Result<(Cli, Output), clap::Error> {
+    let cli = Cli::try_parse_from(std::iter::once("owo".into()).chain(argv))?;
+    let out = owo::run(&cli, env(&cli, || Ok(stdin)));
+    Ok((cli, out))
 }
 
 /// The warnings of an `Output`, one `owo: warning: <text>` line each.
