@@ -206,10 +206,17 @@ fn from_client(line: &[u8], state: &Mutex<State>, inject: &Inject) -> Option<Vec
             }
             if let Some(server) = &inject.server {
                 match params.get_mut("mcpServers").and_then(Value::as_array_mut) {
-                    Some(servers) => servers.push(server.clone()),
-                    None => params["mcpServers"] = json!([server]),
+                    // A server the client already named `owo` stays the only one.
+                    Some(servers) if servers.iter().any(|s| s["name"] == "owo") => {}
+                    Some(servers) => {
+                        servers.push(server.clone());
+                        changed = true;
+                    }
+                    None => {
+                        params["mcpServers"] = json!([server]);
+                        changed = true;
+                    }
                 }
-                changed = true;
             }
             if !changed {
                 return None;
