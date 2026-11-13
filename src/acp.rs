@@ -135,16 +135,26 @@ pub fn serve(cli: &owo::Cli, agent: &[String], mcp: bool) -> Result<u8> {
     Ok(status.code().unwrap_or(1) as u8)
 }
 
-/// The identity the library resolves from the flags, `OWO_IDENTITY` and the config.
+/// The identity the library resolves from the flags, `OWO_IDENTITY` and the config. An
+/// identity with no folder is a config error here, before the agent starts.
 fn identity(globals: &[String]) -> Result<Option<String>> {
-    let mut argv = globals.to_vec();
-    argv.extend(["--json".into(), "config".into()]);
-    let (_, out) = crate::run_argv(argv, String::new())?;
-    eprint!("{}", crate::warnings(&out));
-    if let Some(e) = out.error {
-        return Err(e);
+    let run = |command: &str| -> Result<owo::Output> {
+        let mut argv = globals.to_vec();
+        argv.extend(["--json".into(), command.into()]);
+        let (_, out) = crate::run_argv(argv, String::new())?;
+        match out.error {
+            Some(e) => Err(e),
+            None => Ok(out),
+        }
+    };
+    let config = run("config")?;
+    eprint!("{}", crate::warnings(&config));
+    let id = config.envelope["data"]["identity"].as_str();
+    if id.is_some() {
+        // `state` loads the identity, so it checks the folder.
+        run("state")?;
     }
-    Ok(out.envelope["data"]["identity"].as_str().map(String::from))
+    Ok(id.map(String::from))
 }
 
 /// Tracks a client line and returns its new bytes when the proxy changes it.
