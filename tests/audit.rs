@@ -2,7 +2,10 @@
 
 mod common;
 
-use common::{json, owo};
+use common::acp::{
+    chunk, end, init, init_reply, parse, prompt, request, response, s, start, stored, turn, Proxy,
+};
+use common::{copy_example, json, owo};
 use serde_json::{json, Value};
 use std::fs;
 use std::io::{BufRead, BufReader, Read, Write};
@@ -460,4 +463,267 @@ fn lint_changed_keeps_a_path_with_a_quote() {
     assert!(errors.contains("Nobody"), "{errors}");
     let out = stdout(tmp.path(), &["changes"]);
     assert!(out.contains("soul/examples/a\"b.md"), "{out}");
+}
+
+// Findings from the review of the library core, the in-process MCP calls and `owo acp`.
+
+fn call(id: u64, tool: &str, arguments: Value) -> Value {
+    json!({ "jsonrpc": "2.0", "id": id, "method": "tools/call", "params": { "name": tool, "arguments": arguments } })
+}
+
+#[test]
+fn mcp_tool_does_not_read_the_servers_stdin() {
+    let tmp = thea();
+    let mut child = std::process::Command::new(assert_cmd::cargo::cargo_bin("owo"))
+        .arg("--root")
+        .arg(tmp.path())
+        .args(["-i", "thea", "mcp"])
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .unwrap();
+    let start = call(
+        1,
+        "sync_start",
+        json!({ "session": "s1", "transcript": "/dev/stdin", "now": true }),
+    );
+    // The second request arrives while the first tool call runs.
+    let mut stdin = child.stdin.take().unwrap();
+    stdin.write_all(format!("{start}\n").as_bytes()).unwrap();
+    std::thread::sleep(std::time::Duration::from_millis(300));
+    let next = call(2, "slug", json!({ "text": "Next One" }));
+    stdin.write_all(format!("{next}\n").as_bytes()).unwrap();
+    drop(stdin);
+    let out = child.wait_with_output().unwrap();
+    let replies = String::from_utf8_lossy(&out.stdout);
+    assert_eq!(replies.lines().count(), 2, "{replies}");
+    assert!(replies.contains("next-one"), "{replies}");
+}
+
+#[test]
+fn mcp_tool_output_stays_out_of_the_reply_stream() {
+    let tmp = thea();
+    let avatar = tmp.path().join("a.png");
+    fs::write(&avatar, common::PNG_1X1).unwrap();
+    let replies = mcp(
+        tmp.path(),
+        &[
+            call(
+                1,
+                "export_card",
+                json!({ "png": avatar, "out": "/dev/stdout" }),
+            ),
+            call(2, "slug", json!({ "text": "Next One" })),
+        ],
+    );
+    assert_eq!(replies.len(), 2, "{replies:?}");
+}
+
+#[test]
+fn mcp_with_a_closed_stdout_exits_with_the_write_error() {
+    let tmp = thea();
+    let (reader, writer) = std::io::pipe().unwrap();
+    drop(reader);
+    let mut child = std::process::Command::new(assert_cmd::cargo::cargo_bin("owo"))
+        .arg("--root")
+        .arg(tmp.path())
+        .args(["-i", "thea", "mcp"])
+        .stdin(std::process::Stdio::piped())
+        .stdout(writer)
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    let ping = json!({ "jsonrpc": "2.0", "id": 1, "method": "ping" });
+    let _ = child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(format!("{ping}\n{ping}\n").as_bytes());
+    let out = child.wait_with_output().unwrap();
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert_eq!(out.status.code(), Some(4), "{stderr}");
+    assert!(!stderr.contains("panicked"), "{stderr}");
+}
+
+#[test]
+fn mcp_refuses_a_nul_in_an_argument() {
+    let tmp = thea();
+    let content = "---\ntype: character\n---\na\u{0}b\n";
+    let replies = mcp(
+        tmp.path(),
+        &[call(
+            1,
+            "write",
+            json!({ "path": "life/characters/nul.md", "content": content }),
+        )],
+    );
+    assert_eq!(replies[0]["result"]["isError"], true, "{replies:?}");
+    assert!(!tmp.path().join("thea/life/characters/nul.md").exists());
+}
+
+#[test]
+fn write_reports_a_config_error_before_it_reads_stdin() {
+    let tmp = TempDir::new().unwrap();
+    let mut child = std::process::Command::new(assert_cmd::cargo::cargo_bin("owo"))
+        .arg("--root")
+        .arg(tmp.path())
+        .args(["-i", "nope", "write", "life/x.md"])
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .unwrap();
+    // The test keeps stdin open, so a read of it never ends.
+    let _open = child.stdin.take();
+    let stop = std::time::Instant::now() + std::time::Duration::from_secs(2);
+    let code = loop {
+        if let Some(status) = child.try_wait().unwrap() {
+            break status.code();
+        }
+        if std::time::Instant::now() > stop {
+            child.kill().unwrap();
+            child.wait().unwrap();
+            break None;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    };
+    assert_eq!(code, Some(3), "owo waited for stdin");
+}
+
+#[test]
+fn help_into_a_closed_pipe_exits_zero() {
+    let (reader, writer) = std::io::pipe().unwrap();
+    drop(reader);
+    let status = std::process::Command::new(assert_cmd::cargo::cargo_bin("owo"))
+        .arg("--help")
+        .stdout(writer)
+        .status()
+        .unwrap();
+    assert_eq!(status.code(), Some(0));
+}
+
+/// A proxy on `root` with a new session `s1`, for an agent with no `systemPrompt` capability.
+fn acp_session(root: &Path, flags: &[&str]) -> Proxy {
+    let mut p = start(root, flags, 0);
+    p.send(&init(), &[init_reply(json!({}))]);
+    p.send(
+        &request(1, "session/new", json!({ "cwd": "/tmp", "mcpServers": [] })),
+        &[response(1, json!({ "sessionId": "s1" }))],
+    );
+    p
+}
+
+#[test]
+fn acp_a_prompt_sent_before_the_last_response_keeps_both_turns() {
+    let tmp = copy_example("nicole");
+    let mut p = acp_session(tmp.path(), &[]);
+    p.send(
+        &prompt(2, "s1", &["first question"]),
+        &[chunk("s1", Some("m1"), "answer one")],
+    );
+    let cancel =
+        json!({ "jsonrpc": "2.0", "method": "session/cancel", "params": { "sessionId": "s1" } });
+    p.send(&s(cancel), &[]);
+    p.send(
+        &prompt(3, "s1", &["second question"]),
+        &[
+            response(2, json!({ "stopReason": "cancelled" })),
+            chunk("s1", Some("m2"), "answer two"),
+            end(3),
+        ],
+    );
+    p.finish();
+    assert_eq!(
+        stored(tmp.path(), "s1"),
+        [
+            turn("m1.user", "user", "first question"),
+            turn("m1", "assistant", "answer one"),
+            turn("m2.user", "user", "second question"),
+            turn("m2", "assistant", "answer two"),
+        ]
+    );
+}
+
+#[test]
+fn acp_an_open_turn_is_stored_when_the_agent_exits() {
+    let tmp = copy_example("nicole");
+    let mut p = acp_session(tmp.path(), &[]);
+    p.send(
+        &prompt(2, "s1", &["question before quit"]),
+        &[chunk("s1", Some("m1"), "half an answer")],
+    );
+    p.finish();
+    assert_eq!(
+        stored(tmp.path(), "s1"),
+        [
+            turn("m1.user", "user", "question before quit"),
+            turn("m1", "assistant", "half an answer"),
+        ]
+    );
+}
+
+#[test]
+fn acp_chunks_without_an_id_split_at_a_tool_call() {
+    let tmp = copy_example("nicole");
+    let mut p = acp_session(tmp.path(), &[]);
+    let tool = json!({ "jsonrpc": "2.0", "method": "session/update", "params": { "sessionId": "s1", "update": {
+        "sessionUpdate": "tool_call", "toolCallId": "c1", "title": "Read", "kind": "read", "status": "pending",
+    } } });
+    p.send(
+        &prompt(2, "s1", &["read it"]),
+        &[
+            chunk("s1", None, "Let me read the file."),
+            s(tool),
+            chunk("s1", None, "The file says X."),
+            end(2),
+        ],
+    );
+    p.finish();
+    let answers: Vec<Value> = stored(tmp.path(), "s1")
+        .into_iter()
+        .filter(|t| t["role"] == "assistant")
+        .map(|t| t["text"].clone())
+        .collect();
+    assert_eq!(answers, ["Let me read the file.", "The file says X."]);
+}
+
+#[test]
+fn acp_a_refused_first_prompt_keeps_the_identity_block_for_the_next() {
+    let tmp = copy_example("nicole");
+    let mut p = acp_session(tmp.path(), &[]);
+    let refused =
+        json!({ "jsonrpc": "2.0", "id": 2, "error": { "code": -32000, "message": "busy" } });
+    p.send(&prompt(2, "s1", &["first"]), &[s(refused)]);
+    p.send(&prompt(3, "s1", &["retry"]), &[end(3)]);
+    let (_, got) = p.finish();
+    let blocks = parse(&got[3])["params"]["prompt"].as_array().unwrap().len();
+    assert_eq!(blocks, 2, "{}", got[3]);
+}
+
+#[test]
+fn acp_refuses_an_identity_with_no_folder() {
+    let tmp = copy_example("nicole");
+    owo(tmp.path())
+        .args(["-i", "nosuch", "acp", "--", "true"])
+        .assert()
+        .code(3);
+}
+
+#[test]
+fn acp_mcp_keeps_one_owo_server() {
+    let tmp = copy_example("nicole");
+    let mut p = start(tmp.path(), &["--mcp"], 0);
+    p.send(&init(), &[init_reply(json!({}))]);
+    let own = json!({ "name": "owo", "command": "/usr/bin/owo", "args": ["mcp"], "env": [] });
+    p.send(
+        &request(
+            1,
+            "session/new",
+            json!({ "cwd": "/tmp", "mcpServers": [own] }),
+        ),
+        &[response(1, json!({ "sessionId": "s1" }))],
+    );
+    let (_, got) = p.finish();
+    assert_eq!(parse(&got[1])["params"]["mcpServers"], json!([own]));
 }
