@@ -135,29 +135,25 @@ fn run_tool(op: &Operation, params: &Value, select: &Select, env: &Env) -> Value
     }
 }
 
-/// The tool result of a run: the envelope as pretty JSON, or for a text tool its text and then
-/// the warning lines, or the warning lines and the error line when it failed.
+/// The tool result of a run: the envelope as pretty JSON, or for a text tool its text, then the
+/// warning lines; for a failed text tool the warning lines and the error line.
 fn reply_of(op: &Operation, ran: Ran) -> Value {
     let Ran {
         mut warnings,
         result: outcome,
     } = ran;
-    if !returns_text(op) {
-        let (envelope, ok) = match &outcome {
-            Ok(o) => {
-                let e = o.envelope();
-                let ok = e.ok;
-                (e, ok)
-            }
-            Err(e) => (Envelope::fail(&e.to_string()), false),
-        };
-        let text = serde_json::to_string_pretty(&envelope).expect("envelope serializes");
-        return result(format!("{text}\n"), !ok);
-    }
     let lines = |warnings: &[String]| -> String {
         warnings.iter().map(|w| crate::warning_line(w)).collect()
     };
     let (stdout, stderr, error) = match &outcome {
+        _ if !returns_text(op) => {
+            let envelope = match &outcome {
+                Ok(o) => o.envelope(),
+                Err(e) => Envelope::fail(&e.to_string()),
+            };
+            let text = serde_json::to_string_pretty(&envelope).expect("envelope serializes");
+            (format!("{text}\n"), lines(&warnings), !envelope.ok)
+        }
         Ok(o) => {
             let envelope = o.envelope();
             warnings.extend(envelope.text_warnings());
