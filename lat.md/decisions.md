@@ -1,6 +1,6 @@
 # Decisions
 
-Implementation decisions and how they shape current behavior. The three ADRs in `docs/adr/` record the general decisions; a section links the ADR that covers it.
+Implementation decisions and how they shape current behavior. The ADRs in `docs/adr/` record the general decisions; a section links the ADR that covers it.
 
 ## Path decides kind
 
@@ -88,7 +88,7 @@ A filter hides results, so it comes from the command line and never from the env
 
 ## MCP calls the library
 
-`owo mcp` is a newline-delimited JSON-RPC loop in `mcp.rs` with no MCP crate. Each tool call builds the matching argv, parses it with clap, and calls `owo::run` in process, so a tool and a command always behave alike. See [ADR-0003](../docs/adr/0003-library-core-thin-adapters.md) and [ADR-0002](../docs/adr/0002-small-dependency-set.md).
+`owo mcp` is a newline-delimited JSON-RPC loop in `mcp.rs` with no MCP crate. Each tool call builds the matching argv, parses it with clap, and calls `owo::run` in process, so a tool and a command always behave alike. See [ADR-0004](../docs/adr/0004-library-core-thin-adapters.md) and [ADR-0002](../docs/adr/0002-small-dependency-set.md).
 
 The tool list is read from the clap definitions (`Cli::command()`): each subcommand is a tool, each flag a parameter with its help text, type and allowed values, so a new flag needs no MCP change.
 
