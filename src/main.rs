@@ -130,8 +130,13 @@ fn run(cli: &Cli, out: &Out) -> Result<i32> {
     match &cli.command {
         Command::Slug { text } => {
             let value = slug::slugify(&text.join(" "));
-            let ok = !value.is_empty();
-            out.emit(Envelope::new(ok, json!({ "slug": value })), || {
+            if value.is_empty() {
+                anyhow::bail!(
+                    "{:?} has no letters or digits to make a slug",
+                    text.join(" ")
+                );
+            }
+            out.emit(Envelope::ok(json!({ "slug": value })), || {
                 println!("{value}")
             })
         }
