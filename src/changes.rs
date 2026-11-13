@@ -34,7 +34,13 @@ pub fn changes(id: &Identity, since: Option<&str>) -> anyhow::Result<Changes> {
             "--relative".into(),
         ];
         if let Some(s) = since {
-            args.push(format!("--since={s}"));
+            // Git reads a bare day as that day at the current time; start at midnight instead.
+            let midnight = if crate::state::parse_day(s).is_ok() {
+                " 00:00:00"
+            } else {
+                ""
+            };
+            args.push(format!("--since={s}{midnight}"));
         }
         args.extend(["--".into(), ".".into()]);
         let args: Vec<&str> = args.iter().map(String::as_str).collect();
