@@ -3,7 +3,7 @@
 //! slice to `<root>/sources/<slug>/` and an ingest prompt to `<root>/.owo/sessions/`.
 //! The host runs the ingest agent and then calls `done --until <n>` to move the bookmark.
 
-use crate::identity::{read_json, write_file, write_json};
+use crate::identity::{read_object, write_file, write_json};
 use anyhow::{bail, Context, Result};
 use serde::Serialize;
 use serde_json::{json, Value};
@@ -196,12 +196,7 @@ fn bookmark_path(root: &Path, session: &str) -> std::path::PathBuf {
 }
 
 fn read_bookmark(root: &Path, session: &str) -> Result<Value> {
-    let path = bookmark_path(root, session);
-    match read_json(&path) {
-        None => Ok(json!({})),
-        Some(doc) if doc.is_object() => Ok(doc),
-        Some(_) => bail!("{} is not a JSON object", path.display()),
-    }
+    Ok(read_object(&bookmark_path(root, session))?.unwrap_or_else(|| json!({})))
 }
 
 fn write_bookmark(root: &Path, session: &str, doc: &Value) -> Result<()> {
@@ -265,9 +260,16 @@ pub fn push(req: &StartRequest, turns: &str) -> Result<Start> {
             turns.push(json!({ "id": id, "role": role, "text": text }));
         }
     }
-    let mut stored = fs::read_to_string(&file).unwrap_or_default();
-    // A write cut off before its newline leaves a partial last line; drop it.
-    stored.truncate(stored.rfind('\n').map_or(0, |i| i + 1));
+    let mut bytes = match fs::read(&file) {
+        Ok(b) => b,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => vec![],
+        Err(e) => return Err(e).with_context(|| format!("reading {}", file.display())),
+    };
+    // A write cut off before its newline leaves a partial last line, perhaps mid-character;
+    // drop it before decoding.
+    bytes.truncate(bytes.iter().rposition(|b| *b == b'\n').map_or(0, |i| i + 1));
+    let mut stored = String::from_utf8(bytes)
+        .with_context(|| format!("{} is not UTF-8; fix it by hand", file.display()))?;
     let mut ids: HashSet<String> = parse(&stored, "jsonl")?
         .into_iter()
         .filter_map(|m| m.id)

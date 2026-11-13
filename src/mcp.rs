@@ -11,6 +11,8 @@ use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
 const PROTOCOL: &str = "2025-06-18";
+/// Versions whose messages this server speaks; `initialize` echoes one of these, else `PROTOCOL`.
+const SUPPORTED: &[&str] = &[PROTOCOL, "2025-03-26", "2024-11-05"];
 
 enum Arg {
     /// A value after `--`.
@@ -244,15 +246,10 @@ fn argv(
     Ok((out, stdin))
 }
 
-fn call(params: &Value, cli: &crate::cli::Cli) -> Value {
-    let name = params["name"].as_str().unwrap_or_default();
+fn call(tool: &Tool, params: &Value, cli: &crate::cli::Cli) -> Value {
     let empty = Map::new();
     let args = params["arguments"].as_object().unwrap_or(&empty);
     let result = |text: String, error: bool| json!({ "content": [{ "type": "text", "text": text }], "isError": error });
-    let tools = tools();
-    let Some(tool) = tools.iter().find(|t| t.name == name) else {
-        return result(format!("unknown tool {name:?}"), true);
-    };
     let (argv, stdin) = match argv(tool, args, cli) {
         Ok(a) => a,
         Err(e) => return result(e, true),
@@ -290,9 +287,12 @@ fn call(params: &Value, cli: &crate::cli::Cli) -> Value {
 
 fn respond(id: &Value, method: &str, params: &Value, cli: &crate::cli::Cli) -> Option<Value> {
     let ok = |result: Value| Some(json!({ "jsonrpc": "2.0", "id": id, "result": result }));
+    let error = |code: i64, message: String| {
+        Some(json!({ "jsonrpc": "2.0", "id": id, "error": { "code": code, "message": message } }))
+    };
     match method {
         "initialize" => ok(json!({
-            "protocolVersion": params["protocolVersion"].as_str().unwrap_or(PROTOCOL),
+            "protocolVersion": params["protocolVersion"].as_str().filter(|v| SUPPORTED.contains(v)).unwrap_or(PROTOCOL),
             "capabilities": { "tools": {} },
             "serverInfo": { "name": "owo", "version": env!("CARGO_PKG_VERSION") },
             "instructions": "owo manages one identity: soul/, life/ and work/. Start with `context`, read more with `resolve`, `search`, `show` and `links`, create entries with `add`, fill or edit their text with `write`, then run `stamp`, `index` and `lint`.",
@@ -304,12 +304,14 @@ fn respond(id: &Value, method: &str, params: &Value, cli: &crate::cli::Cli) -> O
                 .map(|t| json!({ "name": t.name, "description": t.about, "inputSchema": schema(t) }))
                 .collect::<Vec<_>>()
         })),
-        "tools/call" => ok(call(params, cli)),
-        _ => Some(json!({
-            "jsonrpc": "2.0",
-            "id": id,
-            "error": { "code": -32601, "message": format!("method not found: {method}") },
-        })),
+        "tools/call" => {
+            let name = params["name"].as_str().unwrap_or_default();
+            match tools().iter().find(|t| t.name == name) {
+                Some(tool) => ok(call(tool, params, cli)),
+                None => error(-32602, format!("unknown tool {name:?}")),
+            }
+        }
+        _ => error(-32601, format!("method not found: {method}")),
     }
 }
 
@@ -403,7 +405,7 @@ fn http_request(stream: TcpStream, cli: &crate::cli::Cli) -> std::io::Result<()>
     let mut reader = BufReader::new(timed.take((MAX_HEAD + MAX_BODY) as u64));
     let mut request = String::new();
     let mut head = reader.read_line(&mut request)?;
-    let (mut length, mut json_body, mut origin) = (0, false, false);
+    let (mut length, mut chunked, mut json_body, mut origin) = (None, false, false, false);
     loop {
         let mut header = String::new();
         let n = reader.read_line(&mut header)?;
@@ -416,7 +418,9 @@ fn http_request(stream: TcpStream, cli: &crate::cli::Cli) -> std::io::Result<()>
         };
         let (k, v) = (k.trim().to_ascii_lowercase(), v.trim());
         match k.as_str() {
-            "content-length" => length = v.parse().unwrap_or(0),
+            "content-length" => length = v.parse::<usize>().ok(),
+            // owo reads only a Content-Length body, so a chunked one gets 411.
+            "transfer-encoding" => chunked = true,
             "content-type" => {
                 json_body = v
                     .split(';')
@@ -430,9 +434,12 @@ fn http_request(stream: TcpStream, cli: &crate::cli::Cli) -> std::io::Result<()>
     // Read the body even for a refused request: closing with unread data resets the connection
     // and the client never sees the status.
     let mut body = vec![];
-    if head <= MAX_HEAD && length <= MAX_BODY {
+    let length = length.filter(|_| !chunked);
+    let mut body_read = false;
+    if let Some(length) = length.filter(|n| head <= MAX_HEAD && *n <= MAX_BODY) {
         body.resize(length, 0);
         reader.read_exact(&mut body)?;
+        body_read = true;
     }
     let mut parts = request.split_whitespace();
     let (method, path) = (parts.next().unwrap_or(""), parts.next().unwrap_or(""));
@@ -442,7 +449,8 @@ fn http_request(stream: TcpStream, cli: &crate::cli::Cli) -> std::io::Result<()>
         // A browser sends Origin with every POST from a page, also after DNS rebinding.
         _ if origin => ("403 Forbidden", String::new()),
         ("POST", "/mcp") if !json_body => ("415 Unsupported Media Type", String::new()),
-        ("POST", "/mcp") if length > MAX_BODY => ("413 Payload Too Large", String::new()),
+        ("POST", "/mcp") if length.is_none() => ("411 Length Required", String::new()),
+        ("POST", "/mcp") if length > Some(MAX_BODY) => ("413 Payload Too Large", String::new()),
         ("POST", "/mcp") => match handle(&body, cli) {
             Some(reply) => ("200 OK", reply.to_string()),
             None => ("202 Accepted", String::new()),
@@ -456,5 +464,17 @@ fn http_request(stream: TcpStream, cli: &crate::cli::Cli) -> std::io::Result<()>
         "HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{reply}",
         reply.len()
     )?;
-    stream.flush()
+    stream.flush()?;
+    // A refused body that was not read (no length, or past a cap) would reset the connection on
+    // close and cut the reply. Send the reply's end first, then discard what the client still
+    // sends: stop after 200ms with nothing arriving, or after 2 seconds, so an idle client
+    // cannot hold this one-at-a-time server.
+    if !body_read {
+        stream.shutdown(std::net::Shutdown::Write)?;
+        stream.set_read_timeout(Some(Duration::from_millis(200)))?;
+        let stop = Instant::now() + Duration::from_secs(2);
+        let mut buf = [0u8; 8192];
+        while Instant::now() < stop && matches!(stream.read(&mut buf), Ok(n) if n > 0) {}
+    }
+    Ok(())
 }

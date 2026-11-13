@@ -67,14 +67,24 @@ pub fn heading(line: &str) -> Option<(usize, &str)> {
 }
 
 /// Lines with their 0-based index, marking each as outside fenced code (fence lines are not).
+/// A fence opens with 3+ backticks or tildes and closes on a run of the same character at
+/// least as long.
 pub fn unfenced(body: &str) -> impl Iterator<Item = (usize, &str, bool)> {
-    let mut fenced = false;
+    let mut fence: Option<(char, usize)> = None;
     body.lines().enumerate().map(move |(i, line)| {
-        if line.trim_start().starts_with("```") {
-            fenced = !fenced;
-            return (i, line, false);
+        let text = line.trim_start();
+        let mark = text
+            .chars()
+            .next()
+            .filter(|c| matches!(c, '`' | '~'))
+            .map(|c| (c, text.chars().take_while(|x| *x == c).count()))
+            .filter(|(_, n)| *n >= 3);
+        match (fence, mark) {
+            (None, Some(m)) => fence = Some(m),
+            (Some((c, n)), Some((m, k))) if c == m && k >= n => fence = None,
+            _ => return (i, line, fence.is_none()),
         }
-        (i, line, !fenced)
+        (i, line, false)
     })
 }
 
@@ -133,6 +143,9 @@ pub struct Link {
     pub line: usize,
 }
 
+/// Characters a wiki-link target cannot hold: they end the target or the link.
+pub const LINK_BREAKERS: &[char] = &['#', '|', '[', ']'];
+
 fn link_re() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
     RE.get_or_init(|| {
@@ -161,18 +174,21 @@ pub fn links(text: &str) -> Vec<Link> {
     out
 }
 
+/// Drops each `code` span; a backtick with no closing partner on the line stays as text.
 fn strip_inline_code(line: &str) -> String {
     let mut out = String::with_capacity(line.len());
-    let mut in_code = false;
-    for ch in line.chars() {
-        if ch == '`' {
-            in_code = !in_code;
-            continue;
-        }
-        if !in_code {
-            out.push(ch);
+    let mut rest = line;
+    while let Some(open) = rest.find('`') {
+        out.push_str(&rest[..open]);
+        match rest[open + 1..].find('`') {
+            Some(close) => rest = &rest[open + 1 + close + 1..],
+            None => {
+                out.push_str(&rest[open..]);
+                return out;
+            }
         }
     }
+    out.push_str(rest);
     out
 }
 
@@ -205,6 +221,9 @@ mod tests {
         assert_eq!(found.len(), 2);
         assert_eq!(found[0].target, "The Café");
         assert_eq!(found[1].target, "Joe");
+        let text = "A ` typo, then [[Ghost]].\n~~~\n[[Fenced]]\n```\n~~~\n[[After]]\n";
+        let found: Vec<String> = links(text).into_iter().map(|l| l.target).collect();
+        assert_eq!(found, ["Ghost", "After"]);
     }
 
     #[test]

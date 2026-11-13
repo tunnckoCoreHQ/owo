@@ -208,6 +208,14 @@ fn check_entry_schema(e: &Entry, out: &mut Vec<Diagnostic>) {
     if e.field_str("title").is_none_or(|t| t.trim().is_empty()) {
         out.push(err(rel, "title is missing"));
     }
+    for name in e.title.iter().chain(&e.aliases) {
+        if name.contains(crate::markdown::LINK_BREAKERS) {
+            out.push(err(
+                rel,
+                format!("{name:?} holds # | [ or ], which break a [[link]] to it"),
+            ));
+        }
+    }
     match e.field_str("status") {
         Some(s) if STATUSES.contains(&s.as_str()) => {}
         Some(s) => out.push(err(
@@ -265,10 +273,7 @@ fn check_entry_schema(e: &Entry, out: &mut Vec<Diagnostic>) {
         }
         None => {
             let stem = e.stem_key();
-            if e.kind != Kind::Project
-                && !is_slug(&stem)
-                && !(e.kind == Kind::Location && file == "overview")
-            {
+            if !is_slug(&stem) && !(e.kind == Kind::Location && file == "overview") {
                 out.push(err(rel, format!("file name {stem:?} must be a slug")));
             }
         }
@@ -469,10 +474,14 @@ fn journal(id: &Identity, out: &mut Vec<Diagnostic>) {
     }
 }
 
+/// Entries the links in `value` resolve to; an ambiguous link resolves to none.
 fn link_hits(id: &Identity, value: &str) -> Vec<usize> {
     markdown::links(value)
         .iter()
-        .flat_map(|l| id.resolve_link(&l.target))
+        .filter_map(|l| match id.resolve_link(&l.target)[..] {
+            [one] => Some(one),
+            _ => None,
+        })
         .collect()
 }
 

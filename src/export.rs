@@ -65,11 +65,18 @@ fn sections(id: &Identity, rel: &str) -> Vec<String> {
         .entry(rel)
         .map(|e| body_without(&e.text, &[]))
         .unwrap_or_default();
-    // Intro text before the first `## ` heading is not a greeting.
-    format!("\n{body}")
-        .split("\n## ")
-        .skip(1)
-        .filter_map(|s| s.split_once('\n').map(|(_, rest)| rest.trim().to_string()))
+    // Intro text before the first `## ` heading is not a greeting; headings in fences do not count.
+    let mut out: Vec<String> = vec![];
+    for (_, line, open) in markdown::unfenced(&body) {
+        if open && line.starts_with("## ") {
+            out.push(String::new());
+        } else if let Some(section) = out.last_mut() {
+            section.push_str(line);
+            section.push('\n');
+        }
+    }
+    out.into_iter()
+        .map(|s| s.trim().to_string())
         .filter(|s| !s.is_empty())
         .collect()
 }
@@ -91,9 +98,10 @@ fn lore(e: &Entry, n: usize) -> Value {
     let mut keys = vec![title.clone()];
     keys.extend(e.aliases.iter().cloned());
     let summary = e.field_str("summary").unwrap_or_default();
-    // Summary plus `## Key facts` (design 10.3); entries without that section give their body.
-    let facts =
-        markdown::section_text(e.body(), "Key facts").map(|(_, text)| text.trim().to_string());
+    // Summary plus `## Key facts`; an entry whose key facts are missing or empty gives its body.
+    let facts = markdown::section_text(e.body(), "Key facts")
+        .map(|(_, text)| text.trim().to_string())
+        .filter(|t| !t.is_empty());
     let body = facts.unwrap_or_else(|| body_without(&e.text, &["Identifiers", "Sources"]));
     let content = [summary, body]
         .into_iter()
@@ -162,14 +170,18 @@ pub fn card(
             .filter(|s| !s.is_empty())
             .unwrap_or_else(|| body_without(&e.text, &["Sources", "Identifiers"]));
     }
-    for e in &id.entries {
-        let include = match e.kind {
+    let mut lorebook: Vec<&Entry> = id
+        .entries
+        .iter()
+        .filter(|e| match e.kind {
             Kind::Project => project_md.is_some_and(|p| p.rel == e.rel),
             k => order(k).is_some(),
-        };
-        if include {
-            entries.push(lore(e, entries.len()));
-        }
+        })
+        .collect();
+    // Kinds in lorebook order; within a kind, path order.
+    lorebook.sort_by_key(|e| order(e.kind));
+    for e in lorebook {
+        entries.push(lore(e, entries.len()));
     }
     let tags = soul_json.get("tags").cloned().unwrap_or(json!([]));
     let creator = soul_json

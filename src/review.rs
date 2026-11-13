@@ -63,10 +63,13 @@ const STOP_WORDS: &[&str] = &[
 fn recurring(days: &[Day]) -> Vec<(String, usize)> {
     let content = |w: &str| !STOP_WORDS.contains(&w);
     let mut seen: BTreeMap<String, BTreeSet<&str>> = BTreeMap::new();
+    // A phrase stays inside one line, so two bullets never join into one.
     for d in days {
-        let toks = crate::search::tokens(&d.body);
-        for w in toks.windows(3).filter(|w| content(&w[0]) && content(&w[2])) {
-            seen.entry(w.join(" ")).or_default().insert(&d.date);
+        for line in d.body.lines() {
+            let toks = crate::search::tokens(line);
+            for w in toks.windows(3).filter(|w| content(&w[0]) && content(&w[2])) {
+                seen.entry(w.join(" ")).or_default().insert(&d.date);
+            }
         }
     }
     let mut out: Vec<(String, usize)> = seen
@@ -258,6 +261,7 @@ pub fn done(id: &Identity, through: Option<NaiveDate>) -> Result<Value> {
             .entries
             .iter()
             .filter(|e| matches!(e.kind, Kind::Log | Kind::Event | Kind::Journal))
+            .filter(|e| !(e.kind == Kind::Log && e.is_blank()))
             .filter_map(|e| e.field_str("date"))
             .filter(|d| parse_day(d).is_ok())
             .max(),
@@ -293,7 +297,8 @@ pub fn soul_note(id: &Identity, file: &str, change: &str, evidence: &[String]) -
     let mut defining = false;
     for raw in evidence {
         let name = raw.trim().trim_start_matches("[[").trim_end_matches("]]");
-        let i = crate::find::one(id, name).context("evidence")?;
+        let target = name.split(['#', '|']).next().unwrap_or_default().trim();
+        let i = crate::find::one(id, target).context("evidence")?;
         let e = &id.entries[i];
         defining |= e.kind == Kind::Event && e.field("defining") == Some(&Value::Bool(true));
         if seen.insert(i) {

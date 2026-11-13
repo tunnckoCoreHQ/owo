@@ -36,17 +36,19 @@ Soul Markdown files are plain Markdown with no frontmatter; their stamps live in
 
 One slug function turns a name into a path segment: transliterate to ASCII, lowercase, drop apostrophes, collapse every other run of non-alphanumeric characters to one hyphen, trim hyphens.
 
-`Jay's Penthouse` becomes `jays-penthouse`. On a collision, add a short disambiguator to the slug and keep the short name as an alias. Logs are `YYYY-MM-DD.md`; journal, writing and project notes are `YYYY-MM-DD_<slug>.md`. A name gives a slug and a slug gives a path, so agents can predict a path and fall back to `owo resolve`.
+`Jay's Penthouse` becomes `jays-penthouse`. On a collision, add a short disambiguator to the slug and keep the short name as an alias. Logs are `YYYY-MM-DD.md`; journal, writing and project notes are `YYYY-MM-DD_<slug>.md`. Entry file names and project folder names must be slugs (the `schema` rule). A name gives a slug and a slug gives a path, so agents can predict a path and fall back to `owo resolve`.
 
 ## Links
 
 Links are Obsidian-style wiki-links: `[[Title]]`, `[[Title|shown text]]`, `[[Title#Section]]`. Resolution is in [[architecture#Link resolution]].
 
+Links inside inline code or fenced code do not count. A fence opens with three or more backticks or tildes and closes on a run of the same character at least as long. A backtick with no closing backtick on its line is plain text.
+
 Soul files link by name: `[[IDENTITY]]`, `[[SOUL]]`, `[[VOICE]]`, `[[LOOK]]`, `[[MEMORY]]`. Links into a project KB are `[[kb:<project>:<path>#<Section>]]`, resolved against the KB path in [[cli#Context]].
 
 ## Entry frontmatter
 
-Every life and work entry has YAML frontmatter with `type`, `title`, `aliases`, `summary`, `status`, `created`, `updated`, `sources`. Lists are block lists (`  - item`); an empty list is `[]`.
+Every life and work entry has YAML frontmatter with `type`, `title`, `aliases`, `summary`, `status`, `created`, `updated`, `sources`. Lists are block lists (`  - item`); an empty list is `[]`. A title or alias holds no `#`, `|`, `[` or `]`, because those break a `[[link]]` to it; `owo add` refuses them and the `schema` rule reports them.
 
 `summary` is one line; indexes, search, the Now block and card lorebooks use it. Citations live only in frontmatter: `sources` (paths relative to `sources/`, optional `#L<a>-L<b>`, or plain text), lesson `evidence` and thread `from` are links. Bodies have no Sources, Evidence or From section.
 
@@ -93,7 +95,7 @@ Each `state.json` has `files`: a map from scope-relative path to `{updated, hash
 
 `soul/state.json` adds `history` and `review`. Each history record is `{at, file, change, evidence}`, appended by `owo soul note`. The `review` object holds `last_reviewed`, `reviewed_through` and `memory_hash`; when MEMORY.md's hash differs from `memory_hash`, lint warns that MEMORY changed outside a review.
 
-Commands write JSON files through a temporary file and a rename. A command that rewrites a state file or `soul/soul.json` exits 1 when the file exists but does not parse or is not an object, so a broken file is never replaced with an empty one.
+Commands write JSON files through a temporary file and a rename. A command that rewrites a state file, `soul/soul.json` or a sync bookmark exits 1 when the file exists but does not parse or is not an object, so a broken file is never replaced with an empty one. When a soul file changed, `owo stamp` reads `soul/soul.json` before it writes any file, so a broken one fails the stamp with nothing recorded or touched.
 
 ## Generated files
 
@@ -113,4 +115,4 @@ Identity resolves from `-i`, `OWO_IDENTITY`, `.owo.toml`, user config, then the 
 
 Templates are embedded in the binary. `<root>/.templates/<name>` overrides one, where `<name>` is the identity-relative path for identity files (`soul/IDENTITY.md`, `work/README.md`) and `<type>.md` for entries (`character.md`).
 
-Placeholders are `{{name}}`, `{{slug}}`, `{{title}}`, `{{today}}`, `{{date}}`, `{{parent}}`, `{{project}}`. A `{{key_yaml}}` form escapes double quotes for YAML strings, and a `{{key_json}}` form escapes for JSON strings. An era's `start` and `end` are empty until the author sets them.
+Placeholders are `{{name}}`, `{{slug}}`, `{{title}}`, `{{today}}`, `{{date}}`, `{{parent}}`, `{{project}}`. A `{{key_yaml}}` form escapes double quotes for YAML strings, and a `{{key_json}}` form escapes for JSON strings. Filling is one pass, so `{{key}}` text inside a value stays as written. An era's `start` and `end` are empty until the author sets them.

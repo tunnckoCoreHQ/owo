@@ -20,6 +20,11 @@ pub fn now() -> String {
     Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true)
 }
 
+/// The local day, as `YYYY-MM-DD`: the day frontmatter dates name.
+pub fn local_today() -> String {
+    chrono::Local::now().format("%Y-%m-%d").to_string()
+}
+
 /// The UTC day of `now`, as `YYYY-MM-DD`.
 pub fn today() -> String {
     day(&now()).to_string()

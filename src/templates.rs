@@ -1,8 +1,10 @@
 //! Built-in templates, embedded in the binary. `<root>/.templates/<file>` overrides one.
 
+use regex::{Captures, Regex};
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::OnceLock;
 
 /// Templates used by `owo new`, keyed by their identity-relative output path.
 pub const IDENTITY_FILES: &[(&str, &str)] = &[
@@ -90,17 +92,31 @@ pub fn get(root: &Path, name: &str, builtin: &str) -> String {
         .unwrap_or_else(|| builtin.to_string())
 }
 
-/// Replaces `{{key}}` placeholders. Keys ending in `_yaml` get double-quote YAML escaping, keys
-/// ending in `_json` JSON string escaping.
+fn placeholder_re() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| Regex::new(r"\{\{(\w+)\}\}").expect("valid regex"))
+}
+
+/// Replaces `{{key}}` placeholders in one pass, so a value that holds `{{key}}` text stays as
+/// written. Keys ending in `_yaml` get double-quote YAML escaping, keys ending in `_json` JSON
+/// string escaping.
 pub fn fill(template: &str, values: &BTreeMap<&str, String>) -> String {
-    let mut out = template.to_string();
-    for (key, value) in values {
-        out = out.replace(&format!("{{{{{key}}}}}"), value);
-        out = out.replace(&format!("{{{{{key}_yaml}}}}"), &yaml_escape(value));
-        let json = serde_json::to_string(value).expect("a string serializes");
-        out = out.replace(&format!("{{{{{key}_json}}}}"), &json[1..json.len() - 1]);
-    }
-    out
+    placeholder_re()
+        .replace_all(template, |cap: &Captures| {
+            let key = &cap[1];
+            if let Some(value) = values.get(key) {
+                return value.clone();
+            }
+            if let Some(value) = key.strip_suffix("_yaml").and_then(|k| values.get(k)) {
+                return yaml_escape(value);
+            }
+            if let Some(value) = key.strip_suffix("_json").and_then(|k| values.get(k)) {
+                let json = serde_json::to_string(value).expect("a string serializes");
+                return json[1..json.len() - 1].to_string();
+            }
+            cap[0].to_string()
+        })
+        .into_owned()
 }
 
 /// Escapes a value for a double-quoted YAML string.
@@ -125,6 +141,9 @@ mod tests {
             fill("t: \"{{title_yaml}}\" # {{title}}", &v),
             "t: \"Say \\\"hi\\\"\" # Say \"hi\""
         );
+        v.insert("title", "Meet {{date}}".to_string());
+        v.insert("date", "2026-01-01".to_string());
+        assert_eq!(fill("{{title}} {{date}}", &v), "Meet {{date}} 2026-01-01");
     }
 
     #[test]

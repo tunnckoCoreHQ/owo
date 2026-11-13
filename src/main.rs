@@ -38,12 +38,15 @@ use serde_json::json;
 use std::process::ExitCode;
 
 fn main() -> ExitCode {
-    // Exit quietly when stdout closes early (`owo search x | head`).
-    #[cfg(unix)]
-    unsafe {
-        libc::signal(libc::SIGPIPE, libc::SIG_DFL);
-    }
     let cli = Cli::parse();
+    // Exit quietly when stdout closes early (`owo search x | head`). `owo mcp` keeps the ignored
+    // signal, so a tool child that closes its stdin early does not kill the server.
+    #[cfg(unix)]
+    if !matches!(cli.command, Command::Mcp { .. }) {
+        unsafe {
+            libc::signal(libc::SIGPIPE, libc::SIG_DFL);
+        }
+    }
     let out = Out {
         json: cli.json,
         quiet: cli.quiet,
@@ -127,8 +130,13 @@ fn run(cli: &Cli, out: &Out) -> Result<i32> {
     match &cli.command {
         Command::Slug { text } => {
             let value = slug::slugify(&text.join(" "));
-            let ok = !value.is_empty();
-            out.emit(Envelope::new(ok, json!({ "slug": value })), || {
+            if value.is_empty() {
+                anyhow::bail!(
+                    "{:?} has no letters or digits to make a slug",
+                    text.join(" ")
+                );
+            }
+            out.emit(Envelope::ok(json!({ "slug": value })), || {
                 println!("{value}")
             })
         }
@@ -545,7 +553,8 @@ fn run(cli: &Cli, out: &Out) -> Result<i32> {
         Command::Changes { since, days } => {
             let (_, id) = load(cli)?;
             let since = since.clone().or_else(|| {
-                days.map(|d| (chrono::Utc::now() - chrono::Duration::days(d)).format("%Y-%m-%d"))
+                // The local day, which Git reads a plain --since day in.
+                days.map(|d| (chrono::Local::now() - chrono::Duration::days(d)).format("%Y-%m-%d"))
                     .map(|d| d.to_string())
             });
             let c = changes::changes(&id, since.as_deref())?;

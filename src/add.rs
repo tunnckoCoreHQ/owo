@@ -30,7 +30,7 @@ pub fn add(id: &Identity, req: &Request) -> Result<(String, bool)> {
         bail!("--kb is for project; a {name} has no KB");
     }
     // The local day, so `owo add log` names the day the user is living.
-    let today = chrono::Local::now().format("%Y-%m-%d").to_string();
+    let today = crate::state::local_today();
     let date = req
         .date
         .map(|d| d.to_string())
@@ -40,6 +40,11 @@ pub fn add(id: &Identity, req: &Request) -> Result<(String, bool)> {
         "" if req.kind == Kind::Log => date.as_str(),
         t => t,
     };
+    for name in std::iter::once(title).chain(req.aliases.iter().map(String::as_str)) {
+        if name.contains(crate::markdown::LINK_BREAKERS) {
+            bail!("{name:?} holds # | [ or ], which break a [[link]] to it");
+        }
+    }
     let slug = slugify(title);
     if slug.is_empty() {
         bail!("title {title:?} has no slug characters; pass a title");
@@ -97,7 +102,7 @@ pub fn add(id: &Identity, req: &Request) -> Result<(String, bool)> {
         &values,
     );
     if !req.aliases.is_empty() {
-        if !text.contains("aliases: []") {
+        if !text.contains("\naliases: []") {
             bail!("the {name} template has no `aliases: []` line for --alias");
         }
         let list = req
@@ -105,7 +110,7 @@ pub fn add(id: &Identity, req: &Request) -> Result<(String, bool)> {
             .iter()
             .map(|a| format!("\n  - \"{}\"", templates::yaml_escape(a)))
             .collect::<String>();
-        text = text.replacen("aliases: []", &format!("aliases:{list}"), 1);
+        text = text.replacen("\naliases: []", &format!("\naliases:{list}"), 1);
     }
     if let (Some(kb), Kind::Project) = (req.kb, req.kind) {
         if !text.contains("kb: \"\"") {
@@ -129,6 +134,7 @@ pub fn write(id: &Identity, rel: &str, text: &str) -> Result<bool> {
     }
     let parts: Option<Vec<&str>> = std::path::Path::new(rel)
         .components()
+        .filter(|c| *c != std::path::Component::CurDir)
         .map(|c| match c {
             std::path::Component::Normal(s) => s.to_str(),
             _ => None,

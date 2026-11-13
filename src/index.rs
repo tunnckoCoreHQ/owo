@@ -1,4 +1,4 @@
-//! Generated files: every `_index.md`, `life/_index.md`, `life/timeline.md`, `work/_index.md`.
+//! Generated files: `life/_index.md`, each life category `_index.md`, `life/timeline.md`, `work/_index.md`.
 //! Output depends only on entry content, so `owo index --check` and lint can compare.
 
 use crate::identity::{Entry, Identity, Kind, LIFE_CATEGORIES};

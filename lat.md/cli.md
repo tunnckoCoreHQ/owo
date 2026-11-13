@@ -8,7 +8,7 @@ With `--json` every command prints `{ "ok", "data", "warnings", "errors" }`; oth
 
 With `--quiet` commands drop their confirmation lines: the path `add` and `write` print, `stamp`, `index`, `lint` and `sync` summaries, `wrote <file>`. Output that is the result itself (`show`, `search`, `context` and the like), warnings and problems still print. Lint also drops its warning diagnostics.
 
-Exit codes: 0 success, 1 problems found (lint errors, exists, unknown template, stale check), 2 usage error (clap, including a date that is not YYYY-MM-DD), 3 config error (no identity selected, identity folder missing, project that is not a slug or has no `project.md`), 4 I/O error. A closed stdout (`owo search x | head`) ends the process quietly.
+Exit codes: 0 success, 1 problems found (lint errors, exists, unknown template, stale check), 2 usage error (clap, including a date that is not YYYY-MM-DD), 3 config error (no identity selected, identity folder missing, project that is not a slug or has no `project.md`), 4 I/O error. A closed stdout (`owo search x | head`) ends the process quietly, except in `owo mcp`, which must outlive a tool child that closes its stdin early.
 
 ## Commands
 
@@ -26,22 +26,25 @@ Each command with its flags and exit behavior.
 - `owo context [--voice] [--look] [--with <name>]... [--notes N] [--format paths]` prints the load set as text, or the file list with `--format paths`; see [[cli#Context]].
 - `owo state [--days N]` prints the derived Now block, plus the last update and recent notes with `--project`.
 - `owo search <query> [--scope soul|life|work] [--type <t>]... [--since <date>] [--limit N]` ranks entries with BM25; no hits gives `ok: false` and exit 1. See [[decisions#Search is in-crate BM25]].
-- `owo review` prints the review packet; see [[cli#Review]]. `owo review done [--through <date>]` records a finished review: `last_reviewed`, `reviewed_through` (default: newest log, event or journal date) and the MEMORY.md hash.
-- `owo soul note <file> --change <text> --evidence <name>...` appends to `soul/state.json` `history`. Evidence must resolve; fewer than two links and no defining event gives a warning. `owo soul history [file]` prints the trail.
-- `owo changes [--since | --days N]` lists changes by day; see [[decisions#Changes read Git, else stamps]]. `owo lint --changed` keeps diagnostics for changed files only.
+- `owo review` prints the review packet; see [[cli#Review]]. `owo review done [--through <date>]` records a finished review: `last_reviewed`, `reviewed_through` (default: newest date of a non-blank log, an event or a journal entry) and the MEMORY.md hash.
+- `owo soul note <file> --change <text> --evidence <name>...` appends to `soul/state.json` `history`. Evidence must resolve; a `#Section` or `|label` part is kept in the record and ignored for resolution; fewer than two links and no defining event gives a warning. `owo soul history [file]` prints the trail.
+- `owo changes [--since | --days N]` lists changes by day; `--days N` starts N days before the local day; see [[decisions#Changes read Git, else stamps]]. `owo lint --changed` keeps diagnostics for changed files only.
 - `owo export card [--spec v3|v2] [--scenario <name>] [--png <avatar> --out <file>]`, `owo export soulspec --out <dir>`, `owo export skill --out <dir>`; see [[cli#Export]].
 - `owo sync start`, `owo sync push` and `owo sync done`; see [[cli#Sync]].
 - `owo migrate v1 <path> --out <root>/<slug>`; see [[decisions#Migrate is mechanical]].
 - `owo mcp [--remote [ADDR]] [--port N]` serves every command as an MCP tool (subcommands as `review_done`, `export_card` and so on). Without `--remote` it speaks over stdio. With `--remote` it listens on ADDR (default `127.0.0.1`), port N or 4224 (else the next free port), prints `http://<addr>:<port>/mcp`, and answers each POST with JSON. `--root`, `-i` and `--project` given to `owo mcp` are the defaults; each tool also takes `identity` and `project`. Paths in tool arguments are paths on the server.
-- `owo list` prints slug, name, last activity and projects per identity. Also `owo slug <text>`, `owo templates [list | show <name>]` (list marks overrides), `owo config`.
+- `owo list` prints slug, name, last activity and projects per identity. Also `owo slug <text>` (exits 1 with a reason when the text has no letters or digits), `owo templates [list | show <name>]` (list marks overrides), `owo config`.
 
 ## Context
 
 `owo context` lists files by tier and adds a generated Now block derived from state files and frontmatter dates.
 
-- core, always: `soul/IDENTITY.md`, `soul/SOUL.md`, `soul/MEMORY.md`, then the Now block (last activity per scope, last project, recent days, recent events, open threads and conflicts, review status, where to look next).
+- core, always: `soul/IDENTITY.md`, `soul/SOUL.md`, `soul/MEMORY.md`, then the Now block (last activity per scope, last project, recent days, recent events (counted back from the newest non-blank log or event date), open threads and conflicts, review status, where to look next).
 - voice and look: `soul/VOICE.md` and `soul/LOOK.md` with `--voice` and `--look`.
 - project, with `--project <p>`: `work/README.md`, `project.md`, the newest N notes, and the KB pointer.
+- with, for each `--with <name>`: the entry it resolves to, unless the load set already holds that file.
+
+Both formats put the Now block right after the core files.
 
 The KB path comes from `project.md` `kb`, relative to the identity folder, with `~/` as the home folder. See [[decisions#KB pointer is always emitted]]. `owo context` writes nothing; the last project is the one with the newest file stamp under `work/projects/`.
 
@@ -54,7 +57,7 @@ The KB path comes from `project.md` `kb`, relative to the identity folder, with 
 - files whose stamp moved after `last_reviewed` (MEMORY.md excluded), with type, summary, word count, and Git `+added -removed` lines when the root is a repo
 - log days after `reviewed_through`, with their bodies
 - events and journal entries dated after `reviewed_through`, lessons among the changed files
-- open threads and conflicts, three-word phrases on three or more unreviewed days that start and end with a content word, the last soul change
+- open threads and conflicts, three-word phrases, each inside one line, on three or more unreviewed days that start and end with a content word, the last soul change
 
 ## Export
 
@@ -66,10 +69,10 @@ The KB path comes from `project.md` `kb`, relative to the identity folder, with 
 | `system_prompt` | IDENTITY "Who she/he/they is/are" section, then VOICE.md |
 | `personality` | SOUL.md body |
 | `scenario` | with `--project`: project.md summary and body |
-| `first_mes`, `alternate_greetings` | `soul/examples/greetings.md`, one per `##`; text before the first `##` is left out |
+| `first_mes`, `alternate_greetings` | `soul/examples/greetings.md`, one per `##` (headings inside fenced code do not count); text before the first `##` is left out |
 | `mes_example` | `soul/examples/good.md`, prefixed `<START>` |
 | `tags`, `creator`, `character_version` | `soul/soul.json` |
-| `character_book` | MEMORY.md as a constant entry, then characters, locations, cultures, factions, eras, events, lessons, and the scoped project; keys are title plus aliases; content is the summary plus `## Key facts`, or the body without its `# ` headings and without an `Identifiers` or `Sources` section at any level (headings inside fenced code do not count) when an entry has no key facts |
+| `character_book` | MEMORY.md as a constant entry, then characters, locations, cultures, factions, eras, events, lessons, and the scoped project; keys are title plus aliases; content is the summary plus `## Key facts`, or the body without its `# ` headings and without an `Identifiers` or `Sources` section at any level (headings inside fenced code do not count) when an entry has no key facts or an empty `## Key facts` |
 
 V3 adds `nickname` (`identity.json` `nickname`), `assets` (default icon), `creation_date`, `modification_date`, `source`, `group_only_greetings`, `creator_notes_multilingual`.
 

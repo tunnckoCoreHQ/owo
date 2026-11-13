@@ -18,7 +18,7 @@ Indexes and the timeline depend only on entry content, so `owo index --check` an
 
 Decision record: [ADR-0003](../docs/adr/0003-stamp-touches-frontmatter.md).
 
-`owo stamp` moves a file's state timestamp only when its hash changes, and then sets `updated:` in that entry's frontmatter to today and re-hashes it.
+`owo stamp` moves a file's state timestamp only when its hash changes, and then sets `updated:` in that entry's frontmatter to the local day (the day `owo add` uses) and re-hashes it.
 
 A changed soul file bumps the minor version in `soul/soul.json`. New identities get `review.memory_hash` set at creation, so a fresh identity lints without a memory warning.
 
@@ -58,9 +58,9 @@ Decision record: [ADR-0008](../docs/adr/0008-examples-are-built-with-owo.md).
 
 Decision record: [ADR-0009](../docs/adr/0009-changes-read-git-else-stamps.md).
 
-`owo changes` reads `git log --name-status` for the identity folder when it sits in a repo, and lists uncommitted paths separately. Outside a repo it groups state-file `updated` stamps by day, so the command always answers.
+`owo changes` reads `git log --name-status` for the identity folder when it sits in a repo, and lists uncommitted paths separately. Outside a repo it groups state-file `updated` stamps by local day, so the command always answers.
 
-Outside a repo `--since` takes only a `YYYY-MM-DD` day and exits 1 on anything else; in a repo it takes whatever `git log --since` accepts.
+Outside a repo `--since` takes only a `YYYY-MM-DD` day and exits 1 on anything else; in a repo it takes whatever `git log --since` accepts, and a plain day starts at its midnight.
 
 `lint --changed` keeps diagnostics whose path is uncommitted in Git or drifts from its stamp (`stamp --check`). Outside Git, files stamped today count too, so a session that ends with `stamp` still checks its own edits. The full lint still runs; only the report is filtered.
 
@@ -70,7 +70,7 @@ Decision record: [ADR-0010](../docs/adr/0010-review-window-uses-two-cursors.md).
 
 Files count as changed when their stamp is newer than `last_reviewed`. Log days, events and journal count as unreviewed when their story date is after `reviewed_through`. Stamps track edits; story dates track the life.
 
-`owo review done` sets `reviewed_through` to the newest log, event or journal date, not today, because story time can run behind or ahead of real time.
+`owo review done` sets `reviewed_through` to the newest date of a non-blank log, an event or a journal entry, not today, because story time can run behind or ahead of real time.
 
 ## Lint reuses find
 
@@ -100,7 +100,7 @@ Decision record: [ADR-0014](../docs/adr/0014-migrate-is-mechanical.md).
 
 It builds a fresh identity with `owo new`, copies soul files (STYLE becomes VOICE), adds missing frontmatter fields to world files (a body `## Sources` section joins `sources`, its links a lesson's `evidence`), splits `conflicts.md` by `##`, copies `sources/`, then indexes and stamps. It reports files with no home and prints the judgment work as a checklist.
 
-Migrate never overwrites: a file whose target already exists is reported as skipped, including files under `sources/`, which is copied with its subfolders. v1 `index.md` files are dropped, since owo generates its own, and a status outside canon, disputed and superseded becomes canon. An event file named only by a date takes its slug from its title. A file whose frontmatter does not parse is reported as skipped and not written. When migrate fails partway, it removes the identity folder it created, so a rerun starts clean.
+Migrate never overwrites: a file whose target already exists is reported as skipped, including files under `sources/`, which is copied with its subfolders. v1 `index.md` files are dropped, since owo generates its own, and a status outside canon, disputed and superseded becomes canon. An event file named only by a date takes its slug from its title. A file whose frontmatter does not parse is reported as skipped and not written. When migrate fails partway, it removes the identity folder and the `sources/<slug>/` folder it created, so a rerun starts clean.
 
 A v1 location folder becomes `life/locations/<slug>/`: its `overview.md`, `index.md`, `README.md` or same-named file is the overview, and every other file is a location detail whose `parent` links the overview. A loose `<x>.md` becomes an overview. World folders `cultures`, `factions`, `eras`, `history/eras` and `threads` map to their life folders.
 
@@ -126,6 +126,6 @@ Decision record: [ADR-0017](../docs/adr/0017-mcp-runs-the-cli.md).
 
 The tool list is read from the clap definitions (`Cli::command()`): each subcommand is a tool, each flag a parameter with its help text, type and allowed values, so a new flag needs no MCP change.
 
-Most tools add `--json` and return the envelope; `context` and `show` return text, which is what an agent reads. Positional values go after `--` and flag values are passed as `--flag=value`, so a value never parses as a flag. A failed command sets `isError`. A line that is not UTF-8 JSON gets a -32700 parse error and the server goes on.
+Most tools add `--json` and return the envelope; `context` and `show` return text, which is what an agent reads. Positional values go after `--` and flag values are passed as `--flag=value`, so a value never parses as a flag. A failed command sets `isError`; an unknown tool name gets a -32602 error. `initialize` answers the client's protocol version when it is one the server speaks (2025-06-18, 2025-03-26, 2024-11-05), else 2025-06-18. A line that is not UTF-8 JSON gets a -32700 parse error and the server goes on.
 
-The `--remote` mode is a small HTTP/1.1 loop over `std::net`: one request at a time, `POST /mcp` with a JSON reply, 202 for notifications, 405 for other methods. It has no authentication, so whoever reaches the URL can read and write the identity. To keep web pages out, it answers 403 to a request with an `Origin` header and 415 to a POST without `Content-Type: application/json`. One request gets 30 seconds to arrive and its reply 30 seconds to leave; headers are capped at 16KB (431) and the body at 8MB (413).
+The `--remote` mode is a small HTTP/1.1 loop over `std::net`: one request at a time, `POST /mcp` with a JSON reply, 202 for notifications, 405 for other methods. It has no authentication, so whoever reaches the URL can read and write the identity. To keep web pages out, it answers 403 to a request with an `Origin` header and 415 to a POST without `Content-Type: application/json`, and 411 to a POST without `Content-Length` or with any `Transfer-Encoding` header. One request gets 30 seconds to arrive and its reply 30 seconds to leave; headers are capped at 16KB (431) and the body at 8MB (413). A refused body it did not read is discarded after the reply, so the client sees the whole status; the discard stops after 200ms with nothing arriving, or after 2 seconds, so an idle client cannot hold the server.

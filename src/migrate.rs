@@ -330,9 +330,14 @@ pub fn v1(src: &Path, out: &Path) -> Result<Report> {
         .or(manifest["display_name"].as_str())
         .map(str::to_string)
         .unwrap_or_else(|| slug.clone());
+    let sources = root.join("sources").join(&slug);
+    let had_sources = sources.exists();
     crate::create::new_identity(root, &name, &slug)?;
     fill(src, &refs, root, &slug, &manifest).inspect_err(|_| {
         let _ = fs::remove_dir_all(root.join(&slug));
+        if !had_sources {
+            let _ = fs::remove_dir_all(&sources);
+        }
     })
 }
 
