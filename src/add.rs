@@ -22,7 +22,10 @@ pub struct Request<'a> {
 
 /// Returns the entry path and true when the file is new.
 pub fn add(id: &Identity, req: &Request) -> Result<(String, bool)> {
-    let name = req.kind.type_name().expect("clap lists entry types");
+    let name = req
+        .kind
+        .type_name()
+        .expect("`Identity::add` takes only entry types");
     if req.parent.is_some() && req.kind != Kind::LocationDetail {
         bail!("--parent is for location-detail; a {name} has no parent");
     }
@@ -85,7 +88,7 @@ pub fn add(id: &Identity, req: &Request) -> Result<(String, bool)> {
     let rel = req
         .kind
         .rel(&slug, &date, parent_slug.as_deref(), req.project)
-        .expect("clap lists entry types with an add path");
+        .expect("every entry type has an add path");
 
     let path = id.dir.join(&rel);
     if path.exists() {
@@ -95,7 +98,7 @@ pub fn add(id: &Identity, req: &Request) -> Result<(String, bool)> {
         .iter()
         .find(|(n, _)| *n == name)
         .map(|(_, t)| *t)
-        .expect("clap lists known types");
+        .expect("every entry type has a template");
     let root = id.dir.parent().unwrap_or(&id.dir);
     let mut text = templates::fill(
         &templates::get(root, &format!("{name}.md"), builtin),

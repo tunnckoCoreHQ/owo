@@ -1,14 +1,15 @@
-//! owo: one world, one identity. The library core for living agent identities.
+//! owo: one world, one identity. The library for living agent identities.
 //!
-//! `run` takes a parsed command, the environment values and a stdin reader, and returns an
-//! `Output`; it prints nothing. `mcp` serves every command as an MCP tool and `acp` runs the
-//! ACP proxy, on streams the caller gives them. The library reads nothing from the process:
-//! the `owo` binary passes in its arguments, environment and streams.
+//! Open a root with `Root::open`, load its identity with `Root::identity`, then call the typed
+//! function of each command on the `Root` or the `Identity`. Each function takes typed
+//! arguments and returns a typed result or an `Error`. The library parses no command line,
+//! renders no output, has no exit codes and reads nothing from the process: the caller passes
+//! the environment values in `Env`. `acp` is the ACP proxy, a consumer of this API, on streams
+//! the caller gives it. The `owo` binary, with its CLI and MCP server, is another consumer.
 
 pub mod acp;
 mod add;
 mod changes;
-mod cli;
 mod config;
 mod context;
 mod create;
@@ -20,7 +21,6 @@ mod index;
 mod kb;
 mod lint;
 mod markdown;
-pub mod mcp;
 mod migrate;
 mod output;
 mod review;
@@ -32,23 +32,30 @@ mod status;
 mod sync;
 mod templates;
 
-pub use cli::{
-    Cli, Command, ExportFormat, MigrateFrom, ReviewAction, SoulAction, SyncAction, TemplatesAction,
-};
-pub use identity::Identity;
-pub use output::Output;
+pub use add::Request as AddRequest;
+pub use changes::{Change, Changes};
+pub use config::{Resolved, Source};
+pub use context::{Context, Item as ContextItem, Request as ContextRequest};
+pub use create::Created;
+pub use export::Report as Soulspec;
+pub use find::{unresolved, Hit, LinkRef};
+pub use identity::{Identity, Kind};
+pub use kb::Kb;
+pub use migrate::Report as MigrateReport;
+pub use output::{Diagnostic, Level};
+pub use review::{Changed, Day, Note as SoulNote, Packet};
+pub use search::{Filter as SearchFilter, Hit as SearchHit};
+pub use stamp::Report as StampReport;
+pub use state::{day, parse_day};
+pub use status::{join as join_links, now_block, Link, ProjectState, Review, Row, State};
+pub use sync::{Start as SyncRun, FORMATS as SYNC_FORMATS};
 
-use anyhow::Result;
-use clap::CommandFactory;
 use config::{need_identity, need_project, ConfigError};
-use identity::Kind;
-use output::{Envelope, Level, Out};
-use serde_json::json;
-use std::io::Read;
-use std::path::PathBuf;
+use serde_json::Value;
+use std::path::{Path, PathBuf};
 
-/// What a command reads from its process: environment values and the working folder. The
-/// caller reads them once; `run`, `mcp` and `acp` only use them.
+/// What the library would read from a process: environment values and the working folder.
+/// The caller reads them once and passes them in.
 #[derive(Debug, Clone, Default)]
 pub struct Env {
     /// `OWO_ROOT`, `OWO_IDENTITY` and `OWO_PROJECT`, when set and not empty.
@@ -63,620 +70,432 @@ pub struct Env {
     pub xdg_data_home: Option<PathBuf>,
 }
 
-/// Runs one command and returns what it produced. `stdin` gives the text for `owo write` and
-/// `owo sync push` when they take no `--content` or `--turns`; `run` reads it only when the
-/// command needs the text. `Command::Mcp` is a server and `Command::Acp` a proxy, not
-/// commands, so they return an error here.
-pub fn run(cli: &Cli, env: &Env, stdin: &mut dyn Read) -> Output {
-    let mut out = Out {
-        json: cli.json,
-        quiet: cli.quiet,
-        warnings: vec![],
-    };
-    match dispatch(cli, env, stdin, &mut out) {
-        Ok(o) => o,
-        Err(e) => Output {
-            warnings: out.warnings,
-            ..Output::from(e)
-        },
-    }
+/// The root, identity and project the caller picks, before `Env` and the config files.
+#[derive(Debug, Clone, Default)]
+pub struct Select {
+    pub root: Option<PathBuf>,
+    pub identity: Option<String>,
+    pub project: Option<String>,
 }
 
-/// The global `--root`, `-i` and `--project` flags of a command line that runs in process.
-fn global_args(cli: &Cli, identity: Option<String>, project: Option<String>) -> Vec<String> {
-    let mut out = vec![];
-    if let Some(root) = &cli.root {
-        out.extend(["--root".into(), root.display().to_string()]);
-    }
-    if let Some(i) = identity {
-        out.extend(["-i".into(), i]);
-    }
-    if let Some(p) = project {
-        out.extend(["--project".into(), p]);
-    }
-    out
+/// Why a call failed. The message is the whole error text.
+#[derive(Debug)]
+pub enum Error {
+    /// A bad argument, such as `add` with no title.
+    Usage(String),
+    /// A root, identity or project that does not resolve or does not exist.
+    Config(String),
+    /// A file that cannot be read or written.
+    Io(String),
+    /// Anything else the call could not do.
+    Failed(String),
 }
 
-/// Parses `argv` (without the program name) with clap and calls `run` in process, with
-/// `stdin` as the stdin text.
-fn run_argv(argv: Vec<String>, env: &Env, stdin: &str) -> Result<(Cli, Output), clap::Error> {
-    let cli: Cli = clap::Parser::try_parse_from(std::iter::once("owo".into()).chain(argv))?;
-    let out = run(&cli, env, &mut stdin.as_bytes());
-    Ok((cli, out))
-}
-
-fn resolved(cli: &Cli, env: &Env, out: &mut Out) -> Result<config::Resolved> {
-    let inputs = config::Inputs::new(cli, env);
-    let r = config::resolve(&inputs).map_err(|e| ConfigError(format!("{e:#}")))?;
-    if let config::Source::ProjectFile(file) = &r.root_source {
-        if file.parent() != Some(inputs.cwd.as_path()) {
-            out.warnings.push(format!(
-                "the root comes from {} in a parent folder",
-                file.display()
-            ));
+impl std::fmt::Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Error::Usage(m) | Error::Config(m) | Error::Io(m) | Error::Failed(m) => f.write_str(m),
         }
     }
-    Ok(r)
 }
 
-fn load(cli: &Cli, env: &Env, out: &mut Out) -> Result<(config::Resolved, Identity)> {
-    let r = resolved(cli, env, out)?;
-    let mut id = Identity::load(&r.root, &need_identity(&r)?)?;
-    id.home = env.home.clone();
-    Ok((r, id))
-}
+impl std::error::Error for Error {}
 
-/// Runs `sync start` or `sync push` with the shared identity, project and run size.
-fn sync_cmd(
-    cli: &Cli,
-    env: &Env,
-    out: &mut Out,
-    session: &str,
-    now: bool,
-    every: usize,
-    step: impl FnOnce(&sync::StartRequest) -> Result<sync::Start>,
-) -> Result<Output> {
-    let r = resolved(cli, env, out)?;
-    let slug = need_identity(&r)?;
-    let dir = r.root.join(&slug);
-    let project = need_project(&dir, r.project.as_deref())?;
-    let every = every.max(1);
-    let s = step(&sync::StartRequest {
-        root: &r.root,
-        slug: &slug,
-        session,
-        now,
-        every,
-        project,
-    })?;
-    out.emit(Envelope::ok(serde_json::to_value(&s)?), |t| {
-        if let Some(n) = s.added {
-            t.say(format!("added {n}"));
-        }
-        if s.source.is_some() {
-            t.line(sync::render(&s));
+impl From<anyhow::Error> for Error {
+    fn from(e: anyhow::Error) -> Self {
+        let message = format!("{e:#}");
+        if e.downcast_ref::<ConfigError>().is_some() {
+            Error::Config(message)
+        } else if e.downcast_ref::<std::io::Error>().is_some() {
+            Error::Io(message)
         } else {
-            t.say(sync::render(&s));
-        }
-    })
-}
-
-fn dispatch(cli: &Cli, env: &Env, stdin: &mut dyn Read, out: &mut Out) -> Result<Output> {
-    match &cli.command {
-        Command::Slug { text } => {
-            let value = slug::slugify(&text.join(" "));
-            if value.is_empty() {
-                anyhow::bail!(
-                    "{:?} has no letters or digits to make a slug",
-                    text.join(" ")
-                );
-            }
-            out.emit(Envelope::ok(json!({ "slug": value })), |t| t.line(&value))
-        }
-        Command::Templates { action } => templates_cmd(cli, action.as_ref(), env, out),
-        Command::Mcp { .. } => anyhow::bail!("`owo mcp` is a server; serve it with `owo::mcp`"),
-        Command::Acp { .. } => anyhow::bail!("`owo acp` is a proxy; run it with `owo::acp`"),
-        Command::Config => {
-            let r = resolved(cli, env, out)?;
-            out.emit(Envelope::ok(serde_json::to_value(&r)?), |t| {
-                t.line(format!("root: {} ({:?})", r.root.display(), r.root_source));
-                t.line(format!(
-                    "identity: {}",
-                    r.identity.as_deref().unwrap_or("-")
-                ));
-                t.line(format!("project: {}", r.project.as_deref().unwrap_or("-")));
-            })
-        }
-        Command::New {
-            name,
-            slug: slug_flag,
-        } => {
-            let r = resolved(cli, env, out)?;
-            let slug_value = slug_flag.clone().unwrap_or_else(|| slug::slugify(name));
-            let c = create::new_identity(&r.root, name.trim(), &slug_value)?;
-            let data = json!({ "slug": c.slug, "path": c.dir, "files": c.files });
-            out.emit(Envelope::ok(data), |t| {
-                t.say(format!(
-                    "created {} ({} files)",
-                    c.dir.display(),
-                    c.files.len()
-                ));
-                for f in &c.files {
-                    t.say(format!("  {f}"));
-                }
-            })
-        }
-        Command::List => {
-            let r = resolved(cli, env, out)?;
-            let rows = status::list(&r.root);
-            out.emit(
-                Envelope::ok(json!({ "root": r.root, "identities": rows })),
-                |t| t.push(status::render_list(&rows)),
-            )
-        }
-        Command::Lint { rules, changed } => {
-            let (_, id) = load(cli, env, out)?;
-            let mut found = lint::run(&id, rules);
-            if *changed {
-                let paths = changes::changed_paths(&id);
-                found.retain(|d| paths.contains(&d.path));
-            }
-            let count = |level: Level| found.iter().filter(|d| d.level == level).count();
-            let (errors, warnings) = (count(Level::Error), count(Level::Warning));
-            let split = |level: Level| {
-                found
-                    .iter()
-                    .filter(|d| d.level == level)
-                    .map(|d| serde_json::to_value(d).expect("serializes"))
-                    .collect::<Vec<_>>()
-            };
-            let slug = &id.slug;
-            let envelope = Envelope::new(
-                errors == 0,
-                json!({ "identity": slug, "infos": split(Level::Info) }),
-            )
-            .with_warnings(split(Level::Warning))
-            .with_errors(split(Level::Error));
-            out.emit(envelope, |t| {
-                for d in found
-                    .iter()
-                    .filter(|d| !cli.quiet || d.level == Level::Error)
-                {
-                    t.line(d.render());
-                }
-                t.say(format!("{slug}: {errors} errors, {warnings} warnings"));
-            })
-        }
-        Command::Write { path, content } => {
-            let (_, id) = load(cli, env, out)?;
-            let text = match content {
-                Some(c) => c.clone(),
-                None => std::io::read_to_string(stdin)?,
-            };
-            let created = add::write(&id, path, &text)?;
-            out.emit(
-                Envelope::ok(json!({ "path": path, "created": created })),
-                |t| t.say(path),
-            )
-        }
-        Command::Add {
-            kind,
-            title,
-            date,
-            parent,
-            aliases,
-            kb,
-        } => {
-            let (r, id) = load(cli, env, out)?;
-            let title = title.join(" ");
-            if title.trim().is_empty() && *kind != Kind::Log {
-                return Err(Cli::command()
-                    .error(
-                        clap::error::ErrorKind::MissingRequiredArgument,
-                        format!("`owo add {}` needs a title", kind.name()),
-                    )
-                    .into());
-            }
-            // Only a note lives under a project; other types ignore the working project.
-            let project = if *kind == Kind::Note {
-                need_project(&id.dir, r.project.as_deref())?
-            } else {
-                None
-            };
-            let req = add::Request {
-                kind: *kind,
-                title: &title,
-                date: *date,
-                parent: parent.as_deref(),
-                project,
-                aliases,
-                kb: kb.as_deref(),
-            };
-            let (path, created) = add::add(&id, &req)?;
-            let ok = created || *kind == Kind::Log;
-            let envelope = Envelope::new(ok, json!({ "path": path, "created": created }))
-                .with_errors((!ok).then(|| format!("exists: {path}")));
-            out.emit(envelope, |t| {
-                if created {
-                    t.say(&path);
-                } else if ok {
-                    t.say(format!("exists {path}"));
-                } else {
-                    t.line(format!("exists {path}"));
-                }
-            })
-        }
-        Command::Stamp { check } => {
-            let (_, id) = load(cli, env, out)?;
-            let report = stamp::run(&id, *check)?;
-            let clean = report.is_clean();
-            let envelope = Envelope::new(!*check || clean, serde_json::to_value(&report)?);
-            out.emit(envelope, |t| {
-                for (label, list) in [
-                    ("added", &report.added),
-                    ("changed", &report.changed),
-                    ("removed", &report.removed),
-                ] {
-                    for p in list {
-                        t.say(format!("{label} {p}"));
-                    }
-                }
-                if clean {
-                    t.say("state is up to date");
-                }
-            })
-        }
-        Command::Index { check } => {
-            let (_, id) = load(cli, env, out)?;
-            let paths = if *check {
-                index::stale(&id)
-            } else {
-                index::write(&id)?
-            };
-            let (key, label) = if *check {
-                ("stale", "stale ")
-            } else {
-                ("written", "wrote ")
-            };
-            let envelope = Envelope::new(!*check || paths.is_empty(), json!({ key: paths }));
-            out.emit(envelope, |t| {
-                for p in &paths {
-                    t.say(format!("{label}{p}"));
-                }
-                if paths.is_empty() {
-                    t.say("generated files are up to date");
-                }
-            })
-        }
-        Command::Resolve { name, kind } => {
-            let (_, id) = load(cli, env, out)?;
-            let name = name.join(" ");
-            match find::resolve(&id, &name, kind.as_deref()) {
-                find::Resolution::Found(i) => {
-                    let hit = find::Hit::of(&id.entries[i]);
-                    out.emit(Envelope::ok(serde_json::to_value(&hit)?), |t| {
-                        t.line(&hit.path)
-                    })
-                }
-                find::Resolution::Ambiguous(v) | find::Resolution::Missing(v) => {
-                    let msg = find::unresolved(&name);
-                    let hits: Vec<_> = v.iter().map(|i| find::Hit::of(&id.entries[*i])).collect();
-                    let envelope = Envelope::new(false, json!({ "candidates": hits }))
-                        .with_errors([msg.as_str()]);
-                    let lines: String =
-                        hits.iter().map(|h| format!("\n  {}", h.render())).collect();
-                    let mut o = out.emit(envelope, |_| {})?;
-                    o.error = Some(anyhow::anyhow!("{msg}{lines}"));
-                    Ok(o)
-                }
-            }
-        }
-        Command::Show { name, section } => {
-            let (_, id) = load(cli, env, out)?;
-            let (path, text) = find::show(&id, &name.join(" "), section.as_deref())?;
-            out.emit(Envelope::ok(json!({ "path": path, "text": text })), |t| {
-                t.push(&text)
-            })
-        }
-        Command::Links {
-            name,
-            inbound,
-            outbound,
-            orphans,
-        } => {
-            let (_, id) = load(cli, env, out)?;
-            if *orphans {
-                let hits: Vec<_> = find::orphans(&id)
-                    .into_iter()
-                    .map(|i| find::Hit::of(&id.entries[i]))
-                    .collect();
-                return out.emit(Envelope::ok(json!({ "orphans": hits })), |t| {
-                    for h in &hits {
-                        t.line(h.render());
-                    }
-                });
-            }
-            let i = find::one(&id, &name.join(" "))?;
-            let both = !inbound && !outbound;
-            let back = if *inbound || both {
-                find::backlinks(&id, i)
-            } else {
-                vec![]
-            };
-            let fwd = if *outbound || both {
-                find::outlinks(&id, i)
-            } else {
-                vec![]
-            };
-            out.emit(
-                Envelope::ok(json!({ "path": id.entries[i].rel, "in": back, "out": fwd })),
-                |t| t.push(find::render_links(&back, &fwd)),
-            )
-        }
-        Command::Context {
-            voice,
-            look,
-            with,
-            notes,
-            format,
-        } => {
-            let (r, id) = load(cli, env, out)?;
-            let project = need_project(&id.dir, r.project.as_deref())?;
-            let req = context::Request {
-                voice: *voice,
-                look: *look,
-                project,
-                with,
-                notes: *notes,
-            };
-            let ctx = context::build(&id, &req)?;
-            let envelope =
-                Envelope::ok(serde_json::to_value(&ctx)?).with_warnings(ctx.warnings.clone());
-            out.emit(envelope, |t| {
-                if format == "text" {
-                    t.push(context::render_text(&id, &ctx));
-                } else {
-                    t.push(context::render_paths(&ctx));
-                }
-            })
-        }
-        Command::State { days } => {
-            let (r, id) = load(cli, env, out)?;
-            let mut s = status::compute(&id, *days, 5);
-            if let Some(p) = need_project(&id.dir, r.project.as_deref())? {
-                s.project = Some(status::project(&id, p));
-            }
-            out.emit(Envelope::ok(serde_json::to_value(&s)?), |t| {
-                t.push(status::render(&s))
-            })
-        }
-        Command::Search {
-            query,
-            scope,
-            types,
-            since,
-            limit,
-        } => {
-            let (_, id) = load(cli, env, out)?;
-            let hits = search::search(
-                &id,
-                &query.join(" "),
-                &search::Filter {
-                    scope: scope.as_deref(),
-                    types,
-                    project: cli.project.as_deref(),
-                    since: since.map(|d| d.to_string()).as_deref(),
-                },
-                *limit,
-            );
-            let ok = !hits.is_empty();
-            let envelope =
-                Envelope::new(ok, json!({ "hits": hits })).with_errors((!ok).then_some("no hits"));
-            let mut o = out.emit(envelope, |t| t.push(search::render(&hits)))?;
-            o.error = (!ok).then(|| anyhow::anyhow!("no hits"));
-            Ok(o)
-        }
-        Command::Sync {
-            action:
-                SyncAction::Start {
-                    session,
-                    transcript,
-                    format,
-                    now,
-                    every,
-                },
-        } => sync_cmd(cli, env, out, session, *now, *every, |req| {
-            sync::start(req, transcript, format)
-        }),
-        Command::Sync {
-            action:
-                SyncAction::Push {
-                    session,
-                    turns,
-                    now,
-                    every,
-                },
-        } => {
-            // The stdin text is read inside the step, after the config resolves.
-            sync_cmd(cli, env, out, session, *now, *every, |req| {
-                let turns = match turns {
-                    Some(t) => t.clone(),
-                    None => std::io::read_to_string(stdin)?,
-                };
-                sync::push(req, &turns)
-            })
-        }
-        Command::Sync {
-            action: SyncAction::Done { session, until },
-        } => {
-            let r = resolved(cli, env, out)?;
-            let doc = sync::done(&r.root, session, *until)?;
-            out.emit(Envelope::ok(doc), |t| {
-                t.say(format!("session {session} synced until {until}"))
-            })
-        }
-        Command::Migrate {
-            from: MigrateFrom::V1 { path, out: dest },
-        } => {
-            let r = migrate::v1(path, dest)?;
-            out.emit(Envelope::ok(serde_json::to_value(&r)?), |t| {
-                for (a, b) in &r.moved {
-                    t.say(format!("{a} -> {b}"));
-                }
-                t.push(migrate::render(&r));
-            })
-        }
-        Command::Review { action: None } => {
-            let (_, id) = load(cli, env, out)?;
-            let p = review::packet(&id);
-            out.emit(Envelope::ok(serde_json::to_value(&p)?), |t| {
-                t.push(review::render(&p))
-            })
-        }
-        Command::Review {
-            action: Some(ReviewAction::Done { through }),
-        } => {
-            let (_, id) = load(cli, env, out)?;
-            let review = review::done(&id, *through)?;
-            let through = review["reviewed_through"]
-                .as_str()
-                .unwrap_or("-")
-                .to_string();
-            out.emit(Envelope::ok(review), |t| {
-                t.say(format!("review recorded through {through}"))
-            })
-        }
-        Command::Soul {
-            action:
-                SoulAction::Note {
-                    file,
-                    change,
-                    evidence,
-                },
-        } => {
-            let (_, id) = load(cli, env, out)?;
-            let note = review::soul_note(&id, file, change, evidence)?;
-            let line = format!(
-                "noted {}: {}",
-                note.record["file"].as_str().unwrap_or(""),
-                note.record["change"].as_str().unwrap_or("")
-            );
-            out.emit(Envelope::ok(note.record).with_warnings(note.warning), |t| {
-                t.say(line)
-            })
-        }
-        Command::Soul {
-            action: SoulAction::History { file },
-        } => {
-            let (_, id) = load(cli, env, out)?;
-            let list = review::soul_history(&id, file.as_deref());
-            out.emit(Envelope::ok(json!({ "history": list })), |t| {
-                t.push(review::render_history(&list));
-                if list.is_empty() {
-                    t.say("no soul changes recorded");
-                }
-            })
-        }
-        Command::Changes { since, days } => {
-            let (_, id) = load(cli, env, out)?;
-            let since = since.clone().or_else(|| {
-                // The local day, which Git reads a plain --since day in.
-                days.map(|d| (chrono::Local::now() - chrono::Duration::days(d)).format("%Y-%m-%d"))
-                    .map(|d| d.to_string())
-            });
-            let c = changes::changes(&id, since.as_deref())?;
-            out.emit(Envelope::ok(serde_json::to_value(&c)?), |t| {
-                t.push(changes::render(&c))
-            })
-        }
-        Command::Export {
-            format:
-                ExportFormat::Card {
-                    spec,
-                    out: file,
-                    png,
-                    scenario,
-                },
-        } => {
-            let (_, id) = load(cli, env, out)?;
-            let project = need_project(&id.dir, cli.project.as_deref())?;
-            let scenario = scenario.as_deref();
-            let card = export::card(&id, spec, project, scenario)?;
-            let warnings = export::warnings(&card);
-            let Some(f) = file else {
-                let text = serde_json::to_string_pretty(&card)?;
-                return out.emit(Envelope::ok(card).with_warnings(warnings), |t| {
-                    t.line(&text)
-                });
-            };
-            export::write_card(&id, &card, project, scenario, f, png.as_deref())?;
-            out.emit(
-                Envelope::ok(json!({ "path": f })).with_warnings(warnings),
-                |t| t.say(format!("wrote {}", f.display())),
-            )
-        }
-        Command::Export {
-            format: ExportFormat::Skill { out: dir },
-        } => {
-            let (_, id) = load(cli, env, out)?;
-            let path = export::skill(&id, dir)?;
-            out.emit(Envelope::ok(json!({ "path": path })), |t| {
-                t.say(format!("wrote {path}"))
-            })
-        }
-        Command::Export {
-            format: ExportFormat::Soulspec { out: dir },
-        } => {
-            let (_, id) = load(cli, env, out)?;
-            let report = export::soulspec(&id, dir)?;
-            let envelope = Envelope::ok(json!({ "dir": dir, "files": report.files }))
-                .with_warnings(report.warnings);
-            out.emit(envelope, |t| {
-                for f in &report.files {
-                    t.say(format!("wrote {f}"));
-                }
-            })
+            Error::Failed(message)
         }
     }
 }
 
-fn templates_cmd(
-    cli: &Cli,
-    action: Option<&TemplatesAction>,
-    env: &Env,
-    out: &mut Out,
-) -> Result<Output> {
-    let root = resolved(cli, env, out)?.root;
-    let all = templates::all();
-    match action {
-        None | Some(TemplatesAction::List) => {
-            let rows: Vec<_> = all
-                .iter()
-                .map(|(name, file, _)| (*name, templates::override_path(&root, file)))
-                .collect();
-            let list: Vec<_> = rows
-                .iter()
-                .map(|(name, path)| json!({ "name": name, "override": path }))
-                .collect();
-            out.emit(Envelope::ok(json!({ "templates": list })), |t| {
-                for (name, path) in &rows {
-                    match path {
-                        Some(p) => t.line(format!("{name:<28} override {}", p.display())),
-                        None => t.line(format!("{name:<28} built-in")),
-                    }
-                }
+pub type Result<T, E = Error> = std::result::Result<T, E>;
+
+/// The slug of a text; an error when the text has no letters or digits.
+pub fn slug(text: &str) -> Result<String> {
+    let value = slug::slugify(text);
+    if value.is_empty() {
+        return Err(Error::Failed(format!(
+            "{text:?} has no letters or digits to make a slug"
+        )));
+    }
+    Ok(value)
+}
+
+/// The names of the entry types `add` creates.
+pub fn entry_types() -> impl Iterator<Item = &'static str> {
+    templates::ENTRY_TEMPLATES.iter().map(|(n, _)| *n)
+}
+
+/// The names of the lint rules.
+pub fn lint_rules() -> impl Iterator<Item = &'static str> {
+    lint::rules()
+}
+
+/// Moves a v1 identity folder at `path` into a new identity folder `out` (`<root>/<slug>`).
+pub fn migrate_v1(path: &Path, out: &Path) -> Result<MigrateReport> {
+    Ok(migrate::v1(path, out)?)
+}
+
+/// One template: its name and its override file in `<root>/.templates/`, when there is one.
+#[derive(Debug, serde::Serialize)]
+pub struct Template {
+    pub name: &'static str,
+    #[serde(rename = "override")]
+    pub override_path: Option<PathBuf>,
+}
+
+/// The backlinks and outlinks of one entry.
+#[derive(Debug)]
+pub struct Links {
+    pub path: String,
+    pub inbound: Vec<LinkRef>,
+    pub outbound: Vec<LinkRef>,
+}
+
+/// A built character card and its warnings.
+#[derive(Debug)]
+pub struct Card {
+    pub card: Value,
+    pub warnings: Vec<String>,
+}
+
+/// What `export_card` builds, and where it writes the card.
+pub struct CardRequest<'a> {
+    /// `v2` or `v3`.
+    pub spec: &'a str,
+    /// The project whose notes join the card; it must exist.
+    pub project: Option<&'a str>,
+    /// The event or location whose summary becomes the scenario.
+    pub scenario: Option<&'a str>,
+    /// Writes the card to this file when set.
+    pub out: Option<&'a Path>,
+    /// Embeds the card in this PNG avatar; needs `out`.
+    pub png: Option<&'a Path>,
+}
+
+/// An opened root: where it is, which identity and project it selects, and the warnings found
+/// while resolving them.
+#[derive(Debug)]
+pub struct Root {
+    pub config: Resolved,
+    pub warnings: Vec<String>,
+    home: Option<PathBuf>,
+}
+
+impl Root {
+    /// Resolves the root, identity and project from `select`, `env` and the config files. It
+    /// reads no identity yet.
+    pub fn open(select: &Select, env: &Env) -> Result<Root> {
+        let inputs = config::Inputs::new(select, env);
+        let config = config::resolve(&inputs).map_err(|e| Error::Config(format!("{e:#}")))?;
+        let mut warnings = vec![];
+        if let Source::ProjectFile(file) = &config.root_source {
+            if file.parent() != Some(inputs.cwd.as_path()) {
+                warnings.push(format!(
+                    "the root comes from {} in a parent folder",
+                    file.display()
+                ));
+            }
+        }
+        Ok(Root {
+            config,
+            warnings,
+            home: env.home.clone(),
+        })
+    }
+
+    pub fn path(&self) -> &Path {
+        &self.config.root
+    }
+
+    /// Loads the selected identity.
+    pub fn identity(&self) -> Result<Identity> {
+        let mut id = Identity::load(&self.config.root, &need_identity(&self.config)?)?;
+        id.home = self.home.clone();
+        Ok(id)
+    }
+
+    /// One row per identity in the root.
+    pub fn list(&self) -> Vec<Row> {
+        status::list(&self.config.root)
+    }
+
+    /// Creates an identity named `name` from the templates, with `slug` or the slug of the name.
+    pub fn create(&self, name: &str, slug: Option<&str>) -> Result<Created> {
+        let slug = slug.map_or_else(|| slug::slugify(name), str::to_string);
+        Ok(create::new_identity(&self.config.root, name.trim(), &slug)?)
+    }
+
+    /// Every template.
+    pub fn templates(&self) -> Vec<Template> {
+        templates::all()
+            .into_iter()
+            .map(|(name, file, _)| Template {
+                name,
+                override_path: templates::override_path(&self.config.root, &file),
             })
+            .collect()
+    }
+
+    /// One template and its text, as `create` and `add` use it.
+    pub fn template(&self, name: &str) -> Result<(Template, String)> {
+        let all = templates::all();
+        let Some((name, file, builtin)) = all.into_iter().find(|(n, _, _)| *n == name) else {
+            return Err(Error::Failed(format!(
+                "unknown template {name:?}; run `owo templates` for the list"
+            )));
+        };
+        let root = &self.config.root;
+        let template = Template {
+            name,
+            override_path: templates::override_path(root, &file),
+        };
+        Ok((template, templates::get(root, &file, builtin)))
+    }
+
+    /// The session sync of the selected identity and project, checked to exist.
+    pub fn sync(&self) -> Result<SessionSync<'_>> {
+        let slug = need_identity(&self.config)?;
+        let project = need_project(
+            &self.config.root.join(&slug),
+            self.config.project.as_deref(),
+        )?
+        .map(str::to_string);
+        Ok(SessionSync {
+            root: &self.config.root,
+            slug,
+            project,
+        })
+    }
+
+    /// Moves the bookmark of `session` to message `until` after an ingest run. Returns the
+    /// bookmark.
+    pub fn sync_done(&self, session: &str, until: usize) -> Result<Value> {
+        Ok(sync::done(&self.config.root, session, until)?)
+    }
+}
+
+/// Session sync for one identity: stores turns and slices them into `sources/` for ingest.
+pub struct SessionSync<'a> {
+    root: &'a Path,
+    slug: String,
+    project: Option<String>,
+}
+
+impl SessionSync<'_> {
+    fn request<'a>(&'a self, session: &'a str, now: bool, every: usize) -> sync::StartRequest<'a> {
+        sync::StartRequest {
+            root: self.root,
+            slug: &self.slug,
+            session,
+            now,
+            every: every.max(1),
+            project: self.project.as_deref(),
         }
-        Some(TemplatesAction::Show { name }) => {
-            let Some((name, file, builtin)) = all.iter().find(|(n, _, _)| n == name) else {
-                anyhow::bail!("unknown template {name:?}; run `owo templates` for the list");
-            };
-            let text = templates::get(&root, file, builtin);
-            let path = templates::override_path(&root, file);
-            out.emit(
-                Envelope::ok(json!({ "name": name, "override": path, "text": text })),
-                |t| t.push(&text),
-            )
+    }
+
+    /// Reads the host's transcript of `session` in `format` (one of `SYNC_FORMATS`) and, when
+    /// `every` new user turns arrived or `now` is set, writes the slice and the ingest prompt.
+    pub fn start(
+        &self,
+        session: &str,
+        transcript: &Path,
+        format: &str,
+        now: bool,
+        every: usize,
+    ) -> Result<SyncRun> {
+        Ok(sync::start(
+            &self.request(session, now, every),
+            transcript,
+            format,
+        )?)
+    }
+
+    /// Stores `turns`, a JSON array of `{id, role, text}`, skipping stored ids, then runs
+    /// `start` on the stored turns.
+    pub fn push(&self, session: &str, turns: &str, now: bool, every: usize) -> Result<SyncRun> {
+        Ok(sync::push(&self.request(session, now, every), turns)?)
+    }
+}
+
+impl Identity {
+    /// `project` when it is a project of this identity; an error when it is not.
+    pub fn check_project<'a>(&self, project: Option<&'a str>) -> Result<Option<&'a str>> {
+        Ok(need_project(&self.dir, project)?)
+    }
+
+    /// The lint findings of the `rules` (every rule when empty). With `changed`, only the
+    /// findings in files changed since the last commit or stamp.
+    pub fn lint(&self, rules: &[String], changed: bool) -> Vec<Diagnostic> {
+        let mut found = lint::run(self, rules);
+        if changed {
+            let paths = changes::changed_paths(self);
+            found.retain(|d| paths.contains(&d.path));
         }
+        found
+    }
+
+    /// Writes the full text of one authored file. Returns true when the file is new.
+    pub fn write(&self, path: &str, text: &str) -> Result<bool> {
+        Ok(add::write(self, path, text)?)
+    }
+
+    /// Creates an entry from its template. Returns its path and true when the file is new. A
+    /// note goes under `req.project`, which must exist; other types ignore it.
+    pub fn add(&self, req: &AddRequest) -> Result<(String, bool)> {
+        if req.kind.type_name().is_none() {
+            return Err(Error::Usage(format!(
+                "{} is not an entry type; `entry_types` lists them",
+                req.kind.name()
+            )));
+        }
+        if req.title.trim().is_empty() && req.kind != Kind::Log {
+            return Err(Error::Usage(format!(
+                "`owo add {}` needs a title",
+                req.kind.name()
+            )));
+        }
+        let project = if req.kind == Kind::Note {
+            self.check_project(req.project)?
+        } else {
+            None
+        };
+        Ok(add::add(self, &AddRequest { project, ..*req })?)
+    }
+
+    /// Refreshes the state files, or with `check` only reports the drift.
+    pub fn stamp(&self, check: bool) -> Result<StampReport> {
+        Ok(stamp::run(self, check)?)
+    }
+
+    /// Writes the generated files and returns their paths.
+    pub fn index(&self) -> Result<Vec<String>> {
+        Ok(index::write(self)?)
+    }
+
+    /// The generated files that are out of date.
+    pub fn stale_index(&self) -> Vec<String> {
+        index::stale(self)
+    }
+
+    /// The entry `name` resolves to, optionally of one type; else the candidates.
+    pub fn resolve(&self, name: &str, kind: Option<&str>) -> Result<Hit, Vec<Hit>> {
+        let hits = |v: Vec<usize>| v.iter().map(|i| Hit::of(&self.entries[*i])).collect();
+        match find::resolve(self, name, kind) {
+            find::Resolution::Found(i) => Ok(Hit::of(&self.entries[i])),
+            find::Resolution::Ambiguous(v) | find::Resolution::Missing(v) => Err(hits(v)),
+        }
+    }
+
+    /// The text of an entry or a `kb:` link, or one section of it, with its path.
+    pub fn show(&self, name: &str, section: Option<&str>) -> Result<(String, String)> {
+        Ok(find::show(self, name, section)?)
+    }
+
+    /// The links into and out of the entry `name`. Both when neither is asked for.
+    pub fn links(&self, name: &str, inbound: bool, outbound: bool) -> Result<Links> {
+        let i = find::one(self, name)?;
+        let both = !inbound && !outbound;
+        Ok(Links {
+            path: self.entries[i].rel.clone(),
+            inbound: if inbound || both {
+                find::backlinks(self, i)
+            } else {
+                vec![]
+            },
+            outbound: if outbound || both {
+                find::outlinks(self, i)
+            } else {
+                vec![]
+            },
+        })
+    }
+
+    /// The entries nothing links to.
+    pub fn orphans(&self) -> Vec<Hit> {
+        find::orphans(self)
+            .into_iter()
+            .map(|i| Hit::of(&self.entries[i]))
+            .collect()
+    }
+
+    /// The tiered load set. `req.project` must exist.
+    pub fn context(&self, req: &ContextRequest) -> Result<Context> {
+        let project = self.check_project(req.project)?;
+        Ok(context::build(self, &ContextRequest { project, ..*req })?)
+    }
+
+    /// The text of a load set: each file after an `<!-- owo: ... -->` line, the Now block and the
+    /// KB pointer.
+    pub fn context_text(&self, ctx: &Context) -> String {
+        context::render_text(self, ctx)
+    }
+
+    /// The derived current state, with events of the last `days`, and the state of `project`,
+    /// which must exist.
+    pub fn state(&self, days: i64, project: Option<&str>) -> Result<State> {
+        let mut s = status::compute(self, days, 5);
+        if let Some(p) = self.check_project(project)? {
+            s.project = Some(status::project(self, p));
+        }
+        Ok(s)
+    }
+
+    /// The BM25 hits for `query`, best first, at most `limit`.
+    pub fn search(&self, query: &str, filter: &SearchFilter, limit: usize) -> Vec<SearchHit> {
+        search::search(self, query, filter, limit)
+    }
+
+    /// The review packet.
+    pub fn review(&self) -> Packet {
+        review::packet(self)
+    }
+
+    /// Records a finished review through the story day `through`, else the newest one. Returns
+    /// the review record.
+    pub fn review_done(&self, through: Option<chrono::NaiveDate>) -> Result<Value> {
+        Ok(review::done(self, through)?)
+    }
+
+    /// Appends a soul change to the soul history, with its evidence entries.
+    pub fn soul_note(&self, file: &str, change: &str, evidence: &[String]) -> Result<SoulNote> {
+        Ok(review::soul_note(self, file, change, evidence)?)
+    }
+
+    /// The soul history, of one soul file or of all.
+    pub fn soul_history(&self, file: Option<&str>) -> Vec<Value> {
+        review::soul_history(self, file)
+    }
+
+    /// What changed, grouped by day, since `since` (a day, or what `git log --since` takes).
+    pub fn changes(&self, since: Option<&str>) -> Result<Changes> {
+        Ok(changes::changes(self, since)?)
+    }
+
+    /// Builds a character card, and writes it when `req.out` is set.
+    pub fn export_card(&self, req: &CardRequest) -> Result<Card> {
+        let project = self.check_project(req.project)?;
+        let card = export::card(self, req.spec, project, req.scenario)?;
+        let warnings = export::warnings(&card);
+        if let Some(out) = req.out {
+            export::write_card(self, &card, project, req.scenario, out, req.png)?;
+        }
+        Ok(Card { card, warnings })
+    }
+
+    /// Writes a SKILL.md wrapper into `dir` and returns its path.
+    pub fn export_skill(&self, dir: &Path) -> Result<String> {
+        Ok(export::skill(self, dir)?)
+    }
+
+    /// Writes a SoulSpec package into `dir`.
+    pub fn export_soulspec(&self, dir: &Path) -> Result<Soulspec> {
+        Ok(export::soulspec(self, dir)?)
     }
 }

@@ -1,10 +1,9 @@
 //! The command line: every command, flag and help line. MCP tools are built from it.
 
-use crate::identity::Kind;
-use crate::{lint, state, sync, templates};
 use chrono::NaiveDate;
 use clap::builder::TypedValueParser;
 use clap::{Parser, Subcommand};
+use owo::Kind;
 use std::path::PathBuf;
 
 #[derive(Parser)]
@@ -56,12 +55,12 @@ pub enum Command {
     /// Create an entry from its template at its deterministic path
     Add {
         /// Entry type
-        #[arg(value_name = "TYPE", value_parser = clap::builder::PossibleValuesParser::new(templates::ENTRY_TEMPLATES.iter().map(|(n, _)| *n)).map(|s| Kind::from_type(&s).expect("an entry type")))]
+        #[arg(value_name = "TYPE", value_parser = clap::builder::PossibleValuesParser::new(owo::entry_types()).map(|s| Kind::from_type(&s).expect("an entry type")))]
         kind: Kind,
         /// Title (a log without one is titled by its date)
         title: Vec<String>,
         /// Date for dated entries (default: today, local time)
-        #[arg(long, value_parser = state::parse_day)]
+        #[arg(long, value_parser = owo::parse_day)]
         date: Option<NaiveDate>,
         /// Parent location for location-detail
         #[arg(long)]
@@ -82,7 +81,7 @@ pub enum Command {
     /// Validate an identity
     Lint {
         /// Run only these rules (repeatable)
-        #[arg(long = "rule", value_parser = clap::builder::PossibleValuesParser::new(lint::rules()))]
+        #[arg(long = "rule", value_parser = clap::builder::PossibleValuesParser::new(owo::lint_rules()))]
         rules: Vec<String>,
         /// Report only files changed since the last commit or stamp
         #[arg(long)]
@@ -169,7 +168,7 @@ pub enum Command {
         #[arg(long = "type", value_parser = clap::builder::PossibleValuesParser::new(Kind::names()))]
         types: Vec<String>,
         /// Only entries dated (or updated) on or after YYYY-MM-DD
-        #[arg(long, value_parser = state::parse_day)]
+        #[arg(long, value_parser = owo::parse_day)]
         since: Option<NaiveDate>,
         /// Most hits to print
         #[arg(long, default_value_t = 10)]
@@ -246,7 +245,7 @@ pub enum ReviewAction {
     /// Record a finished review (dates and the MEMORY.md hash)
     Done {
         /// Last story day covered (default: newest log, event or journal date)
-        #[arg(long, value_parser = state::parse_day)]
+        #[arg(long, value_parser = owo::parse_day)]
         through: Option<NaiveDate>,
     },
 }
@@ -313,7 +312,7 @@ pub enum SyncAction {
         #[arg(long)]
         transcript: PathBuf,
         /// Transcript format; jsonl lines are {"role": ..., "text": ...} with an optional turn "id"
-        #[arg(long, default_value = "jsonl", value_parser = clap::builder::PossibleValuesParser::new(sync::FORMATS))]
+        #[arg(long, default_value = "jsonl", value_parser = clap::builder::PossibleValuesParser::new(owo::SYNC_FORMATS))]
         format: String,
         /// Take any new turns now (session end)
         #[arg(long)]

@@ -1,8 +1,7 @@
-//! Tests that use only the library: a consumer runs the MCP server and the ACP proxy on its own
-//! streams, with no `owo` binary.
+//! Tests that use only the library: the typed API with no binary, command line or rendered
+//! output, and the ACP proxy on in-memory streams.
 
-use clap::Parser;
-use owo::{acp, mcp, Cli, Env};
+use owo::{acp, AddRequest, ContextRequest, Env, Error, Kind, Root, SearchFilter, Select};
 use serde_json::{json, Value};
 use std::io::{BufRead, BufReader, Write};
 use std::path::Path;
@@ -31,112 +30,188 @@ fn root(ids: &[&str]) -> TempDir {
     tmp
 }
 
-/// The environment of a process in `root` with no owo variables.
-fn env(root: &Path) -> Env {
+/// The root `dir` with `identity` selected.
+fn select(dir: &Path, identity: Option<&str>) -> Select {
+    Select {
+        root: Some(dir.to_path_buf()),
+        identity: identity.map(str::to_string),
+        project: None,
+    }
+}
+
+/// The environment of a process in `dir` with no owo variables.
+fn env(dir: &Path) -> Env {
     Env {
-        cwd: root.to_path_buf(),
+        cwd: dir.to_path_buf(),
         ..Env::default()
     }
 }
 
-fn cli(args: &[&str]) -> Cli {
-    Cli::parse_from(std::iter::once("owo").chain(args.iter().copied()))
+/// Opens `dir` as the root, with `identity` selected.
+fn open(dir: &Path, identity: Option<&str>) -> Root {
+    Root::open(&select(dir, identity), &env(dir)).unwrap()
 }
-
-fn reply(message: Value, cli: &Cli, env: &Env) -> Value {
-    mcp::reply(message.to_string().as_bytes(), cli, env).unwrap()
-}
-
-fn call(name: &str, arguments: Value) -> Value {
-    json!({ "jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": { "name": name, "arguments": arguments } })
-}
-
 #[test]
-fn mcp_reply_answers_one_message() {
-    let tmp = root(&["nicole"]);
-    let (cli, env) = (
-        cli(&["--root", tmp.path().to_str().unwrap(), "mcp"]),
-        env(tmp.path()),
-    );
+fn a_root_lists_and_selects_identities() {
+    let tmp = root(&["nicole", "reviewer"]);
+    let r = open(tmp.path(), None);
+    let slugs: Vec<String> = r.list().into_iter().map(|row| row.slug).collect();
+    assert_eq!(slugs, ["nicole", "reviewer"]);
+    // Two identities and none picked: loading one is a config error.
+    assert!(r.config.identity.is_none());
+    assert!(matches!(r.identity(), Err(Error::Config(_))));
 
-    let init = json!({ "jsonrpc": "2.0", "id": 1, "method": "initialize", "params": { "protocolVersion": "2025-03-26" } });
-    let r = reply(init, &cli, &env);
-    assert_eq!(r["id"], 1);
-    assert_eq!(r["result"]["protocolVersion"], "2025-03-26");
-    assert_eq!(r["result"]["serverInfo"]["name"], "owo");
+    let r = open(tmp.path(), Some("nobody"));
+    assert!(matches!(r.identity(), Err(Error::Config(_))));
 
-    let r = reply(
-        json!({ "jsonrpc": "2.0", "id": 2, "method": "tools/list" }),
-        &cli,
-        &env,
-    );
-    let names: Vec<&str> = r["result"]["tools"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .map(|t| t["name"].as_str().unwrap())
-        .collect();
-    assert!(names.contains(&"slug") && names.contains(&"review_done"));
-    assert!(!names.contains(&"mcp") && !names.contains(&"acp"));
-
-    let r = reply(call("slug", json!({ "text": "Hello World" })), &cli, &env);
-    assert_eq!(r["result"]["isError"], false);
-    let text = r["result"]["content"][0]["text"].as_str().unwrap();
-    let envelope: Value = serde_json::from_str(text).unwrap();
-    assert_eq!(envelope["data"]["slug"], "hello-world");
-
-    let r = reply(call("list", json!({})), &cli, &env);
-    let text = r["result"]["content"][0]["text"].as_str().unwrap();
-    let envelope: Value = serde_json::from_str(text).unwrap();
-    assert_eq!(envelope["data"]["identities"][0]["slug"], "nicole");
-
-    let r = reply(call("context", json!({ "identity": "nicole" })), &cli, &env);
-    assert_eq!(r["result"]["isError"], false);
-    assert!(r["result"]["content"][0]["text"]
-        .as_str()
-        .unwrap()
-        .contains("Nicole"));
-
-    let r = reply(call("context", json!({ "identity": "nobody" })), &cli, &env);
-    assert_eq!(r["result"]["isError"], true);
-
-    assert!(mcp::reply(
-        b"{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}",
-        &cli,
-        &env
-    )
-    .is_none());
+    // With one identity, it is selected.
+    let one = root(&["nicole"]);
     assert_eq!(
-        mcp::reply(b"not json", &cli, &env).unwrap()["error"]["code"],
-        -32700
+        open(one.path(), None).config.identity.as_deref(),
+        Some("nicole")
     );
 }
 
 #[test]
-fn mcp_serves_a_reader_and_a_writer() {
+fn read_side_calls_return_typed_results() {
     let tmp = root(&["nicole"]);
-    let (cli, env) = (
-        cli(&["--root", tmp.path().to_str().unwrap(), "mcp"]),
-        env(tmp.path()),
+    let id = open(tmp.path(), Some("nicole")).identity().unwrap();
+
+    let hit = id.resolve("First Firing", None).unwrap();
+    assert_eq!(hit.path, "life/events/first-firing.md");
+    assert!(id.resolve("no such entry at all", None).is_err());
+
+    let (path, text) = id.show("First Firing", None).unwrap();
+    assert_eq!(path, "life/events/first-firing.md");
+    assert!(text.contains("title: \"First Firing\""));
+    assert!(matches!(
+        id.show("First Firing", Some("no such section")),
+        Err(Error::Failed(_))
+    ));
+
+    let links = id.links("First Firing", true, false).unwrap();
+    assert!(!links.inbound.is_empty() && links.outbound.is_empty());
+
+    let hits = id.search(
+        "glaze",
+        &SearchFilter {
+            scope: Some("life"),
+            types: &[],
+            project: None,
+            since: None,
+        },
+        3,
     );
-    let input = format!(
-        "{}\n\n{}\n{}\n",
-        json!({ "jsonrpc": "2.0", "id": 1, "method": "ping" }),
-        json!({ "jsonrpc": "2.0", "method": "notifications/initialized" }),
-        call("slug", json!({ "text": "a b" })),
+    assert!(!hits.is_empty() && hits.len() <= 3);
+    assert!(hits.iter().all(|h| h.path.starts_with("life/")));
+
+    let ctx = id
+        .context(&ContextRequest {
+            voice: true,
+            look: false,
+            project: None,
+            with: &[],
+            notes: 3,
+        })
+        .unwrap();
+    let paths: Vec<&str> = ctx.items.iter().map(|i| i.path.as_str()).collect();
+    assert_eq!(
+        paths,
+        [
+            "soul/IDENTITY.md",
+            "soul/SOUL.md",
+            "soul/MEMORY.md",
+            "soul/VOICE.md"
+        ]
     );
-    let mut output = vec![];
-    mcp::serve(input.as_bytes(), &mut output, &cli, &env).unwrap();
-    let lines: Vec<Value> = String::from_utf8(output)
+    let text = id.context_text(&ctx);
+    assert!(text.contains("<!-- owo: now -->\n## Now"));
+    assert!(text.contains("<!-- owo: soul/VOICE.md (voice) -->"));
+
+    let state = id.state(14, None).unwrap();
+    assert_eq!(state.identity, "nicole");
+    assert!(matches!(
+        id.state(14, Some("no-such-project")),
+        Err(Error::Config(_))
+    ));
+
+    assert!(id
+        .lint(&[], false)
+        .iter()
+        .all(|d| d.level != owo::Level::Error));
+    assert!(id.stamp(true).unwrap().is_clean());
+    assert!(id.stale_index().is_empty());
+    assert_eq!(id.review().identity, "nicole");
+    assert_eq!(id.changes(None).unwrap().source, "state");
+    assert!(id
+        .export_card(&owo::CardRequest {
+            spec: "v3",
+            project: None,
+            scenario: None,
+            out: None,
+            png: None,
+        })
         .unwrap()
-        .lines()
-        .map(|l| serde_json::from_str(l).unwrap())
-        .collect();
-    assert_eq!(lines.len(), 2);
-    assert_eq!(lines[0], json!({ "jsonrpc": "2.0", "id": 1, "result": {} }));
-    assert_eq!(lines[1]["result"]["isError"], false);
+        .card["data"]["name"]
+        .is_string());
 }
 
+#[test]
+fn write_side_calls_change_the_identity() {
+    let tmp = root(&["nicole"]);
+    let r = open(tmp.path(), Some("nicole"));
+    let id = r.identity().unwrap();
+
+    let req = AddRequest {
+        kind: Kind::Thread,
+        title: "Find the glaze recipe",
+        date: None,
+        parent: None,
+        project: None,
+        aliases: &[],
+        kb: None,
+    };
+    let (path, created) = id.add(&req).unwrap();
+    assert_eq!(path, "life/threads/find-the-glaze-recipe.md");
+    assert!(created);
+    assert!(!id.add(&req).unwrap().1, "a second add finds the file");
+    assert!(matches!(
+        id.add(&AddRequest { title: " ", ..req }),
+        Err(Error::Usage(_))
+    ));
+
+    assert!(id
+        .write("life/journal/2026-11-05_note.md", "# A note\n")
+        .unwrap());
+
+    // A fresh load sees the new files; stamp and index pick them up.
+    let id = r.identity().unwrap();
+    let stamped = id.stamp(false).unwrap();
+    assert!(stamped.added.contains(&path));
+    id.index().unwrap();
+    assert!(r.identity().unwrap().stale_index().is_empty());
+
+    let sync = r.sync().unwrap();
+    let run = sync
+        .push(
+            "s1",
+            r#"[{"id": "1", "role": "user", "text": "hi"}]"#,
+            false,
+            6,
+        )
+        .unwrap();
+    assert_eq!(run.added, Some(1));
+    assert!(!run.due);
+    assert!(sync.push("s1", "not json", false, 6).is_err());
+}
+
+#[test]
+fn free_functions_need_no_root() {
+    assert_eq!(owo::slug("Hello World").unwrap(), "hello-world");
+    assert!(matches!(owo::slug("!!"), Err(Error::Failed(_))));
+    assert!(owo::entry_types().any(|t| t == "event"));
+    assert!(owo::lint_rules().any(|r| r == "links"));
+}
 /// A running proxy with a scripted agent thread. The test is the client.
 struct Session {
     to_proxy: std::io::PipeWriter,
@@ -163,17 +238,14 @@ impl Write for Shared {
 /// Starts the proxy. The agent answers its n-th line with `replies[n]`, and ends when its
 /// input ends.
 fn start(root: &Path, options: acp::Options, replies: Vec<Vec<String>>) -> Session {
-    let cli = cli(&[
-        "--root",
-        root.to_str().unwrap(),
-        "-i",
-        "nicole",
-        "acp",
-        "--",
-        "agent",
-    ]);
     let warnings = std::sync::Arc::new(std::sync::Mutex::new(vec![]));
-    let proxy = acp::Proxy::new(&cli, &env(root), options, Shared(warnings.clone())).unwrap();
+    let proxy = acp::Proxy::new(
+        &select(root, Some("nicole")),
+        &env(root),
+        options,
+        Shared(warnings.clone()),
+    )
+    .unwrap();
     let (client_in, to_proxy) = std::io::pipe().unwrap();
     let (from_proxy, client_out) = std::io::pipe().unwrap();
     let (agent_in_read, agent_in) = std::io::pipe().unwrap();
@@ -323,18 +395,17 @@ fn acp_proxy_runs_on_given_streams() {
 #[test]
 fn acp_inject_puts_the_context_in_the_first_prompt() {
     let tmp = root(&["nicole"]);
-    let context = owo::run(
-        &cli(&[
-            "--root",
-            tmp.path().to_str().unwrap(),
-            "-i",
-            "nicole",
-            "context",
-        ]),
-        &env(tmp.path()),
-        &mut std::io::empty(),
-    )
-    .text;
+    let id = open(tmp.path(), Some("nicole")).identity().unwrap();
+    let context = id.context_text(
+        &id.context(&ContextRequest {
+            voice: false,
+            look: false,
+            project: None,
+            with: &[],
+            notes: 3,
+        })
+        .unwrap(),
+    );
     let mut p = start(
         tmp.path(),
         acp::Options { inject: true },

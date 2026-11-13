@@ -124,31 +124,6 @@ pub fn changes(id: &Identity, since: Option<&str>) -> anyhow::Result<Changes> {
     })
 }
 
-pub fn render(c: &Changes) -> String {
-    let mut o = String::new();
-    for (day, list) in c.days.iter().rev() {
-        o.push_str(&format!("{day}\n"));
-        for ch in list {
-            let commit = ch
-                .commit
-                .as_ref()
-                .map(|h| format!("  {h}"))
-                .unwrap_or_default();
-            o.push_str(&format!("  {:<5} {}{commit}\n", ch.status, ch.path));
-        }
-    }
-    if !c.pending.is_empty() {
-        o.push_str("uncommitted\n");
-        for p in &c.pending {
-            o.push_str(&format!("  {p}\n"));
-        }
-    }
-    if o.is_empty() {
-        o.push_str("no changes\n");
-    }
-    o
-}
-
 /// Files changed since the last commit or stamp: uncommitted Git paths plus stamp drift.
 /// Outside Git, files stamped today count too, so a session that ends with `stamp` still checks
 /// its own edits.

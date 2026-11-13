@@ -146,17 +146,6 @@ pub fn search(id: &Identity, query: &str, filter: &Filter, limit: usize) -> Vec<
     hits
 }
 
-pub fn render(hits: &[Hit]) -> String {
-    let mut out = String::new();
-    for h in hits {
-        out.push_str(&format!("{:>6.2}  {}  {}\n", h.score, h.path, h.title));
-        if let (Some(l), Some(s)) = (h.line, &h.snippet) {
-            out.push_str(&format!("        {l}: {s}\n"));
-        }
-    }
-    out
-}
-
 #[cfg(test)]
 mod tests {
     #[test]

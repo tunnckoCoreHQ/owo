@@ -1,0 +1,11 @@
+# Typed library API, CLI, MCP and ACP as consumers
+
+The `owo` library crate (`src/lib.rs`) is a typed API. A caller opens a root with `Root::open`, loads its identity with `Root::identity`, and calls one function per command on the `Root` or the `Identity`: `context`, `search`, `show`, `resolve`, `links`, `add`, `write`, `stamp`, `index`, `lint`, `state`, `review`, `soul_note`, `changes`, the exports, the session sync, and the free functions `slug` and `migrate_v1`. Each function takes typed arguments and returns a typed result or an `owo::Error`, whose kind (`Usage`, `Config`, `Io`, `Failed`) says what went wrong. The library has no clap, no rendered command output, no exit codes and no envelope, and it reads nothing from the process: the caller passes the environment values in `Env` and the picked root, identity and project in `Select`.
+
+The CLI, the MCP server and the ACP proxy are consumers of that API, and none of them builds a command line for another. The CLI maps the clap arguments to the library calls. The MCP server maps the JSON arguments of a tool call to the same calls; it reads its tool list from the CLI's clap definitions, and checks the arguments itself, with its own error text. Both render a result with one set of functions, which build the text, the JSON envelope and the exit code, so a tool and a command give the same output. These two live in the `owo` binary (`src/bin/owo/`), because the rendering and the clap definitions are command-line concerns.
+
+The ACP proxy needs no rendering: it resolves the identity, lists the identities, reads the context text and stores the turns with library calls. So it stays in the library as `owo::acp`, on streams the caller gives it, and a program that links owo can run it. The `owo acp` command only starts the agent process and hands the proxy its streams.
+
+A program that links the library gets the behavior of every command as values, and the library tests use that API, and the ACP proxy on in-memory streams, with no binary. A program that wants the MCP server runs `owo mcp`.
+
+This supersedes [ADR-0004](0004-library-core-thin-adapters.md), where the library took a parsed clap command line, returned the rendered output and the exit code, and held the MCP server and the ACP proxy, which ran their calls as command lines.

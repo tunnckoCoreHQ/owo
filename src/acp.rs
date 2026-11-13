@@ -2,10 +2,10 @@
 //! lines between a client and an agent, on streams the caller gives it, as the bytes it
 //! received. When the root has identities, it gives each session an identity the client can
 //! switch with the `identity` config option or the `/owo` command, changes only the lines that
-//! carry the injection, the picker and the command, and stores user and agent turns with
-//! `owo sync push`, called in process.
+//! carry the injection, the picker and the command, and stores user and agent turns through
+//! the library's session sync.
 
-use anyhow::Result;
+use crate::Result;
 use serde_json::{json, Value};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::io::{BufRead, Write};
@@ -23,25 +23,20 @@ struct Setup {
     context: bool,
     /// The owo MCP server entry. None with `inject`.
     server: Option<Value>,
-    /// The `--root` and `--project` flags of each owo call.
-    globals: Vec<String>,
     owo: Arc<Owo>,
 }
 
 impl Setup {
     /// The identity block for `id`. By default it tells the agent to load the identity with the
-    /// owo MCP `context` tool. With `inject` it is the output of `owo context`; when that
-    /// fails, one warning line goes to the warnings writer and nothing is injected.
+    /// owo MCP `context` tool. With `inject` it is the text of the identity's load set; when
+    /// that fails, one warning line goes to the warnings writer and nothing is injected.
     fn text(&self, id: &str) -> Option<String> {
         if !self.context {
             return Some(format!("Your identity is the owo identity \"{id}\". Before you answer, load it with the `context` tool of the owo MCP server, with the argument `identity` set to \"{id}\", and keep to it."));
         }
-        let mut argv = self.globals.clone();
-        argv.extend(["-i".into(), id.into(), "context".into()]);
         self.owo
-            .run(argv)
-            .map(|out| out.text)
-            .map_err(|e| self.owo.warn(&e))
+            .context(id)
+            .map_err(|e| self.owo.warn(&e.to_string()))
             .ok()
     }
 
@@ -189,22 +184,46 @@ pub struct Options {
     pub inject: bool,
 }
 
-/// Runs owo commands in process, and writes warning lines.
+/// Calls the library for a session's identity, and writes warning lines.
 struct Owo {
     env: crate::Env,
+    /// The root and project of each call; the identity is the session's.
+    select: crate::Select,
     warnings: Mutex<Box<dyn Write + Send>>,
 }
 
 impl Owo {
-    /// Runs one owo command line. The error is one line of text.
-    fn run(&self, argv: Vec<String>) -> Result<crate::Output, String> {
-        match crate::run_argv(argv, &self.env, "") {
-            Ok((_, out)) => match out.error {
-                Some(e) => Err(format!("{e:#}")),
-                None => Ok(out),
-            },
-            Err(e) => Err(e.to_string().lines().next().unwrap_or_default().to_string()),
-        }
+    /// The root with `identity` selected.
+    fn root(&self, identity: &str) -> crate::Result<crate::Root> {
+        let select = crate::Select {
+            identity: Some(identity.into()),
+            ..self.select.clone()
+        };
+        crate::Root::open(&select, &self.env)
+    }
+
+    /// The text of the default load set of `identity`, as `owo context` prints it.
+    fn context(&self, identity: &str) -> crate::Result<String> {
+        let root = self.root(identity)?;
+        let id = root.identity()?;
+        let ctx = id.context(&crate::ContextRequest {
+            voice: false,
+            look: false,
+            project: root.config.project.as_deref(),
+            with: &[],
+            notes: 3,
+        })?;
+        Ok(id.context_text(&ctx))
+    }
+
+    /// Stores `turns` for `identity` in `session`. The proxy only stores turns: with this run
+    /// size an ingest run is never due.
+    fn push(&self, identity: &str, session: &str, turns: Vec<Value>) -> crate::Result<()> {
+        let turns = Value::from(turns).to_string();
+        self.root(identity)?
+            .sync()?
+            .push(session, &turns, false, usize::MAX)?;
+        Ok(())
     }
 
     /// Writes `text` to the warnings writer. A failed write is ignored.
@@ -226,40 +245,35 @@ pub struct Proxy {
     setup: Option<Arc<Setup>>,
     /// The identity resolved at start.
     start: Option<String>,
-    /// The `--root` and `--project` flags of each store.
-    globals: Vec<String>,
 }
 
 impl Proxy {
     /// Resolves the identity and reads the identities of the root, before the agent starts.
-    /// `cli` gives `--root`, `-i` and `--project`. Warning lines go to `warnings`. An identity
-    /// with no folder, or a project that is not found, is a config error; `inject` with no
-    /// identity in the root is a usage error.
+    /// `select` gives the root, identity and project. Warning lines go to `warnings`. An
+    /// identity with no folder, or a project that is not found, is a config error; `inject`
+    /// with no identity in the root is a usage error.
     pub fn new(
-        cli: &crate::Cli,
+        select: &crate::Select,
         env: &crate::Env,
         options: Options,
         warnings: impl Write + Send + 'static,
     ) -> Result<Self> {
         let owo = Arc::new(Owo {
             env: env.clone(),
+            select: crate::Select {
+                identity: None,
+                ..select.clone()
+            },
             warnings: Mutex::new(Box::new(warnings)),
         });
-        let start = identity(
-            &owo,
-            &crate::global_args(cli, cli.identity.clone(), cli.project.clone()),
-        )?;
-        let identities = list(&owo, crate::global_args(cli, None, None))?;
+        let (start, rows) = identity(&owo, select)?;
+        let identities: Vec<_> = rows.into_iter().map(|r| (r.slug, r.name)).collect();
         let context = options.inject;
         if identities.is_empty() && context {
-            return Err(<crate::Cli as clap::CommandFactory>::command()
-                .error(
-                    clap::error::ErrorKind::MissingRequiredArgument,
-                    "--inject needs an identity in the root",
-                )
-                .into());
+            return Err(crate::Error::Usage(
+                "--inject needs an identity in the root".into(),
+            ));
         }
-        let globals = crate::global_args(cli, None, cli.project.clone());
         let setup = (!identities.is_empty()).then(|| {
             let args = match &start {
                 Some(id) => json!(["mcp", "-i", id]),
@@ -270,16 +284,10 @@ impl Proxy {
                 context,
                 server: (!context)
                     .then(|| json!({ "name": "owo", "command": "owo", "args": args, "env": [] })),
-                globals: globals.clone(),
                 owo: owo.clone(),
             })
         });
-        Ok(Self {
-            owo,
-            setup,
-            start,
-            globals,
-        })
+        Ok(Self { owo, setup, start })
     }
 
     /// Copies lines between the client and the agent until `agent_out` ends, then stores the
@@ -294,12 +302,7 @@ impl Proxy {
         mut agent_in: impl Write + Send + 'static,
         mut agent_out: impl BufRead,
     ) -> std::io::Result<()> {
-        let Proxy {
-            owo,
-            setup,
-            start,
-            globals,
-        } = self;
+        let Proxy { owo, setup, start } = self;
         let client_out = Arc::new(Mutex::new(client_out));
         let state = Arc::new(Mutex::new(State {
             start,
@@ -346,7 +349,7 @@ impl Proxy {
         let (store, jobs) = mpsc::channel::<Job>();
         let storer = std::thread::spawn(move || {
             for (identity, session, turns) in jobs {
-                push(&owo, &globals, &identity, &session, turns);
+                push(&owo, &identity, &session, turns);
             }
         });
 
@@ -389,46 +392,23 @@ impl Proxy {
     }
 }
 
-/// The identity the library resolves from the flags, `OWO_IDENTITY` and the config. An
-/// identity with no folder, or a project that is not found, is a config error here, before the
-/// agent starts.
-fn identity(owo: &Owo, globals: &[String]) -> Result<Option<String>> {
-    let run = |command: &str| -> Result<crate::Output> {
-        let mut argv = globals.to_vec();
-        argv.extend(["--json".into(), command.into()]);
-        Ok(crate::run_argv(argv, &owo.env, "")?.1)
+/// The identity the library resolves from `select`, `OWO_IDENTITY` and the config, and the
+/// row of each identity in the root. An identity with no folder, or a project that
+/// is not found, is a config error here, before the agent starts.
+fn identity(owo: &Owo, select: &crate::Select) -> Result<(Option<String>, Vec<crate::Row>)> {
+    let root = crate::Root::open(select, &owo.env)?;
+    for w in &root.warnings {
+        owo.warn(w);
+    }
+    let start = match &root.config.identity {
+        Some(slug) => {
+            let id = root.identity()?;
+            id.check_project(root.config.project.as_deref())?;
+            Some(slug.clone())
+        }
+        None => None,
     };
-    let config = run("config")?;
-    owo.write(&config.warning_lines());
-    if let Some(e) = config.error {
-        return Err(e);
-    }
-    let Some(id) = config.envelope["data"]["identity"].as_str() else {
-        return Ok(None);
-    };
-    // `state` loads the identity, so it checks the identity folder and the project.
-    match run("state")?.error {
-        Some(e) => Err(e),
-        None => Ok(Some(id.into())),
-    }
-}
-
-/// The slug and name of each identity in the root, from `owo list --json`.
-fn list(owo: &Owo, mut argv: Vec<String>) -> Result<Vec<(String, String)>> {
-    argv.extend(["--json".into(), "list".into()]);
-    let out = crate::run_argv(argv, &owo.env, "")?.1;
-    if let Some(e) = out.error {
-        return Err(e);
-    }
-    let all = out.envelope["data"]["identities"].as_array().cloned();
-    Ok(all
-        .into_iter()
-        .flatten()
-        .filter_map(|i| {
-            let slug = i["slug"].as_str()?;
-            Some((slug.into(), i["name"].as_str().unwrap_or(slug).into()))
-        })
-        .collect())
+    Ok((start, root.list()))
 }
 
 /// What the proxy does with a client line it reads.
@@ -811,20 +791,9 @@ fn emit(out: &Mutex<impl Write>, bytes: &[u8]) -> std::io::Result<()> {
     out.flush()
 }
 
-/// Stores the turns with `owo sync push` for `identity`. A failure is one warning line.
-fn push(owo: &Owo, globals: &[String], identity: &str, session: &str, turns: Vec<Value>) {
-    let mut argv = globals.to_vec();
-    argv.extend([
-        "-i".into(),
-        identity.into(),
-        "sync".into(),
-        "push".into(),
-        format!("--session={session}"),
-        // The proxy only stores turns: with this run size an ingest run is never due.
-        format!("--every={}", usize::MAX),
-        format!("--turns={}", Value::from(turns)),
-    ]);
-    if let Err(e) = owo.run(argv) {
-        owo.warn(&e);
+/// Stores the turns for `identity`. A failure is one warning line.
+fn push(owo: &Owo, identity: &str, session: &str, turns: Vec<Value>) {
+    if let Err(e) = owo.push(identity, session, turns) {
+        owo.warn(&e.to_string());
     }
 }

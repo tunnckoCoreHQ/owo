@@ -418,25 +418,3 @@ pub fn done(root: &Path, session: &str, until: usize) -> Result<Value> {
     write_bookmark(root, session, &doc)?;
     Ok(doc)
 }
-
-/// The due run (slice and prompt), or why no run is due.
-pub fn render(s: &Start) -> String {
-    match &s.source {
-        Some(src) => format!(
-            "due {} {}-{}\nsource {src}\nprompt {}",
-            s.identity,
-            s.from,
-            s.until,
-            s.prompt.as_deref().unwrap_or("")
-        ),
-        None => format!(
-            "not due: {} new user turns (every {}){}",
-            s.new_user_turns,
-            s.every,
-            s.pending
-                .as_deref()
-                .map(|p| format!("; a run is pending ({p}) until `sync done`"))
-                .unwrap_or_default()
-        ),
-    }
-}

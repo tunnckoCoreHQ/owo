@@ -1,9 +1,18 @@
-//! owo: one world, one identity. The CLI connects the process to the library: it parses
-//! arguments, builds `owo::Env` from the environment, hands over stdio and the agent process,
-//! prints the output and returns the exit code.
+//! owo: one world, one identity. The binary holds the CLI and the MCP server, which call the owo
+//! library and render its results. `main` connects them and the library's ACP proxy to the
+//! process: it parses arguments, builds `owo::Env` from the environment, hands over stdio and
+//! the agent process, prints the output and returns the exit code.
+
+mod cli;
+mod mcp;
+mod output;
+mod render;
+mod run;
+mod text;
 
 use clap::Parser;
-use owo::{Cli, Command, Output};
+use cli::{Cli, Command};
+use output::Output;
 use std::io::Write;
 use std::path::PathBuf;
 use std::process::{ExitCode, Stdio};
@@ -34,7 +43,7 @@ fn main() -> ExitCode {
             Ok(code) => return ExitCode::from(code),
             Err(e) => Output::from(e),
         },
-        _ => owo::run(&cli, &env, &mut std::io::stdin()),
+        _ => run::run(&cli, &env, &mut std::io::stdin()),
     };
     match out
         .error
@@ -74,20 +83,30 @@ fn mcp_stdio(cli: &Cli, env: &owo::Env) -> anyhow::Result<()> {
     #[cfg(unix)]
     {
         let (input, output) = own_stdio()?;
-        owo::mcp::serve(std::io::BufReader::new(input), output, cli, env)
+        mcp::serve(
+            std::io::BufReader::new(input),
+            output,
+            &run::select(cli),
+            env,
+        )
     }
     #[cfg(not(unix))]
-    owo::mcp::serve(std::io::stdin().lock(), std::io::stdout(), cli, env)
+    mcp::serve(
+        std::io::stdin().lock(),
+        std::io::stdout(),
+        &run::select(cli),
+        env,
+    )
 }
 
 /// Serves MCP over HTTP on `addr`, after it prints the URL.
 fn mcp_http(addr: &str, port: Option<u16>, cli: &Cli, env: &owo::Env) -> anyhow::Result<()> {
-    let listener = owo::mcp::bind(addr, port)?;
+    let listener = mcp::bind(addr, port)?;
     println!("http://{}/mcp", listener.local_addr()?);
     std::io::stdout().flush()?;
     #[cfg(unix)]
     detach_stdio()?;
-    owo::mcp::serve_http(listener, cli, env)
+    mcp::serve_http(listener, &run::select(cli), env)
 }
 
 /// Points the process's stdin at `/dev/null` and its stdout at stderr. A tool call runs in this
@@ -119,7 +138,12 @@ fn own_stdio() -> std::io::Result<(std::fs::File, std::fs::File)> {
 /// signal killed it.
 fn acp(cli: &Cli, env: &owo::Env, agent: &[String], inject: bool) -> anyhow::Result<u8> {
     use anyhow::Context;
-    let proxy = owo::acp::Proxy::new(cli, env, owo::acp::Options { inject }, std::io::stderr())?;
+    let proxy = owo::acp::Proxy::new(
+        &run::select(cli),
+        env,
+        owo::acp::Options { inject },
+        std::io::stderr(),
+    )?;
     let mut child = std::process::Command::new(&agent[0])
         .args(&agent[1..])
         .stdin(Stdio::piped())
@@ -139,3 +163,6 @@ fn acp(cli: &Cli, env: &owo::Env, agent: &[String], inject: bool) -> anyhow::Res
     copied?;
     Ok(status.code().unwrap_or(1) as u8)
 }
+
+#[cfg(test)]
+mod tests;

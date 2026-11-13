@@ -98,29 +98,6 @@ pub fn build(id: &Identity, req: &Request) -> Result<Context> {
     })
 }
 
-pub fn render_paths(c: &Context) -> String {
-    let mut out = String::new();
-    // The Now block follows the core files, as in the text format.
-    let core = c.items.iter().take_while(|it| it.tier == "core").count();
-    for (n, it) in c.items.iter().enumerate() {
-        if n == core {
-            out.push_str("now      (generated block)\n");
-        }
-        out.push_str(&format!("{:<8} {}  ({})\n", it.tier, it.path, it.reason));
-    }
-    if core == c.items.len() {
-        out.push_str("now      (generated block)\n");
-    }
-    if let Some(kb) = &c.kb {
-        out.push_str(&format!(
-            "kb       {}{}\n",
-            kb.path,
-            if kb.exists { "" } else { "  (missing)" }
-        ));
-    }
-    out
-}
-
 pub fn render_text(id: &Identity, c: &Context) -> String {
     let mut out = String::new();
     let mut now_done = false;

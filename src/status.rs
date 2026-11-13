@@ -104,25 +104,6 @@ pub fn list(root: &std::path::Path) -> Vec<Row> {
         .collect()
 }
 
-pub fn render_list(rows: &[Row]) -> String {
-    rows.iter()
-        .map(|row| {
-            let last = row
-                .last_activity
-                .as_deref()
-                .map(crate::state::day)
-                .unwrap_or("-");
-            format!(
-                "{:<16} {:<20} {:<10} {}\n",
-                row.slug,
-                row.name,
-                last,
-                row.projects.join(", ")
-            )
-        })
-        .collect()
-}
-
 fn by_date_desc(id: &Identity, kind: Kind) -> Vec<&Entry> {
     let mut v: Vec<&Entry> = id.entries.iter().filter(|e| e.kind == kind).collect();
     v.sort_by(|a, b| (b.field_str("date"), &b.rel).cmp(&(a.field_str("date"), &a.rel)));
@@ -232,7 +213,8 @@ pub fn compute(id: &Identity, days: i64, logs: usize) -> State {
     }
 }
 
-pub(crate) fn join(links: &[Link]) -> String {
+/// The links as `[[title]]` wiki-links joined with commas, or "none".
+pub fn join(links: &[Link]) -> String {
     if links.is_empty() {
         "none".into()
     } else {
@@ -289,33 +271,5 @@ pub fn now_block(s: &State, project: Option<&str>) -> String {
         "- More: {} (or `owo search`, `owo resolve`)\n",
         more.join(", ")
     ));
-    out
-}
-
-pub fn render(s: &State) -> String {
-    let mut out = format!("# {}\n\n", s.identity);
-    out.push_str(&now_block(s, None));
-    if let Some(change) = &s.last_soul_change {
-        out.push_str(&format!(
-            "- Last soul change: {} {}\n",
-            change.get("file").and_then(Value::as_str).unwrap_or("?"),
-            change.get("change").and_then(Value::as_str).unwrap_or("")
-        ));
-    }
-    if let Some(p) = &s.project {
-        let last = p
-            .last_updated
-            .as_deref()
-            .map(crate::state::day)
-            .unwrap_or("never");
-        out.push_str(&format!(
-            "- Project {}: last {last}, notes {}\n",
-            p.slug,
-            join(&p.notes)
-        ));
-    }
-    if s.review.memory_changed_outside_review {
-        out.push_str("- MEMORY.md changed outside a review\n");
-    }
     out
 }

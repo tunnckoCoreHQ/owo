@@ -284,12 +284,6 @@ fn mcp_tool_results_equal_the_cli_output() {
             String::new(),
         ),
         (
-            "search",
-            json!({ "query": "kiln", "limit": "many" }),
-            vec!["--json", "search", "--limit=many", "--", "kiln"],
-            String::new(),
-        ),
-        (
             "sync_push",
             json!({ "session": "m1", "turns": turns, "now": true }),
             vec!["--json", "sync", "push", "--session=m1", "--now"],
@@ -314,5 +308,13 @@ fn mcp_tool_results_equal_the_cli_output() {
         assert_eq!(reply["result"]["isError"], failed, "{tool}");
         errors += failed as usize;
     }
-    assert_eq!(errors, 2, "the failing call and the usage error");
+    assert_eq!(errors, 1, "the failing call");
+    // A bad argument is refused before the library call, with its own text.
+    let bad = call(0, "search", json!({ "query": "kiln", "limit": "many" }));
+    let reply = &raw_session(mcp_root.path(), "nicole", lines(&[bad]))[0];
+    assert_eq!(
+        text(reply),
+        "argument \"limit\" must be an integer, not \"many\""
+    );
+    assert_eq!(reply["result"]["isError"], true);
 }

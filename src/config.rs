@@ -55,12 +55,12 @@ pub struct Inputs {
 }
 
 impl Inputs {
-    /// The flags from `cli` and the environment values from `env`.
-    pub fn new(cli: &crate::Cli, env: &crate::Env) -> Self {
+    /// The picks from `select` and the environment values from `env`.
+    pub fn new(select: &crate::Select, env: &crate::Env) -> Self {
         Self {
-            root_flag: cli.root.clone(),
-            identity_flag: cli.identity.clone(),
-            project_flag: cli.project.clone(),
+            root_flag: select.root.clone(),
+            identity_flag: select.identity.clone(),
+            project_flag: select.project.clone(),
             env_root: env.owo_root.clone(),
             env_identity: env.owo_identity.clone(),
             env_project: env.owo_project.clone(),

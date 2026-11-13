@@ -8,7 +8,7 @@ publish = false
 
 [[bin]]
 name = "owo"
-path = "src/main.rs"
+path = "src/bin/owo/main.rs"
 
 [dependencies]
 anyhow = "1"

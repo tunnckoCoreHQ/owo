@@ -3,7 +3,7 @@
 
 use crate::identity::{write_json, Identity, Kind};
 use crate::state::parse_day;
-use crate::status::{join, Link};
+use crate::status::Link;
 use anyhow::{bail, Context, Result};
 use chrono::NaiveDate;
 use serde::Serialize;
@@ -170,85 +170,6 @@ pub fn packet(id: &Identity) -> Packet {
     }
 }
 
-pub fn render(p: &Packet) -> String {
-    let mut o = format!("# Review packet: {}\n\n", p.identity);
-    o.push_str(&format!(
-        "Last reviewed: {}. Reviewed through: {}.\n\n",
-        p.last_reviewed.as_deref().unwrap_or("never"),
-        p.reviewed_through.as_deref().unwrap_or("-")
-    ));
-    o.push_str(&format!(
-        "## Current MEMORY ({} words{})\n\n{}\n\n",
-        p.memory_words,
-        if p.memory_changed_outside_review {
-            ", changed outside a review"
-        } else {
-            ""
-        },
-        p.memory.trim_end()
-    ));
-    o.push_str(&format!(
-        "## Changed since last review ({})\n\n",
-        p.changed.len()
-    ));
-    for c in &p.changed {
-        let git = c
-            .git
-            .map(|(a, d)| format!(", git +{a} -{d}"))
-            .unwrap_or_default();
-        o.push_str(&format!(
-            "- {} ({}, {} words{git}): {}\n",
-            c.path,
-            c.kind,
-            c.words,
-            c.summary.as_deref().unwrap_or("-")
-        ));
-    }
-    o.push_str(&format!(
-        "\n## Unreviewed days ({})\n",
-        p.unreviewed_days.len()
-    ));
-    for d in &p.unreviewed_days {
-        let heading = if d.title == d.date {
-            d.date.clone()
-        } else {
-            format!("{} {}", d.date, d.title)
-        };
-        o.push_str(&format!("\n### {heading}\n\n{}\n", d.body));
-    }
-    o.push_str(&format!("\n## Events in window\n\n{}\n", join(&p.events)));
-    o.push_str(&format!("\n## Lessons changed\n\n{}\n", join(&p.lessons)));
-    o.push_str(&format!(
-        "\n## Journal in window\n\n{}\n",
-        if p.journal.is_empty() {
-            "none".into()
-        } else {
-            p.journal.join(", ")
-        }
-    ));
-    o.push_str(&format!(
-        "\n## Open\n\n- Threads: {}\n- Conflicts: {}\n",
-        join(&p.open_threads),
-        join(&p.open_conflicts)
-    ));
-    if !p.recurring.is_empty() {
-        o.push_str("\n## Recurring phrases\n\n");
-        for (phrase, n) in &p.recurring {
-            o.push_str(&format!("- \"{phrase}\" on {n} days\n"));
-        }
-    }
-    if let Some(c) = &p.last_soul_change {
-        o.push_str(&format!(
-            "\n## Last soul change\n\n{} {}: {}\n",
-            c["at"].as_str().unwrap_or("?"),
-            c["file"].as_str().unwrap_or("?"),
-            c["change"].as_str().unwrap_or("")
-        ));
-    }
-    o.push_str("\nWhen MEMORY is compiled: `owo stamp && owo index && owo lint`, then `owo review done`.\n");
-    o
-}
-
 /// Records a review: last_reviewed = now, reviewed_through = `through` or the newest
 /// story date among logs, events and journal entries, memory_hash = current MEMORY.md hash.
 pub fn done(id: &Identity, through: Option<NaiveDate>) -> Result<Value> {
@@ -333,24 +254,6 @@ pub fn soul_history(id: &Identity, file: Option<&str>) -> Vec<Value> {
         .filter(|r| file.is_none_or(|f| r["file"].as_str() == Some(f)))
         .cloned()
         .collect()
-}
-
-pub fn render_history(list: &[Value]) -> String {
-    let mut out = String::new();
-    for r in list {
-        let ev: Vec<&str> = r["evidence"]
-            .as_array()
-            .map(|a| a.iter().filter_map(|v| v.as_str()).collect())
-            .unwrap_or_default();
-        out.push_str(&format!(
-            "{}  {}  {}\n    evidence: {}\n",
-            r["at"].as_str().unwrap_or("?"),
-            r["file"].as_str().unwrap_or("?"),
-            r["change"].as_str().unwrap_or(""),
-            ev.join(", ")
-        ));
-    }
-    out
 }
 
 #[cfg(test)]
