@@ -177,6 +177,8 @@ pub fn compute(id: &Identity, days: i64, logs: usize) -> State {
         .entries
         .iter()
         .filter(|e| matches!(e.kind, Kind::Log | Kind::Event))
+        // A log with nothing written yet is not a day that happened.
+        .filter(|e| !(e.kind == Kind::Log && e.is_blank()))
         .filter_map(|e| date_of(&e.field_str("date")?))
         .max()
         .unwrap_or(today);
