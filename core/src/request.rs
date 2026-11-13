@@ -526,8 +526,8 @@ impl Request for NewRequest {
 pub struct WriteRequest {
     /// The identity-relative path.
     pub path: String,
-    /// The file text. The operation reads the caller's input when it is None; `Identity::write`
-    /// writes an empty file.
+    /// The file text. The operation reads the caller's input when it is None; a call to
+    /// `Identity::write` with no text is an error.
     pub content: Option<String>,
 }
 
