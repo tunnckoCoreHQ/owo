@@ -503,11 +503,7 @@ fn from_client(msg: &mut Value, state: &Mutex<State>, setup: &Setup) -> Option<R
                     &mut st, setup, &session, &id, arg,
                 )));
             }
-            let user: Vec<&str> = prompt
-                .iter()
-                .filter(|b| b["type"] == "text")
-                .filter_map(|b| b["text"].as_str())
-                .collect();
+            let user: Vec<&str> = typed(prompt).collect();
             let user = user.join("\n");
             let identity = st.session(&session).identity.clone();
             let text = st
@@ -533,9 +529,45 @@ fn from_client(msg: &mut Value, state: &Mutex<State>, setup: &Setup) -> Option<R
     Some(Reply::Changed)
 }
 
-/// The argument of a `/owo` command in the first text block of a prompt.
+/// The text a person typed, from the text blocks of a prompt. A client such as T3 Code adds its
+/// own instructions as XML-like elements: the content of a `<user_request>` element is the
+/// typed text, and a block made only of other such elements is left out.
+fn typed(prompt: &[Value]) -> impl Iterator<Item = &str> {
+    prompt
+        .iter()
+        .filter(|b| b["type"] == "text")
+        .filter_map(|b| b["text"].as_str())
+        .filter_map(|text| match text.split_once("<user_request>") {
+            Some((_, rest)) => rest
+                .split_once("</user_request>")
+                .map(|(inner, _)| inner.trim()),
+            None => (!only_elements(text)).then_some(text),
+        })
+}
+
+/// True when the text is one or more `<some_name>...</some_name>` elements and nothing else.
+/// The name has an underscore, so a pasted HTML or XML snippet is not taken for one.
+fn only_elements(text: &str) -> bool {
+    let mut rest = text.trim();
+    let mut found = false;
+    while !rest.is_empty() {
+        let Some((name, _)) = rest.strip_prefix('<').and_then(|r| r.split_once('>')) else {
+            return false;
+        };
+        if !name.contains('_') || !name.chars().all(|c| c.is_ascii_lowercase() || c == '_') {
+            return false;
+        }
+        let Some((_, after)) = rest.split_once(&format!("</{name}>")) else {
+            return false;
+        };
+        (rest, found) = (after.trim_start(), true);
+    }
+    found
+}
+
+/// The argument of a `/owo` command in the first typed text of a prompt.
 fn command(prompt: &[Value]) -> Option<&str> {
-    let text = prompt.iter().find(|b| b["type"] == "text")?["text"].as_str()?;
+    let text = typed(prompt).next()?;
     let (name, arg) = text.split_once(char::is_whitespace).unwrap_or((text, ""));
     (name == "/owo").then_some(arg.trim())
 }

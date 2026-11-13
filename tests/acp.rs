@@ -587,3 +587,41 @@ fn an_agent_with_only_modes_gets_no_picker() {
     assert_eq!(parse(&got[1]), parse(&end(2)));
     p.finish();
 }
+
+#[test]
+fn text_a_client_adds_to_a_prompt_is_not_stored() {
+    let tmp = both();
+    let mut p = start(tmp.path(), &["-i", "nicole"], 0);
+    p.send(&init(), &[init_reply(json!({}))]);
+    p.open(
+        &request(1, "session/new", json!({ "cwd": "/w", "mcpServers": [] })),
+        &[response(1, json!({ "sessionId": "s" }))],
+        "s",
+        json!([picker("nicole", &["nicole", "reviewer"])]),
+    );
+    // T3 Code sends its instructions and the typed text in one block, then its own notes.
+    let first = "<t3_code_instructions>\nBe kind.\n</t3_code_instructions>\n\n<user_request>\nhello thea\n</user_request>";
+    let notes = "<runtime_info>You run in T3 Code.</runtime_info>\n\n<pull_request_linking>\nLink each PR.\n</pull_request_linking>";
+    p.send(
+        &prompt(2, "s", &[first, notes]),
+        &[chunk("s", Some("m1"), "hi"), end(2)],
+    );
+    p.send(
+        &prompt(3, "s", &["<b>bold</b> stays", notes]),
+        &[chunk("s", Some("m2"), "ok"), end(3)],
+    );
+    // The command is found inside the element too.
+    let wrapped = "<t3_code_instructions>x</t3_code_instructions>\n<user_request>\n/owo reviewer\n</user_request>";
+    let got = p.ask(&prompt(4, "s", &[wrapped, notes]), 3);
+    assert!(got[0].contains("now records into"), "{}", got[0]);
+    p.finish();
+    assert_eq!(
+        stored(tmp.path(), "s.nicole"),
+        [
+            turn("m1.user", "user", "hello thea"),
+            turn("m1", "assistant", "hi"),
+            turn("m2.user", "user", "<b>bold</b> stays"),
+            turn("m2", "assistant", "ok"),
+        ]
+    );
+}
