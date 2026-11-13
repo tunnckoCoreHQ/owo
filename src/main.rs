@@ -553,7 +553,8 @@ fn run(cli: &Cli, out: &Out) -> Result<i32> {
         Command::Changes { since, days } => {
             let (_, id) = load(cli)?;
             let since = since.clone().or_else(|| {
-                days.map(|d| (chrono::Utc::now() - chrono::Duration::days(d)).format("%Y-%m-%d"))
+                // The local day, which Git reads a plain --since day in.
+                days.map(|d| (chrono::Local::now() - chrono::Duration::days(d)).format("%Y-%m-%d"))
                     .map(|d| d.to_string())
             });
             let c = changes::changes(&id, since.as_deref())?;
