@@ -72,6 +72,8 @@ pub fn build(id: &Identity, req: &Request) -> Result<Context> {
     }
     for name in req.with {
         match crate::find::one(id, name) {
+            // A file already in the load set is loaded once.
+            Ok(i) if items.iter().any(|it| it.path == id.entries[i].rel) => {}
             Ok(i) => items.push(item(
                 "with",
                 &id.entries[i].rel,
@@ -98,10 +100,17 @@ pub fn build(id: &Identity, req: &Request) -> Result<Context> {
 
 pub fn render_paths(c: &Context) -> String {
     let mut out = String::new();
-    for it in &c.items {
+    // The Now block follows the core files, as in the text format.
+    let core = c.items.iter().take_while(|it| it.tier == "core").count();
+    for (n, it) in c.items.iter().enumerate() {
+        if n == core {
+            out.push_str("now      (generated block)\n");
+        }
         out.push_str(&format!("{:<8} {}  ({})\n", it.tier, it.path, it.reason));
     }
-    out.push_str("now      (generated block)\n");
+    if core == c.items.len() {
+        out.push_str("now      (generated block)\n");
+    }
     if let Some(kb) = &c.kb {
         out.push_str(&format!(
             "kb       {}{}\n",
