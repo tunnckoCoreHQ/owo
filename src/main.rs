@@ -10,17 +10,13 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 
 fn main() -> ExitCode {
-    // Exit quietly when stdout closes early (`owo search x | head`).
-    #[cfg(unix)]
-    unsafe {
-        libc::signal(libc::SIGPIPE, libc::SIG_DFL);
-    }
     let cli = Cli::parse();
-    // `owo mcp` and `owo acp` ignore the signal: a closed pipe is a write error there, not a kill.
+    // Exit quietly when stdout closes early (`owo search x | head`). `owo mcp` and `owo acp` keep
+    // the ignored signal: a closed pipe is a write error there, not a kill.
     #[cfg(unix)]
-    if matches!(cli.command, Command::Mcp { .. } | Command::Acp { .. }) {
+    if !matches!(cli.command, Command::Mcp { .. } | Command::Acp { .. }) {
         unsafe {
-            libc::signal(libc::SIGPIPE, libc::SIG_IGN);
+            libc::signal(libc::SIGPIPE, libc::SIG_DFL);
         }
     }
     let out = match &cli.command {
