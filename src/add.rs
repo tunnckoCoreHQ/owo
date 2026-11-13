@@ -97,7 +97,7 @@ pub fn add(id: &Identity, req: &Request) -> Result<(String, bool)> {
         &values,
     );
     if !req.aliases.is_empty() {
-        if !text.contains("aliases: []") {
+        if !text.contains("\naliases: []") {
             bail!("the {name} template has no `aliases: []` line for --alias");
         }
         let list = req
@@ -105,7 +105,7 @@ pub fn add(id: &Identity, req: &Request) -> Result<(String, bool)> {
             .iter()
             .map(|a| format!("\n  - \"{}\"", templates::yaml_escape(a)))
             .collect::<String>();
-        text = text.replacen("aliases: []", &format!("aliases:{list}"), 1);
+        text = text.replacen("\naliases: []", &format!("\naliases:{list}"), 1);
     }
     if let (Some(kb), Kind::Project) = (req.kb, req.kind) {
         if !text.contains("kb: \"\"") {
@@ -129,6 +129,7 @@ pub fn write(id: &Identity, rel: &str, text: &str) -> Result<bool> {
     }
     let parts: Option<Vec<&str>> = std::path::Path::new(rel)
         .components()
+        .filter(|c| *c != std::path::Component::CurDir)
         .map(|c| match c {
             std::path::Component::Normal(s) => s.to_str(),
             _ => None,

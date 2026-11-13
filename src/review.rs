@@ -258,6 +258,7 @@ pub fn done(id: &Identity, through: Option<NaiveDate>) -> Result<Value> {
             .entries
             .iter()
             .filter(|e| matches!(e.kind, Kind::Log | Kind::Event | Kind::Journal))
+            .filter(|e| !(e.kind == Kind::Log && e.is_blank()))
             .filter_map(|e| e.field_str("date"))
             .filter(|d| parse_day(d).is_ok())
             .max(),
@@ -293,7 +294,8 @@ pub fn soul_note(id: &Identity, file: &str, change: &str, evidence: &[String]) -
     let mut defining = false;
     for raw in evidence {
         let name = raw.trim().trim_start_matches("[[").trim_end_matches("]]");
-        let i = crate::find::one(id, name).context("evidence")?;
+        let target = name.split(['#', '|']).next().unwrap_or_default().trim();
+        let i = crate::find::one(id, target).context("evidence")?;
         let e = &id.entries[i];
         defining |= e.kind == Kind::Event && e.field("defining") == Some(&Value::Bool(true));
         if seen.insert(i) {

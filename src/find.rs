@@ -56,11 +56,23 @@ fn levenshtein(a: &str, b: &str) -> usize {
     prev[b.len()]
 }
 
+/// The identity-relative path of a name typed as a file path inside the identity folder
+/// (absolute, or relative to the working directory). Links in files never go through this.
+fn in_identity(id: &Identity, name: &str) -> Option<String> {
+    if !(name.contains('/') || name.ends_with(".md")) {
+        return None;
+    }
+    let path = std::fs::canonicalize(name.trim()).ok()?;
+    let dir = std::fs::canonicalize(&id.dir).ok()?;
+    let rel = path.strip_prefix(dir).ok()?;
+    Some(rel.to_string_lossy().replace('\\', "/"))
+}
+
 /// Resolves a name the way links do, optionally limited to one entry type.
 pub fn resolve(id: &Identity, name: &str, kind: Option<&str>) -> Resolution {
     let matches_kind = |i: &usize| kind.is_none_or(|k| id.entries[*i].kind.name() == k);
     let hits: Vec<usize> = id
-        .resolve_link(name)
+        .resolve_link(in_identity(id, name).as_deref().unwrap_or(name))
         .into_iter()
         .filter(matches_kind)
         .collect();

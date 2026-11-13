@@ -3,7 +3,7 @@
 //! slice to `<root>/sources/<slug>/` and an ingest prompt to `<root>/.owo/sessions/`.
 //! The host runs the ingest agent and then calls `done --until <n>` to move the bookmark.
 
-use crate::identity::{read_json, write_file, write_json};
+use crate::identity::{read_object, write_file, write_json};
 use anyhow::{bail, Context, Result};
 use serde::Serialize;
 use serde_json::{json, Value};
@@ -196,12 +196,7 @@ fn bookmark_path(root: &Path, session: &str) -> std::path::PathBuf {
 }
 
 fn read_bookmark(root: &Path, session: &str) -> Result<Value> {
-    let path = bookmark_path(root, session);
-    match read_json(&path) {
-        None => Ok(json!({})),
-        Some(doc) if doc.is_object() => Ok(doc),
-        Some(_) => bail!("{} is not a JSON object", path.display()),
-    }
+    Ok(read_object(&bookmark_path(root, session))?.unwrap_or_else(|| json!({})))
 }
 
 fn write_bookmark(root: &Path, session: &str, doc: &Value) -> Result<()> {

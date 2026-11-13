@@ -249,11 +249,11 @@ pub struct Identity {
 
 pub fn classify(rel: &str) -> Kind {
     let parts: Vec<&str> = rel.split('/').collect();
-    let name = *parts.last().unwrap_or(&"");
-    if name == "_index.md" || rel == "life/timeline.md" {
-        return Kind::Generated;
-    }
     match parts.as_slice() {
+        ["life" | "work", "_index.md"] | ["life", "timeline.md"] => Kind::Generated,
+        ["life", category, "_index.md"] if LIFE_CATEGORIES.iter().any(|(c, _)| c == category) => {
+            Kind::Generated
+        }
         ["soul", file] if SOUL_FILES.contains(file) => Kind::Soul,
         ["soul", "examples", _] => Kind::Example,
         ["work", "README.md"] => Kind::WorkReadme,
@@ -446,22 +446,6 @@ impl Identity {
     /// Resolves a link target to entry indexes. Tries the raw key (a path may end in `.md`),
     /// then its slug.
     pub fn resolve_link(&self, target: &str) -> Vec<usize> {
-        // A file path inside the identity folder (absolute, or relative to the working directory)
-        // resolves like its identity-relative path.
-        let looks_like_path = target.contains('/') || target.ends_with(".md");
-        let inside = looks_like_path
-            .then(|| fs::canonicalize(target.trim()).ok())
-            .flatten()
-            .and_then(|p| {
-                let dir = fs::canonicalize(&self.dir).ok()?;
-                Some(
-                    p.strip_prefix(dir)
-                        .ok()?
-                        .to_string_lossy()
-                        .replace('\\', "/"),
-                )
-            });
-        let target = inside.as_deref().unwrap_or(target);
         let raw = target.trim().to_lowercase();
         let raw = raw.strip_suffix(".md").unwrap_or(&raw).to_string();
         if let Some(hit) = self.keys.get(&raw) {
@@ -543,5 +527,8 @@ mod tests {
             Kind::Note
         );
         assert_eq!(classify("life/stuff/x.md"), Kind::Unknown);
+        assert_eq!(classify("life/stuff/_index.md"), Kind::Unknown);
+        assert_eq!(classify("soul/_index.md"), Kind::Unknown);
+        assert_eq!(classify("work/_index.md"), Kind::Generated);
     }
 }

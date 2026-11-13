@@ -31,7 +31,7 @@ Each module owns one job; `main.rs` parses arguments, dispatches each command, a
 
 `Identity::load` reads `identity.json` and the three state files, then walks the folder in file-name order and parses each `.md` file once.
 
-Path decides the kind: `life/events/x.md` is an event, `life/locations/<slug>/overview.md` a location, any other file in that folder a location detail, `_index.md` and `life/timeline.md` are generated. Files outside the layout get `Kind::Unknown`, which lint reports.
+Path decides the kind: `life/events/x.md` is an event, `life/locations/<slug>/overview.md` a location, any other file in that folder a location detail. The files `owo index` writes (`life/_index.md`, each life category `_index.md`, `work/_index.md` and `life/timeline.md`) are generated. Files outside the layout, an `_index.md` elsewhere included, get `Kind::Unknown`, which lint reports.
 
 `classify` in `identity.rs` maps a path to its kind, and `Kind::rel` beside it maps a kind back to the path `owo add` writes. A unit test checks that `classify` returns the same kind for the `Kind::rel` path of every type `owo add` creates.
 
@@ -39,4 +39,4 @@ Path decides the kind: `life/events/x.md` is an event, `life/locations/<slug>/ov
 
 Links resolve through one lowercase key map, built once in `Identity::load`, from titles, aliases, file stems (folder name for `overview.md`), identity-relative paths and soul file names.
 
-`resolve_link` tries the raw lowercase target, then its slug. Generated files are left out of the map, so links always land on authored entries.
+`resolve_link` tries the raw lowercase target, then its slug. Generated files are left out of the map, so links always land on authored entries. Only `find::resolve`, for a name typed on the command line, also accepts a file path, absolute or relative to the working directory. Links in files resolve through the key map alone, so lint gives the same result from any folder.

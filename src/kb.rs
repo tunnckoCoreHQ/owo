@@ -113,7 +113,7 @@ pub fn link(id: &Identity, target: &str) -> Option<Result<Link, String>> {
     let Some(kb) = root(id, project) else {
         return Some(Ok(out));
     };
-    let base = if kb.extension().is_some_and(|x| x == "md") {
+    let base = if kb.is_file() {
         kb.parent().map(Path::to_path_buf).unwrap_or(kb.clone())
     } else {
         kb.clone()

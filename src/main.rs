@@ -38,12 +38,15 @@ use serde_json::json;
 use std::process::ExitCode;
 
 fn main() -> ExitCode {
-    // Exit quietly when stdout closes early (`owo search x | head`).
-    #[cfg(unix)]
-    unsafe {
-        libc::signal(libc::SIGPIPE, libc::SIG_DFL);
-    }
     let cli = Cli::parse();
+    // Exit quietly when stdout closes early (`owo search x | head`). `owo mcp` keeps the ignored
+    // signal, so a tool child that closes its stdin early does not kill the server.
+    #[cfg(unix)]
+    if !matches!(cli.command, Command::Mcp { .. }) {
+        unsafe {
+            libc::signal(libc::SIGPIPE, libc::SIG_DFL);
+        }
+    }
     let out = Out {
         json: cli.json,
         quiet: cli.quiet,

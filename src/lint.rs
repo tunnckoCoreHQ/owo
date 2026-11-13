@@ -265,10 +265,7 @@ fn check_entry_schema(e: &Entry, out: &mut Vec<Diagnostic>) {
         }
         None => {
             let stem = e.stem_key();
-            if e.kind != Kind::Project
-                && !is_slug(&stem)
-                && !(e.kind == Kind::Location && file == "overview")
-            {
+            if !is_slug(&stem) && !(e.kind == Kind::Location && file == "overview") {
                 out.push(err(rel, format!("file name {stem:?} must be a slug")));
             }
         }

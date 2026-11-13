@@ -128,18 +128,21 @@ pub fn run(id: &Identity, check: bool) -> Result<Report> {
     if check || report.is_clean() {
         return Ok(report);
     }
+    // Read soul.json before any write, so a broken one fails the stamp with nothing recorded.
+    let soul = if soul_changed { bumped_soul(id)? } else { None };
     for (scope, doc) in docs {
         write_json(&id.dir.join(format!("{scope}/state.json")), &doc)?;
     }
-    if soul_changed {
-        bump_soul_version(id)?;
+    if let Some(soul) = soul {
+        write_json(&id.dir.join("soul/soul.json"), &soul)?;
     }
     Ok(report)
 }
 
-fn bump_soul_version(id: &Identity) -> Result<()> {
+/// `soul/soul.json` with its minor version bumped, or None when the file is missing.
+fn bumped_soul(id: &Identity) -> Result<Option<Value>> {
     let Some(mut soul) = id.read_object("soul/soul.json")? else {
-        return Ok(());
+        return Ok(None);
     };
     let version = soul
         .get("version")
@@ -152,7 +155,7 @@ fn bump_soul_version(id: &Identity) -> Result<()> {
         parts.get(1).copied().unwrap_or(0),
     );
     soul["version"] = json!(format!("{major}.{}.0", minor + 1));
-    write_json(&id.dir.join("soul/soul.json"), &soul)
+    Ok(Some(soul))
 }
 
 #[cfg(test)]

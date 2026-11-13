@@ -42,6 +42,8 @@ One slug function turns a name into a path segment: transliterate to ASCII, lowe
 
 Links are Obsidian-style wiki-links: `[[Title]]`, `[[Title|shown text]]`, `[[Title#Section]]`. Resolution is in [[architecture#Link resolution]].
 
+Links inside inline code or fenced code (fences of ` ``` ` or `~~~`) do not count. A backtick with no closing backtick on its line is plain text.
+
 Soul files link by name: `[[IDENTITY]]`, `[[SOUL]]`, `[[VOICE]]`, `[[LOOK]]`, `[[MEMORY]]`. Links into a project KB are `[[kb:<project>:<path>#<Section>]]`, resolved against the KB path in [[cli#Context]].
 
 ## Entry frontmatter
@@ -93,7 +95,7 @@ Each `state.json` has `files`: a map from scope-relative path to `{updated, hash
 
 `soul/state.json` adds `history` and `review`. Each history record is `{at, file, change, evidence}`, appended by `owo soul note`. The `review` object holds `last_reviewed`, `reviewed_through` and `memory_hash`; when MEMORY.md's hash differs from `memory_hash`, lint warns that MEMORY changed outside a review.
 
-Commands write JSON files through a temporary file and a rename. A command that rewrites a state file or `soul/soul.json` exits 1 when the file exists but does not parse or is not an object, so a broken file is never replaced with an empty one.
+Commands write JSON files through a temporary file and a rename. A command that rewrites a state file, `soul/soul.json` or a sync bookmark exits 1 when the file exists but does not parse or is not an object, so a broken file is never replaced with an empty one. `owo stamp` reads `soul/soul.json` before it writes a state file, so a broken one fails the stamp with nothing recorded.
 
 ## Generated files
 
