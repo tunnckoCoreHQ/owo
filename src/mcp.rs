@@ -246,15 +246,10 @@ fn argv(
     Ok((out, stdin))
 }
 
-fn call(params: &Value, cli: &crate::cli::Cli) -> Value {
-    let name = params["name"].as_str().unwrap_or_default();
+fn call(tool: &Tool, params: &Value, cli: &crate::cli::Cli) -> Value {
     let empty = Map::new();
     let args = params["arguments"].as_object().unwrap_or(&empty);
     let result = |text: String, error: bool| json!({ "content": [{ "type": "text", "text": text }], "isError": error });
-    let tools = tools();
-    let Some(tool) = tools.iter().find(|t| t.name == name) else {
-        return result(format!("unknown tool {name:?}"), true);
-    };
     let (argv, stdin) = match argv(tool, args, cli) {
         Ok(a) => a,
         Err(e) => return result(e, true),
@@ -292,6 +287,9 @@ fn call(params: &Value, cli: &crate::cli::Cli) -> Value {
 
 fn respond(id: &Value, method: &str, params: &Value, cli: &crate::cli::Cli) -> Option<Value> {
     let ok = |result: Value| Some(json!({ "jsonrpc": "2.0", "id": id, "result": result }));
+    let error = |code: i64, message: String| {
+        Some(json!({ "jsonrpc": "2.0", "id": id, "error": { "code": code, "message": message } }))
+    };
     match method {
         "initialize" => ok(json!({
             "protocolVersion": params["protocolVersion"].as_str().filter(|v| SUPPORTED.contains(v)).unwrap_or(PROTOCOL),
@@ -306,12 +304,14 @@ fn respond(id: &Value, method: &str, params: &Value, cli: &crate::cli::Cli) -> O
                 .map(|t| json!({ "name": t.name, "description": t.about, "inputSchema": schema(t) }))
                 .collect::<Vec<_>>()
         })),
-        "tools/call" => ok(call(params, cli)),
-        _ => Some(json!({
-            "jsonrpc": "2.0",
-            "id": id,
-            "error": { "code": -32601, "message": format!("method not found: {method}") },
-        })),
+        "tools/call" => {
+            let name = params["name"].as_str().unwrap_or_default();
+            match tools().iter().find(|t| t.name == name) {
+                Some(tool) => ok(call(tool, params, cli)),
+                None => error(-32602, format!("unknown tool {name:?}")),
+            }
+        }
+        _ => error(-32601, format!("method not found: {method}")),
     }
 }
 
