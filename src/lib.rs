@@ -55,8 +55,9 @@ pub struct Env {
     /// `XDG_CONFIG_HOME` and `XDG_DATA_HOME`, when set and not empty.
     pub xdg_config_home: Option<PathBuf>,
     pub xdg_data_home: Option<PathBuf>,
-    /// Text for `owo write` and `owo sync push` when they take no `--content` or `--turns`.
-    pub stdin: Option<std::io::Result<String>>,
+    /// Reads the text for `owo write` and `owo sync push` when they take no `--content` or
+    /// `--turns`. `run` calls it only when the command needs the text.
+    pub stdin: Option<Box<dyn FnOnce() -> std::io::Result<String>>>,
 }
 
 /// Runs one command and returns what it produced. `Command::Mcp` is a server and `Command::Acp`
@@ -97,9 +98,12 @@ fn load(cli: &Cli, env: &Env, out: &mut Out) -> Result<(config::Resolved, Identi
     Ok((r, id))
 }
 
-/// The stdin text `run` was given; empty when there is none.
+/// The stdin text, read now; empty when `run` was given no reader.
 fn stdin(env: &mut Env) -> Result<String> {
-    Ok(env.stdin.take().unwrap_or_else(|| Ok(String::new()))?)
+    Ok(env
+        .stdin
+        .take()
+        .map_or_else(|| Ok(String::new()), |read| read())?)
 }
 
 /// Runs `sync start` or `sync push` with the shared identity, project and run size.

@@ -5,7 +5,7 @@ mod acp;
 mod mcp;
 
 use clap::Parser;
-use owo::{Cli, Command, Output, SyncAction};
+use owo::{Cli, Command, Output};
 use std::path::PathBuf;
 use std::process::ExitCode;
 
@@ -38,10 +38,7 @@ fn main() -> ExitCode {
             Ok(code) => return ExitCode::from(code),
             Err(e) => Output::from(e),
         },
-        _ => owo::run(
-            &cli,
-            env(&cli, || std::io::read_to_string(std::io::stdin())),
-        ),
+        _ => owo::run(&cli, env(|| std::io::read_to_string(std::io::stdin()))),
     };
     match usage(&out) {
         // clap prints its own error, so it keeps its colour on a terminal.
@@ -58,16 +55,9 @@ fn main() -> ExitCode {
     ExitCode::from(out.code as u8)
 }
 
-/// The environment values `owo::run` uses, and `stdin` read only for a command that takes it.
-fn env(cli: &Cli, stdin: impl FnOnce() -> std::io::Result<String>) -> owo::Env {
+/// The environment values `owo::run` uses. `stdin` reads the stdin text when a command needs it.
+fn env(stdin: impl FnOnce() -> std::io::Result<String> + 'static) -> owo::Env {
     let non_empty = |key: &str| std::env::var(key).ok().filter(|v| !v.is_empty());
-    let reads_stdin = matches!(
-        &cli.command,
-        Command::Write { content: None, .. }
-            | Command::Sync {
-                action: SyncAction::Push { turns: None, .. }
-            }
-    );
     owo::Env {
         owo_root: non_empty("OWO_ROOT"),
         owo_identity: non_empty("OWO_IDENTITY"),
@@ -76,7 +66,7 @@ fn env(cli: &Cli, stdin: impl FnOnce() -> std::io::Result<String>) -> owo::Env {
         home: std::env::var_os("HOME").map(PathBuf::from),
         xdg_config_home: non_empty("XDG_CONFIG_HOME").map(PathBuf::from),
         xdg_data_home: non_empty("XDG_DATA_HOME").map(PathBuf::from),
-        stdin: reads_stdin.then(stdin),
+        stdin: Some(Box::new(stdin)),
     }
 }
 
@@ -99,7 +89,7 @@ fn global_args(cli: &Cli, identity: Option<String>, project: Option<String>) -> 
 /// with `stdin` as the stdin text.
 fn run_argv(argv: Vec<String>, stdin: String) -> Result<(Cli, Output), clap::Error> {
     let cli = Cli::try_parse_from(std::iter::once("owo".into()).chain(argv))?;
-    let out = owo::run(&cli, env(&cli, || Ok(stdin)));
+    let out = owo::run(&cli, env(|| Ok(stdin)));
     Ok((cli, out))
 }
 
