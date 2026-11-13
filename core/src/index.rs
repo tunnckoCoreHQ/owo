@@ -180,17 +180,21 @@ pub fn write(identity: &Identity) -> anyhow::Result<Vec<String>> {
     write_as(identity, &identity.dir)
 }
 
-/// Like `write`, but error text names the identity folder as `shown`.
+/// Like `write`, but error text names the identity folder as `shown`. Writes all files or none.
 pub fn write_as(identity: &Identity, shown: &std::path::Path) -> anyhow::Result<Vec<String>> {
-    let mut written = vec![];
-    for (rel, content) in generate(identity) {
-        let path = identity.dir.join(&rel);
-        if fs::read_to_string(&path).ok().as_deref() != Some(content.as_str()) {
-            crate::identity::write_file_as(&path, &shown.join(&rel), content)?;
-            written.push(rel);
-        }
-    }
-    Ok(written)
+    let stale: Vec<(String, String)> = generate(identity)
+        .into_iter()
+        .filter(|(rel, content)| {
+            fs::read_to_string(identity.dir.join(rel)).ok().as_deref() != Some(content.as_str())
+        })
+        .collect();
+    stale
+        .iter()
+        .fold(crate::write::Writes::new(), |w, (rel, content)| {
+            w.file(identity.dir.join(rel), shown.join(rel), content.as_str())
+        })
+        .commit()?;
+    Ok(stale.into_iter().map(|(rel, _)| rel).collect())
 }
 
 /// Generated paths whose file content differs from what `generate` produces.

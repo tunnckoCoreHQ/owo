@@ -1,12 +1,12 @@
 //! `owo add`: creates one entry from its template at its deterministic path.
 
-use crate::identity::{write_file, Identity, Kind};
+use crate::identity::{Identity, Kind};
 use crate::slug::slugify;
 use crate::templates;
+use crate::write::{self, Writes};
 use crate::Fault;
 use anyhow::{bail, Context, Result};
 use std::collections::BTreeMap;
-use std::fs;
 
 use crate::AddRequest as Request;
 
@@ -139,10 +139,13 @@ pub fn add(id: &Identity, req: &Request, project: Option<&str>) -> Result<(Strin
         let kb = templates::yaml_escape(kb);
         text = text.replacen("kb: \"\"", &format!("kb: \"{kb}\""), 1);
     }
-    write_file(&path, text)?;
-    if req.kind == Kind::Project {
-        fs::create_dir_all(path.with_file_name("notes"))?;
+    let notes = path.with_file_name("notes");
+    let writes = Writes::new().file(&path, &path, text);
+    match req.kind {
+        Kind::Project => writes.dir(&notes, &notes),
+        _ => writes,
     }
+    .commit()?;
     Ok((rel, true))
 }
 
@@ -172,6 +175,6 @@ pub fn write(id: &Identity, rel: &str, text: &str) -> Result<bool> {
     }
     let file = id.dir.join(&clean);
     let created = !file.exists();
-    write_file(&file, text)?;
+    write::file(&file, text)?;
     Ok(created)
 }

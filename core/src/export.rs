@@ -2,6 +2,7 @@
 
 use crate::identity::{Entry, Identity, Kind};
 use crate::markdown;
+use crate::write::Writes;
 use anyhow::{bail, Result};
 use serde_json::{json, Value};
 use std::fs;
@@ -287,7 +288,7 @@ pub fn write_card(
     png: Option<&Path>,
 ) -> Result<()> {
     let Some(png) = png else {
-        return crate::identity::write_json_as(out, shown, main);
+        return Writes::new().json(out, shown, main)?.commit();
     };
     let avatar = fs::read(png)?;
     let image = if main["spec"] == "chara_card_v3" {
@@ -296,8 +297,7 @@ pub fn write_card(
     } else {
         embed_png(&avatar, &[("chara", main)])?
     };
-    fs::write(out, image)?;
-    Ok(())
+    Writes::new().file(out, shown, image).commit()
 }
 
 pub struct Report {
@@ -324,35 +324,39 @@ pub fn soulspec(id: &Identity, dir: &Path, shown: &Path) -> Result<Report> {
     }
     manifest["files"]["style"] = json!("STYLE.md");
     manifest["files"]["memory"] = json!("MEMORY.md");
-    fs::create_dir_all(dir.join("examples"))?;
-    crate::identity::write_json_as(&dir.join("soul.json"), &shown.join("soul.json"), &manifest)?;
-    let mut files = vec!["soul.json".to_string()];
-    let mut write = |rel: &str, body: String| -> Result<()> {
-        fs::write(dir.join(rel), body)?;
-        files.push(rel.to_string());
-        Ok(())
-    };
     let read = |rel: &str| fs::read_to_string(soul.join(rel)).unwrap_or_default();
-    write("SOUL.md", read("SOUL.md"))?;
     let look = text(id, "soul/LOOK.md");
     let mut identity = read("IDENTITY.md").trim_end().to_string();
     if !look.is_empty() {
         identity.push_str(&format!("\n\n## Look\n\n{}", markdown::demote(&look)));
     }
-    write("IDENTITY.md", format!("{identity}\n"))?;
-    write(
-        "STYLE.md",
-        read("VOICE.md").replacen("# Voice", "# Style", 1),
-    )?;
-    write("MEMORY.md", read("MEMORY.md"))?;
+    let mut parts = vec![
+        ("SOUL.md".to_string(), read("SOUL.md")),
+        ("IDENTITY.md".into(), format!("{identity}\n")),
+        (
+            "STYLE.md".into(),
+            read("VOICE.md").replacen("# Voice", "# Style", 1),
+        ),
+        ("MEMORY.md".into(), read("MEMORY.md")),
+    ];
     for name in ["good.md", "bad.md", "greetings.md"] {
-        if soul.join("examples").join(name).is_file() {
-            write(
-                &format!("examples/{name}"),
-                read(&format!("examples/{name}")),
-            )?;
+        let rel = format!("examples/{name}");
+        if soul.join(&rel).is_file() {
+            parts.push((rel.clone(), read(&rel)));
         }
     }
+    parts
+        .iter()
+        .fold(
+            Writes::new()
+                .dir(dir.join("examples"), shown.join("examples"))
+                .json(dir.join("soul.json"), shown.join("soul.json"), &manifest)?,
+            |w, (rel, body)| w.file(dir.join(rel), shown.join(rel), body.as_str()),
+        )
+        .commit()?;
+    let files = std::iter::once("soul.json".to_string())
+        .chain(parts.into_iter().map(|(rel, _)| rel))
+        .collect();
     Ok(Report { files, warnings })
 }
 
@@ -415,9 +419,7 @@ Add `--look` when visuals matter.
             about.trim_end_matches('.')
         )),
     );
-    fs::create_dir_all(dir)?;
-    fs::write(dir.join("SKILL.md"), text)?;
-    Ok(())
+    crate::write::file(&dir.join("SKILL.md"), text)
 }
 
 fn crc32(bytes: &[u8]) -> u32 {

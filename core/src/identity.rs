@@ -341,34 +341,6 @@ pub fn read_object(path: &Path) -> Result<Option<Json>> {
     Ok(Some(doc))
 }
 
-/// Writes pretty JSON with a trailing newline through a temporary file and a rename, so a
-/// killed write never leaves a cut-off file.
-pub fn write_json(path: &Path, doc: &Json) -> Result<()> {
-    write_json_as(path, path, doc)
-}
-
-/// Like `write_json`, but error text names `shown`, the path as the request gave it.
-pub fn write_json_as(path: &Path, shown: &Path, doc: &Json) -> Result<()> {
-    let text = format!("{}\n", serde_json::to_string_pretty(doc)?);
-    let tmp = path.with_extension("json.tmp");
-    write_file_as(&tmp, &shown.with_extension("json.tmp"), text)?;
-    fs::rename(&tmp, path).with_context(|| format!("writing {}", shown.display()))
-}
-
-/// Writes a file, creating its folders first.
-pub fn write_file(path: &Path, text: impl AsRef<[u8]>) -> Result<()> {
-    write_file_as(path, path, text)
-}
-
-/// Like `write_file`, but error text names `shown`, the path as the request gave it.
-pub fn write_file_as(path: &Path, shown: &Path, text: impl AsRef<[u8]>) -> Result<()> {
-    if let Some(dir) = path.parent() {
-        let shown_dir = shown.parent().unwrap_or(shown);
-        fs::create_dir_all(dir).with_context(|| format!("creating {}", shown_dir.display()))?;
-    }
-    fs::write(path, text).with_context(|| format!("writing {}", shown.display()))
-}
-
 impl Identity {
     pub fn load(root: &Path, slug: &str) -> Result<Self> {
         let dir = root.join(slug);

@@ -231,7 +231,7 @@ fn migrate_locations(
         }
         let stem = from.file_stem().map(|s| s.to_string_lossy().into_owned());
         let stem = stem.unwrap_or_default();
-        crate::identity::write_file(
+        crate::write::file(
             &target,
             normalize(text, kind, &stem, None, parent, today, slug),
         )?;
@@ -360,7 +360,7 @@ fn fill(src: &Path, refs: &Path, root: &Path, slug: &str, manifest: &Value) -> R
     for (from, to) in SOUL {
         let p = refs.join("soul").join(from);
         if p.is_file() {
-            fs::copy(&p, dir.join("soul").join(to))?;
+            crate::write::file(&dir.join("soul").join(to), fs::read(&p)?)?;
             r.moved.push((rel(&p), format!("soul/{to}")));
         }
     }
@@ -373,7 +373,7 @@ fn fill(src: &Path, refs: &Path, root: &Path, slug: &str, manifest: &Value) -> R
         if let Some(h) = old.get("history").filter(|h| h.is_array()) {
             doc["history"] = h.clone();
         }
-        crate::identity::write_json(&path, &doc)?;
+        crate::write::json(&path, &doc)?;
         r.moved.push((
             "references/soul/state.json".into(),
             "soul/state.json (history)".into(),
@@ -388,7 +388,7 @@ fn fill(src: &Path, refs: &Path, root: &Path, slug: &str, manifest: &Value) -> R
         {
             doc["accounts"] = acc.clone();
         }
-        crate::identity::write_json(&path, &doc)?;
+        crate::write::json(&path, &doc)?;
         if refs.join("manifest.json").is_file() {
             r.moved
                 .push(("references/manifest.json".into(), "identity.json".into()));
@@ -473,7 +473,7 @@ fn fill(src: &Path, refs: &Path, root: &Path, slug: &str, manifest: &Value) -> R
                 ));
                 continue;
             }
-            fs::write(
+            crate::write::file(
                 &target,
                 normalize(
                     &text,
@@ -513,8 +513,8 @@ fn fill(src: &Path, refs: &Path, root: &Path, slug: &str, manifest: &Value) -> R
                 title.trim(),
                 body.trim()
             );
-            fs::write(
-                dir.join(&file),
+            crate::write::file(
+                &dir.join(&file),
                 normalize(&doc, "conflict", &name, None, None, &today, slug),
             )?;
             r.moved
@@ -542,8 +542,7 @@ fn fill(src: &Path, refs: &Path, root: &Path, slug: &str, manifest: &Value) -> R
             ));
             continue;
         }
-        fs::create_dir_all(target.parent().expect("has parent"))?;
-        fs::copy(e.path(), &target)?;
+        crate::write::file(&target, fs::read(e.path())?)?;
         r.moved
             .push((rel(e.path()), format!("<root>/sources/{slug}/{name}")));
     }

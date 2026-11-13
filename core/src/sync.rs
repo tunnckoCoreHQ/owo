@@ -3,7 +3,8 @@
 //! slice to `<root>/sources/<slug>/` and an ingest prompt to `<root>/.owo/sessions/`.
 //! The host runs the ingest agent and then calls `done --until <n>` to move the bookmark.
 
-use crate::identity::{read_object, write_file, write_json};
+use crate::identity::read_object;
+use crate::write::Writes;
 use crate::Fault;
 use anyhow::{bail, Context, Result};
 use serde::{Deserialize, Serialize};
@@ -202,20 +203,37 @@ fn check_session(session: &str) -> Result<()> {
 }
 
 /// Holds `<root>/.owo/sessions/<id>.lock` while one sync step reads and writes the bookmark,
-/// so parallel calls for one session run one after the other.
-struct Lock(PathBuf);
+/// so parallel calls for one session run one after the other. The folders it made go when the
+/// lock goes and they are empty, so a failed step leaves none.
+struct Lock {
+    path: PathBuf,
+    _made: Made,
+}
+
+/// Folders a lock made, deepest first, removed when they are empty again.
+struct Made(Vec<PathBuf>);
+
+impl Drop for Made {
+    fn drop(&mut self) {
+        for dir in &self.0 {
+            let _ = fs::remove_dir(dir);
+        }
+    }
+}
 
 impl Lock {
     fn take(root: &Path, session: &str) -> Result<Lock> {
         let path = root.join(".owo/sessions").join(format!("{session}.lock"));
-        fs::create_dir_all(path.parent().expect("has parent"))?;
+        let dir = path.parent().expect("has parent");
+        let made = Made(crate::write::missing(dir));
+        fs::create_dir_all(dir)?;
         for _ in 0..100 {
             match fs::OpenOptions::new()
                 .write(true)
                 .create_new(true)
                 .open(&path)
             {
-                Ok(_) => return Ok(Lock(path)),
+                Ok(_) => return Ok(Lock { path, _made: made }),
                 Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
                     // A lock older than a minute belongs to a process that ended without cleanup.
                     let stale = fs::metadata(&path)
@@ -240,7 +258,7 @@ impl Lock {
 
 impl Drop for Lock {
     fn drop(&mut self) {
-        let _ = fs::remove_file(&self.0);
+        let _ = fs::remove_file(&self.path);
     }
 }
 
@@ -252,8 +270,9 @@ fn read_bookmark(root: &Path, session: &str) -> Result<Value> {
     Ok(read_object(&bookmark_path(root, session))?.unwrap_or_else(|| json!({})))
 }
 
-fn write_bookmark(root: &Path, session: &str, doc: &Value) -> Result<()> {
-    write_json(&bookmark_path(root, session), doc)
+fn bookmark_writes(root: &Path, session: &str, doc: &Value) -> Result<Writes> {
+    let path = bookmark_path(root, session);
+    Writes::new().json(&path, &path, doc)
 }
 
 /// The file that `push` stores turns in, relative to the root.
@@ -271,7 +290,9 @@ pub fn start(req: &StartRequest, transcript: &Path, format: Format) -> Result<St
     }
     let raw = fs::read_to_string(req.cwd.join(transcript))
         .with_context(|| format!("reading {}", transcript.display()))?;
-    run(req, transcript, &raw, format)
+    let (out, writes) = run(req, transcript, &raw, format)?;
+    writes.commit()?;
+    Ok(out)
 }
 
 /// One turn a host pushes: its id (the host's id for the message), role and text.
@@ -372,10 +393,11 @@ pub fn push(req: &StartRequest, turns: &[Turn]) -> Result<Start> {
             added += 1;
         }
     }
-    let tmp = file.with_extension("jsonl.tmp");
-    write_file(&tmp, &stored)?;
-    fs::rename(&tmp, &file)?;
-    let mut out = run(req, &file, &stored, Format::Jsonl)?;
+    let (mut out, writes) = run(req, &file, &stored, Format::Jsonl)?;
+    Writes::new()
+        .file(&file, &file, stored)
+        .and(writes)
+        .commit()?;
     out.added = Some(added);
     if let (Some(source), Some(prompt)) = (&out.source, &out.prompt) {
         out.source_text = Some(fs::read_to_string(req.root.join(source))?);
@@ -386,7 +408,12 @@ pub fn push(req: &StartRequest, turns: &[Turn]) -> Result<Start> {
 
 /// Parses `raw`, the text of `transcript`, decides whether a run is due and writes the slice
 /// and prompt. The caller holds the session lock.
-fn run(req: &StartRequest, transcript: &Path, raw: &str, format: Format) -> Result<Start> {
+fn run(
+    req: &StartRequest,
+    transcript: &Path,
+    raw: &str,
+    format: Format,
+) -> Result<(Start, Writes)> {
     let messages = parse(raw, format)?;
     if messages.is_empty() && !raw.trim().is_empty() {
         return Err(Fault::NoMessages {
@@ -441,6 +468,7 @@ fn run(req: &StartRequest, transcript: &Path, raw: &str, format: Format) -> Resu
     if !due {
         out.pending = doc["pending"]["prompt"].as_str().map(str::to_string);
     }
+    let mut writes = Writes::new();
     if due {
         let date = crate::state::now()[..10].to_string();
         let source = format!(
@@ -455,7 +483,8 @@ fn run(req: &StartRequest, transcript: &Path, raw: &str, format: Format) -> Resu
                     .unwrap_or_default();
             body.push_str(&format!("\n## {} {}{id}\n\n{}\n", from + i, m.role, m.text));
         }
-        write_file(&req.root.join(&source), body)?;
+        let slice = req.root.join(&source);
+        writes = writes.file(&slice, &slice, body);
         let prompt = format!(".owo/sessions/{}.prompt.md", req.session);
         let project = req
             .project
@@ -473,14 +502,17 @@ fn run(req: &StartRequest, transcript: &Path, raw: &str, format: Format) -> Resu
             cite = source.trim_start_matches("sources/"),
             session = req.session,
         );
-        write_file(&req.root.join(&prompt), text)?;
+        let file = req.root.join(&prompt);
+        writes = writes.file(&file, &file, text);
         doc["pending"] =
             json!({ "from": from, "until": until, "source": source, "prompt": prompt });
         out.source = Some(source);
         out.prompt = Some(prompt);
     }
-    write_bookmark(req.root, req.session, &doc)?;
-    Ok(out)
+    Ok((
+        out,
+        writes.and(bookmark_writes(req.root, req.session, &doc)?),
+    ))
 }
 
 pub fn done(root: &Path, session: &str, until: usize) -> Result<Bookmark> {
@@ -510,6 +542,6 @@ pub fn done(root: &Path, session: &str, until: usize) -> Result<Bookmark> {
     }
     let bookmark = Bookmark::deserialize(&doc)
         .with_context(|| format!("the bookmark of session {session:?} does not parse"))?;
-    write_bookmark(root, session, &doc)?;
+    bookmark_writes(root, session, &doc)?.commit()?;
     Ok(bookmark)
 }

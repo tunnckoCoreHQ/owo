@@ -1,6 +1,7 @@
 //! `owo new`: creates an identity folder from the embedded templates.
 
 use crate::identity::{Identity, LIFE_CATEGORIES};
+use crate::write::Writes;
 use crate::{index, state, templates};
 use anyhow::{bail, Context, Result};
 use std::collections::BTreeMap;
@@ -48,23 +49,35 @@ fn fill(root: &Path, shown: &Path, name: &str, slug: &str) -> Result<Vec<String>
     values.insert("slug", slug.to_string());
     values.insert("today", crate::state::today());
 
-    let mut files = vec![];
-    for (rel, builtin) in templates::IDENTITY_FILES {
-        let text = templates::fill(&templates::get(root, rel, builtin), &values);
-        crate::identity::write_file_as(&dir.join(rel), &shown.join(rel), text)?;
-        files.push(rel.to_string());
-    }
-    for (category, _) in LIFE_CATEGORIES {
-        fs::create_dir_all(dir.join("life").join(category))?;
-    }
-    fs::create_dir_all(dir.join("work/projects"))?;
+    let folders = LIFE_CATEGORIES
+        .iter()
+        .map(|(category, _)| format!("life/{category}"))
+        .chain(["work/projects".to_string()]);
+    let writes = folders.fold(Writes::new(), |w, rel| {
+        w.dir(dir.join(&rel), shown.join(&rel))
+    });
+    templates::IDENTITY_FILES
+        .iter()
+        .fold(writes, |w, (rel, builtin)| {
+            let text = templates::fill(&templates::get(root, rel, builtin), &values);
+            w.file(dir.join(rel), shown.join(rel), text)
+        })
+        .commit()?;
+    let mut files: Vec<String> = templates::IDENTITY_FILES
+        .iter()
+        .map(|(rel, _)| rel.to_string())
+        .collect();
 
     let identity = Identity::load(root, slug)?;
     files.extend(index::write_as(&identity, shown)?);
-    for (rel, value) in state::initial(&identity, &state::now()) {
-        crate::identity::write_json_as(&dir.join(&rel), &shown.join(&rel), &value)?;
-        files.push(rel);
-    }
+    let states = state::initial(&identity, &state::now());
+    states
+        .iter()
+        .try_fold(Writes::new(), |w, (rel, value)| {
+            w.json(dir.join(rel), shown.join(rel), value)
+        })?
+        .commit()?;
+    files.extend(states.into_iter().map(|(rel, _)| rel));
     files.sort();
     Ok(files)
 }

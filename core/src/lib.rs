@@ -39,6 +39,7 @@ mod state;
 mod status;
 mod sync;
 mod templates;
+mod write;
 
 pub use changes::{Change, Changes};
 pub use config::{Resolved, Source};
@@ -110,6 +111,12 @@ pub fn slug(req: &SlugRequest) -> Result<String> {
     Ok(value)
 }
 
+/// `path` as valid UTF-8 text, each run of bytes that is not UTF-8 replaced by U+FFFD, so every
+/// caller gets the same path for the same argument.
+fn utf8(path: &Path) -> PathBuf {
+    PathBuf::from(path.to_string_lossy().into_owned())
+}
+
 /// The names of the entry types `add` creates.
 pub fn entry_types() -> impl Iterator<Item = &'static str> {
     templates::ENTRY_TEMPLATES.iter().map(|(n, _)| *n)
@@ -119,7 +126,7 @@ pub fn entry_types() -> impl Iterator<Item = &'static str> {
 /// join onto `cwd`, the caller's folder.
 pub fn migrate_v1(req: &MigrateRequest, cwd: &Path) -> Result<MigrateReport> {
     req.check()?;
-    Ok(migrate::v1(cwd, &req.path, &req.out)?)
+    Ok(migrate::v1(cwd, &utf8(&req.path), &utf8(&req.out))?)
 }
 
 /// One template: its name and its override file in `<root>/.templates/`, when there is one.
@@ -290,7 +297,7 @@ impl SessionSync<'_> {
         req.check()?;
         Ok(sync::start(
             &self.request(&req.session, &req.options),
-            &req.transcript,
+            &utf8(&req.transcript),
             req.format,
         )?)
     }
@@ -495,15 +502,15 @@ impl Identity {
         let scenario = req.scenario.as_deref();
         let card = export::card(self, req.spec, project, scenario)?;
         let warnings = export::warnings(&card);
-        if let Some(out) = &req.out {
-            let png = req.png.as_ref().map(|p| self.cwd.join(p));
+        if let Some(out) = req.out.as_deref().map(utf8) {
+            let png = req.png.as_deref().map(|p| self.cwd.join(utf8(p)));
             export::write_card(
                 self,
                 &card,
                 project,
                 scenario,
-                &self.cwd.join(out),
-                out,
+                &self.cwd.join(&out),
+                &out,
                 png.as_deref(),
             )?;
         }
@@ -513,13 +520,15 @@ impl Identity {
     /// Writes a SKILL.md wrapper into `req.out` and returns its path, as `req.out` gives it.
     pub fn export_skill(&self, req: &SkillRequest) -> Result<String> {
         req.check()?;
-        export::skill(self, &self.cwd.join(&req.out))?;
-        Ok(req.out.join("SKILL.md").display().to_string())
+        let out = utf8(&req.out);
+        export::skill(self, &self.cwd.join(&out))?;
+        Ok(out.join("SKILL.md").display().to_string())
     }
 
     /// Writes a SoulSpec package into `req.out`.
     pub fn export_soulspec(&self, req: &SoulspecRequest) -> Result<Soulspec> {
         req.check()?;
-        Ok(export::soulspec(self, &self.cwd.join(&req.out), &req.out)?)
+        let out = utf8(&req.out);
+        Ok(export::soulspec(self, &self.cwd.join(&out), &out)?)
     }
 }

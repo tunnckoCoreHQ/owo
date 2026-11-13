@@ -1,7 +1,7 @@
 //! `owo review` (the packet the review skill compiles MEMORY from), `owo review done`,
 //! and the soul history: `owo soul note`, `owo soul history`.
 
-use crate::identity::{write_json, Identity, Kind};
+use crate::identity::{Identity, Kind};
 use crate::state::parse_day;
 use crate::status::Link;
 use anyhow::{bail, Context, Result};
@@ -206,7 +206,7 @@ pub fn done(id: &Identity, through: Option<NaiveDate>) -> Result<ReviewRecord> {
         memory_hash: memory,
     };
     doc["review"] = serde_json::to_value(&review)?;
-    write_json(&id.dir.join("soul/state.json"), &doc)?;
+    crate::write::json(&id.dir.join("soul/state.json"), &doc)?;
     Ok(review)
 }
 
@@ -319,7 +319,7 @@ pub fn soul_note(id: &Identity, file: &str, change: &str, evidence: &[String]) -
         Some(h) => h.push(value),
         None => doc["history"] = json!([value]),
     }
-    write_json(&id.dir.join("soul/state.json"), &doc)?;
+    crate::write::json(&id.dir.join("soul/state.json"), &doc)?;
     Ok(Note { record, warning })
 }
 

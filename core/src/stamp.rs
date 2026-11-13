@@ -2,12 +2,12 @@
 //! Timestamps move only when a file's hash changed. Changed entries get today's
 //! `updated:` date in frontmatter; a changed soul file bumps the soul.json minor version.
 
-use crate::identity::{write_json, Identity, Kind};
+use crate::identity::{Identity, Kind};
 use crate::state::{self, hash, scope_of, SCOPES};
-use anyhow::{bail, Context, Result};
+use crate::write::Writes;
+use anyhow::{bail, Result};
 use regex::Regex;
 use serde_json::{json, Map, Value};
-use std::fs;
 
 #[derive(Default, serde::Serialize)]
 pub struct Report {
@@ -132,15 +132,19 @@ pub fn run(id: &Identity, check: bool) -> Result<Report> {
     }
     // Read soul.json before any write, so a broken one fails the stamp with nothing recorded.
     let soul = if soul_changed { bumped_soul(id)? } else { None };
-    for (rel, text) in touched {
-        fs::write(id.dir.join(&rel), text).with_context(|| format!("writing {rel}"))?;
+    let writes = touched.into_iter().fold(Writes::new(), |w, (rel, text)| {
+        w.file(id.dir.join(&rel), rel, text)
+    });
+    let writes = docs.iter().try_fold(writes, |w, (scope, doc)| {
+        let path = id.dir.join(format!("{scope}/state.json"));
+        w.json(&path, &path, doc)
+    })?;
+    let path = id.dir.join("soul/soul.json");
+    match soul {
+        Some(soul) => writes.json(&path, &path, &soul)?,
+        None => writes,
     }
-    for (scope, doc) in docs {
-        write_json(&id.dir.join(format!("{scope}/state.json")), &doc)?;
-    }
-    if let Some(soul) = soul {
-        write_json(&id.dir.join("soul/soul.json"), &soul)?;
-    }
+    .commit()?;
     Ok(report)
 }
 

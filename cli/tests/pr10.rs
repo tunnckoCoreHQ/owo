@@ -239,16 +239,17 @@ fn pr10_multi_value_array_names_the_field_type() {
     assert!(text.contains("paths, text"), "{text}");
 }
 
-// macOS file systems refuse a name that is not UTF-8, so the bytes cannot reach owo there.
+// macOS file systems refuse a name that is not UTF-8, so the bytes cannot reach owo there. The
+// core reads the bytes as UTF-8 text, so it finds the folder and the file of that name.
 #[cfg(all(unix, not(target_os = "macos")))]
 #[test]
-fn pr10_cli_keeps_raw_path_bytes() {
+fn pr10_core_turns_a_non_utf8_path_into_utf8_text() {
     use std::ffi::OsStr;
     use std::os::unix::ffi::OsStrExt;
     let tmp = setup();
     let work = tmp.path().join("work");
     let bad = |s: &[u8]| OsStr::from_bytes(s).to_os_string();
-    v1(&work.join(bad(b"v1\xff")));
+    v1(&work.join("v1\u{FFFD}"));
     let out = owo(&tmp.path().join("ids"))
         .current_dir(&work)
         .args(["migrate", "v1"])
@@ -262,7 +263,7 @@ fn pr10_cli_keeps_raw_path_bytes() {
         String::from_utf8_lossy(&out.stderr)
     );
     assert!(work.join("root/lumen/identity.json").is_file());
-    transcript(&work.join(bad(b"t\xff.jsonl")));
+    transcript(&work.join("t\u{FFFD}.jsonl"));
     let out = owo(&tmp.path().join("ids"))
         .current_dir(&work)
         .args([
