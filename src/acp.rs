@@ -132,6 +132,13 @@ pub fn serve(cli: &owo::Cli, agent: &[String], mcp: bool) -> Result<u8> {
         let _ = child.kill();
     }
     let status = child.wait()?;
+    // The agent is gone: store the turns it left open.
+    for (session, open) in state.lock().unwrap().turns.drain() {
+        let left: Vec<Value> = open.into_iter().flat_map(turns).collect();
+        if !left.is_empty() {
+            let _ = store.send((session, left));
+        }
+    }
     drop(store);
     let _ = storer.join();
     copied?;
