@@ -109,22 +109,29 @@ pub fn serve(cli: &owo::Cli, agent: &[String], mcp: bool) -> Result<u8> {
         }
     });
 
-    // Agent to client. The state changes before the line is written, so the client's next
-    // request already sees them.
-    let mut stdout = std::io::stdout().lock();
-    let mut line = vec![];
-    while from_agent.read_until(b'\n', &mut line)? > 0 {
-        let job = inject.as_ref().and_then(|_| from_agent_line(&line, &state));
-        stdout.write_all(&line)?;
-        stdout.flush()?;
-        if let Some(job) = job {
-            let _ = store.send(job);
+    // Agent to client. The state changes, and a finished turn goes to the store, before the
+    // line is written, so the client's next request already sees them.
+    let copied = (|| -> std::io::Result<()> {
+        let mut stdout = std::io::stdout().lock();
+        let mut line = vec![];
+        while from_agent.read_until(b'\n', &mut line)? > 0 {
+            if let Some(job) = inject.as_ref().and_then(|_| from_agent_line(&line, &state)) {
+                let _ = store.send(job);
+            }
+            stdout.write_all(&line)?;
+            stdout.flush()?;
+            line.clear();
         }
-        line.clear();
+        Ok(())
+    })();
+    // A client that closed its stdout ends the session: stop the agent, then finish the stores.
+    if copied.is_err() {
+        let _ = child.kill();
     }
     let status = child.wait()?;
     drop(store);
     let _ = storer.join();
+    copied?;
     Ok(status.code().unwrap_or(1) as u8)
 }
 
@@ -133,6 +140,7 @@ fn identity(globals: &[String]) -> Result<Option<String>> {
     let mut argv = globals.to_vec();
     argv.extend(["--json".into(), "config".into()]);
     let (_, out) = crate::run_argv(argv, String::new())?;
+    eprint!("{}", crate::warnings(&out));
     if let Some(e) = out.error {
         return Err(e);
     }
