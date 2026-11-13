@@ -54,7 +54,7 @@ The KB path comes from `project.md` `kb`, relative to the identity folder, with 
 - files whose stamp moved after `last_reviewed` (MEMORY.md excluded), with type, summary, word count, and Git `+added -removed` lines when the root is a repo
 - log days after `reviewed_through`, with their bodies
 - events and journal entries dated after `reviewed_through`, lessons among the changed files
-- open threads and conflicts, three-word phrases on three or more unreviewed days that start and end with a content word, the last soul change
+- open threads and conflicts, three-word phrases, each inside one line, on three or more unreviewed days that start and end with a content word, the last soul change
 
 ## Export
 

@@ -474,10 +474,14 @@ fn journal(id: &Identity, out: &mut Vec<Diagnostic>) {
     }
 }
 
+/// Entries the links in `value` resolve to; an ambiguous link resolves to none.
 fn link_hits(id: &Identity, value: &str) -> Vec<usize> {
     markdown::links(value)
         .iter()
-        .flat_map(|l| id.resolve_link(&l.target))
+        .filter_map(|l| match id.resolve_link(&l.target)[..] {
+            [one] => Some(one),
+            _ => None,
+        })
         .collect()
 }
 
