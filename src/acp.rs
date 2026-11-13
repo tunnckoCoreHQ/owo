@@ -170,17 +170,21 @@ fn from_client(line: &[u8], state: &Mutex<State>, inject: &Inject) -> Option<Vec
             let mut changed = false;
             if st.system_prompt {
                 let block = json!({ "type": "text", "text": inject.text });
-                match params
-                    .get_mut("systemPrompt")
-                    .and_then(|s| s.get_mut("content"))
-                    .and_then(Value::as_array_mut)
-                {
-                    Some(content) => content.push(block),
+                match params.get_mut("systemPrompt").filter(|s| !s.is_null()) {
                     None => {
-                        params["systemPrompt"] = json!({ "mode": "append", "content": [block] })
+                        params["systemPrompt"] = json!({ "mode": "append", "content": [block] });
+                        changed = true;
+                    }
+                    // The client's own prompt keeps its mode. One with no content list is
+                    // not valid, so it passes as it is.
+                    Some(own) => {
+                        if let Some(content) = own.get_mut("content").and_then(Value::as_array_mut)
+                        {
+                            content.push(block);
+                            changed = true;
+                        }
                     }
                 }
-                changed = true;
             }
             if let Some(server) = &inject.server {
                 match params.get_mut("mcpServers").and_then(Value::as_array_mut) {
@@ -236,9 +240,14 @@ fn from_agent_line(line: &[u8], state: &Mutex<State>) -> Option<(String, Vec<Val
             let turn = st.turns.get_mut(params["sessionId"].as_str()?)?;
             let text = update["content"]["text"].as_str()?;
             let id = update["messageId"].as_str().map(String::from);
-            match turn.agent.last_mut() {
-                Some((last, joined)) if *last == id => joined.push_str(text),
-                _ => turn.agent.push((id, text.to_string())),
+            // Chunks with one `messageId` are one message; chunks with none join while adjacent.
+            let same = match &id {
+                Some(_) => turn.agent.iter_mut().find(|(i, _)| *i == id),
+                None => turn.agent.last_mut().filter(|(i, _)| i.is_none()),
+            };
+            match same {
+                Some((_, joined)) => joined.push_str(text),
+                None => turn.agent.push((id, text.to_string())),
             }
         }
         return None;
@@ -307,6 +316,8 @@ fn push(globals: &[String], session: &str, turns: Vec<Value>) {
         "sync".into(),
         "push".into(),
         format!("--session={session}"),
+        // The proxy only stores turns: with this run size an ingest run is never due.
+        format!("--every={}", usize::MAX),
         format!("--turns={}", Value::from(turns)),
     ]);
     let error = match crate::run_argv(argv, String::new()) {

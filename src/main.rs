@@ -10,12 +10,15 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 
 fn main() -> ExitCode {
-    // Exit quietly when stdout closes early (`owo search x | head`).
-    #[cfg(unix)]
-    unsafe {
-        libc::signal(libc::SIGPIPE, libc::SIG_DFL);
-    }
     let cli = Cli::parse();
+    // Exit quietly when stdout closes early (`owo search x | head`). `owo acp` keeps the ignored
+    // signal, so an agent that closes its stdin early does not kill the proxy.
+    #[cfg(unix)]
+    if !matches!(cli.command, Command::Acp { .. }) {
+        unsafe {
+            libc::signal(libc::SIGPIPE, libc::SIG_DFL);
+        }
+    }
     let out = match &cli.command {
         Command::Mcp { remote, port } => {
             let served = match remote {
