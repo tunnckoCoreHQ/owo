@@ -155,3 +155,120 @@ fn a_fence_closes_only_on_a_run_at_least_as_long() {
     let errors = messages(&v, "errors");
     assert!(!errors.contains("Inside Fence"), "{errors}");
 }
+
+fn add(root: &Path, args: &[&str]) {
+    owo(root)
+        .args(["-i", "thea", "add"])
+        .args(args)
+        .assert()
+        .success();
+}
+
+fn card(root: &Path) -> Value {
+    let out = owo(root)
+        .args(["-i", "thea", "export", "card"])
+        .output()
+        .unwrap();
+    serde_json::from_slice(&out.stdout).unwrap()
+}
+
+#[test]
+fn a_blank_log_does_not_hide_recent_events() {
+    let tmp = thea();
+    add(tmp.path(), &["event", "Storm", "--date", "2020-05-01"]);
+    add(tmp.path(), &["log", "--date", "2020-05-03"]);
+    let log = tmp.path().join("thea/life/log/2020-05-03.md");
+    let text = fs::read_to_string(&log).unwrap();
+    fs::write(&log, format!("{text}\n- Rowed out.\n")).unwrap();
+    add(tmp.path(), &["log", "--date", "2020-06-01"]);
+    let out = owo(tmp.path())
+        .args(["-i", "thea", "state"])
+        .output()
+        .unwrap();
+    let state = String::from_utf8(out.stdout).unwrap();
+    assert!(state.contains("Recent events: [[Storm]]"), "{state}");
+}
+
+#[test]
+fn an_empty_key_facts_section_falls_back_to_the_body() {
+    let tmp = thea();
+    add(tmp.path(), &["character", "Jay Doe"]);
+    let file = tmp.path().join("thea/life/characters/jay-doe.md");
+    let text = fs::read_to_string(&file).unwrap();
+    let text = text.replacen(
+        "## Description\n",
+        "## Description\n\nJay runs the harbor bar.\n",
+        1,
+    );
+    assert!(
+        text.contains("Jay runs"),
+        "the template has a Description section"
+    );
+    fs::write(&file, text).unwrap();
+    let card = card(tmp.path());
+    let entries = card["data"]["character_book"]["entries"]
+        .as_array()
+        .unwrap();
+    let jay = entries.iter().find(|e| e["name"] == "Jay Doe").unwrap();
+    assert!(
+        jay["content"].as_str().unwrap().contains("Jay runs"),
+        "{jay}"
+    );
+}
+
+#[test]
+fn context_with_loads_each_file_once() {
+    let tmp = thea();
+    add(tmp.path(), &["character", "Jay Doe"]);
+    let out = owo(tmp.path())
+        .args(["-i", "thea", "context", "--format", "paths"])
+        .args([
+            "--with", "IDENTITY", "--with", "Jay Doe", "--with", "jay-doe",
+        ])
+        .output()
+        .unwrap();
+    let paths = String::from_utf8(out.stdout).unwrap();
+    assert_eq!(paths.matches("soul/IDENTITY.md").count(), 1, "{paths}");
+    assert_eq!(
+        paths.matches("life/characters/jay-doe.md").count(),
+        1,
+        "{paths}"
+    );
+}
+
+#[test]
+fn lorebook_lists_locations_before_events() {
+    let tmp = thea();
+    add(tmp.path(), &["character", "Jay Doe"]);
+    add(tmp.path(), &["event", "Storm", "--date", "2020-05-01"]);
+    add(tmp.path(), &["location", "Harbor"]);
+    let card = card(tmp.path());
+    let names: Vec<&str> = card["data"]["character_book"]["entries"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|e| e["name"].as_str().unwrap())
+        .collect();
+    let at = |n: &str| names.iter().position(|x| *x == n).unwrap();
+    assert!(
+        at("Jay Doe") < at("Harbor") && at("Harbor") < at("Storm"),
+        "{names:?}"
+    );
+}
+
+#[test]
+fn context_paths_put_the_now_block_after_the_core_files() {
+    let tmp = thea();
+    let out = owo(tmp.path())
+        .args(["-i", "thea", "context", "--format", "paths", "--voice"])
+        .output()
+        .unwrap();
+    let paths = String::from_utf8(out.stdout).unwrap();
+    let tiers: Vec<&str> = paths
+        .lines()
+        .filter_map(|l| l.split_whitespace().next())
+        .collect();
+    let now = tiers.iter().position(|t| *t == "now").unwrap();
+    assert!(tiers[..now].iter().all(|t| *t == "core"), "{paths}");
+    assert!(now < tiers.len() - 1, "{paths}");
+}
