@@ -1,13 +1,12 @@
-//! owo: one world, one identity. The CLI: it parses arguments, calls `owo::run`, and prints
-//! the output. `owo mcp` is a server and `owo acp` a proxy, so they run here instead.
-
-mod acp;
-mod mcp;
+//! owo: one world, one identity. The CLI connects the process to the library: it parses
+//! arguments, builds `owo::Env` from the environment, hands over stdio and the agent process,
+//! prints the output and returns the exit code.
 
 use clap::Parser;
 use owo::{Cli, Command, Output};
+use std::io::Write;
 use std::path::PathBuf;
-use std::process::ExitCode;
+use std::process::{ExitCode, Stdio};
 
 fn main() -> ExitCode {
     let cli = Cli::parse();
@@ -19,31 +18,36 @@ fn main() -> ExitCode {
             libc::signal(libc::SIGPIPE, libc::SIG_DFL);
         }
     }
+    let env = env();
     let out = match &cli.command {
         Command::Mcp { remote, port } => {
             let served = match remote {
-                Some(addr) => mcp::serve_http(addr, *port, &cli),
-                None => mcp::serve(&cli),
+                Some(addr) => mcp_http(addr, *port, &cli, &env),
+                None => mcp_stdio(&cli, &env),
             };
             match served {
                 Ok(()) => return ExitCode::SUCCESS,
                 Err(e) => Output::from(e),
             }
         }
-        Command::Acp { inject, agent } => match acp::serve(&cli, agent, *inject) {
+        Command::Acp { inject, agent } => match acp(&cli, &env, agent, *inject) {
             Ok(code) => return ExitCode::from(code),
             Err(e) => Output::from(e),
         },
-        _ => owo::run(&cli, env(|| std::io::read_to_string(std::io::stdin()))),
+        _ => owo::run(&cli, &env, &mut std::io::stdin()),
     };
-    match usage(&out) {
+    match out
+        .error
+        .as_ref()
+        .and_then(|e| e.downcast_ref::<clap::Error>())
+    {
         // clap prints its own error, so it keeps its colour on a terminal.
         Some(e) => {
-            eprint!("{}", warnings(&out));
+            eprint!("{}", out.warning_lines());
             let _ = e.print();
         }
         None => {
-            let (stdout, stderr) = render(&cli, &out);
+            let (stdout, stderr) = out.render(cli.json);
             eprint!("{stderr}");
             print!("{stdout}");
         }
@@ -51,8 +55,8 @@ fn main() -> ExitCode {
     ExitCode::from(out.code as u8)
 }
 
-/// The environment values `owo::run` uses. `stdin` reads the stdin text when a command needs it.
-fn env(stdin: impl FnOnce() -> std::io::Result<String> + 'static) -> owo::Env {
+/// The environment values the library uses, read from the process.
+fn env() -> owo::Env {
     let non_empty = |key: &str| std::env::var(key).ok().filter(|v| !v.is_empty());
     owo::Env {
         owo_root: non_empty("OWO_ROOT"),
@@ -62,73 +66,76 @@ fn env(stdin: impl FnOnce() -> std::io::Result<String> + 'static) -> owo::Env {
         home: std::env::var_os("HOME").map(PathBuf::from),
         xdg_config_home: non_empty("XDG_CONFIG_HOME").map(PathBuf::from),
         xdg_data_home: non_empty("XDG_DATA_HOME").map(PathBuf::from),
-        stdin: Some(Box::new(stdin)),
     }
 }
 
-/// The global `--root`, `-i` and `--project` flags of a command line that runs in process.
-fn global_args(cli: &Cli, identity: Option<String>, project: Option<String>) -> Vec<String> {
-    let mut out = vec![];
-    if let Some(root) = &cli.root {
-        out.extend(["--root".into(), root.display().to_string()]);
+/// Serves MCP on the process's stdin and stdout until stdin closes.
+fn mcp_stdio(cli: &Cli, env: &owo::Env) -> anyhow::Result<()> {
+    #[cfg(unix)]
+    {
+        let (input, output) = own_stdio()?;
+        owo::mcp::serve(std::io::BufReader::new(input), output, cli, env)
     }
-    if let Some(i) = identity {
-        out.extend(["-i".into(), i]);
-    }
-    if let Some(p) = project {
-        out.extend(["--project".into(), p]);
-    }
-    out
+    #[cfg(not(unix))]
+    owo::mcp::serve(std::io::stdin().lock(), std::io::stdout(), cli, env)
 }
 
-/// Parses `argv` (without the program name) with clap and calls `owo::run` in process,
-/// with `stdin` as the stdin text.
-fn run_argv(argv: Vec<String>, stdin: String) -> Result<(Cli, Output), clap::Error> {
-    let cli = Cli::try_parse_from(std::iter::once("owo".into()).chain(argv))?;
-    let out = owo::run(&cli, env(|| Ok(stdin)));
-    Ok((cli, out))
+/// Serves MCP over HTTP on `addr`, after it prints the URL.
+fn mcp_http(addr: &str, port: Option<u16>, cli: &Cli, env: &owo::Env) -> anyhow::Result<()> {
+    let listener = owo::mcp::bind(addr, port)?;
+    println!("http://{}/mcp", listener.local_addr()?);
+    std::io::stdout().flush()?;
+    #[cfg(unix)]
+    detach_stdio()?;
+    owo::mcp::serve_http(listener, cli, env)
 }
 
-/// The warnings of an `Output`, one `owo: warning: <text>` line each.
-fn warnings(out: &Output) -> String {
-    out.warnings
-        .iter()
-        .map(|w| format!("owo: warning: {w}\n"))
-        .collect()
-}
-
-/// The clap usage error in an `Output`, if it holds one.
-fn usage(out: &Output) -> Option<&clap::Error> {
-    out.error.as_ref().and_then(|e| e.downcast_ref())
-}
-
-/// The stdout and stderr text of an `Output`. Stderr holds the warnings, then a usage error
-/// or the error line; stdout holds the JSON envelope with `--json`, else the text.
-fn render(cli: &Cli, out: &Output) -> (String, String) {
-    let mut stderr = warnings(out);
-    if let Some(usage) = usage(out) {
-        return usage_text(usage, stderr);
+/// Points the process's stdin at `/dev/null` and its stdout at stderr. A tool call runs in this
+/// process, so a tool path such as `/dev/stdin` or `/dev/stdout` must not reach the server's
+/// own streams.
+#[cfg(unix)]
+fn detach_stdio() -> std::io::Result<()> {
+    use std::os::fd::AsRawFd;
+    let null = std::fs::File::open("/dev/null")?;
+    // SAFETY: `dup2` only replaces descriptors 0 and 1 with copies of open descriptors.
+    if unsafe { libc::dup2(null.as_raw_fd(), 0) < 0 || libc::dup2(2, 1) < 0 } {
+        return Err(std::io::Error::last_os_error());
     }
-    let stdout = if cli.json {
-        let text = serde_json::to_string_pretty(&out.envelope).expect("envelope serializes");
-        format!("{text}\n")
-    } else {
-        if let Some(e) = &out.error {
-            stderr.push_str(&format!("owo: {e:#}\n"));
-        }
-        out.text.clone()
-    };
-    (stdout, stderr)
+    Ok(())
 }
 
-/// The stdout and stderr text of a clap error, as clap prints it: help and version on stdout,
-/// errors on stderr after `stderr`.
-fn usage_text(usage: &clap::Error, mut stderr: String) -> (String, String) {
-    let text = usage.render().to_string();
-    if usage.use_stderr() {
-        stderr.push_str(&text);
-        (String::new(), stderr)
-    } else {
-        (text, stderr)
+/// The server's own stdin and stdout for the protocol, taken before `detach_stdio`. The copies
+/// are close-on-exec, so a `git` child does not inherit them.
+#[cfg(unix)]
+fn own_stdio() -> std::io::Result<(std::fs::File, std::fs::File)> {
+    use std::os::fd::AsFd;
+    let input = std::io::stdin().as_fd().try_clone_to_owned()?;
+    let output = std::io::stdout().as_fd().try_clone_to_owned()?;
+    detach_stdio()?;
+    Ok((input.into(), output.into()))
+}
+
+/// Runs the agent behind the ACP proxy until it exits, and returns its exit code, or 1 when a
+/// signal killed it.
+fn acp(cli: &Cli, env: &owo::Env, agent: &[String], inject: bool) -> anyhow::Result<u8> {
+    use anyhow::Context;
+    let proxy = owo::acp::Proxy::new(cli, env, owo::acp::Options { inject }, std::io::stderr())?;
+    let mut child = std::process::Command::new(&agent[0])
+        .args(&agent[1..])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::inherit())
+        .spawn()
+        .with_context(|| format!("starting {}", agent[0]))?;
+    let agent_in = child.stdin.take().expect("piped stdin");
+    let agent_out = std::io::BufReader::new(child.stdout.take().expect("piped stdout"));
+    let client_in = std::io::BufReader::new(std::io::stdin());
+    let copied = proxy.run(client_in, std::io::stdout(), agent_in, agent_out);
+    // A client that closed its stdout ends the session: stop the agent.
+    if copied.is_err() {
+        let _ = child.kill();
     }
+    let status = child.wait()?;
+    copied?;
+    Ok(status.code().unwrap_or(1) as u8)
 }

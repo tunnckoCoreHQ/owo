@@ -1,15 +1,14 @@
-//! `owo acp`: a pass-through proxy for the Agent Client Protocol (newline-delimited JSON-RPC
-//! over stdio). It runs the agent as a child process and copies lines both ways as the bytes
-//! it received. When the root has identities, it gives each session an identity the client can
+//! A pass-through proxy for the Agent Client Protocol (newline-delimited JSON-RPC). It copies
+//! lines between a client and an agent, on streams the caller gives it, as the bytes it
+//! received. When the root has identities, it gives each session an identity the client can
 //! switch with the `identity` config option or the `/owo` command, changes only the lines that
 //! carry the injection, the picker and the command, and stores user and agent turns with
 //! `owo sync push`, called in process.
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use serde_json::{json, Value};
 use std::collections::{HashMap, HashSet, VecDeque};
-use std::io::{BufRead, BufReader, Write};
-use std::process::{Command, Stdio};
+use std::io::{BufRead, Write};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{mpsc, Arc, Mutex};
 
@@ -20,27 +19,29 @@ const NONE: &str = "_none";
 struct Setup {
     /// The slug and name of each identity in the root.
     identities: Vec<(String, String)>,
-    /// True with `--inject`: the identity block is the output of `owo context`.
+    /// True with `inject`: the identity block is the output of `owo context`.
     context: bool,
-    /// The owo MCP server entry. None with `--inject`.
+    /// The owo MCP server entry. None with `inject`.
     server: Option<Value>,
     /// The `--root` and `--project` flags of each owo call.
     globals: Vec<String>,
+    owo: Arc<Owo>,
 }
 
 impl Setup {
     /// The identity block for `id`. By default it tells the agent to load the identity with the
-    /// owo MCP `context` tool. With `--inject` it is the output of `owo context`; when that
-    /// fails, one warning line goes to stderr and nothing is injected.
+    /// owo MCP `context` tool. With `inject` it is the output of `owo context`; when that
+    /// fails, one warning line goes to the warnings writer and nothing is injected.
     fn text(&self, id: &str) -> Option<String> {
         if !self.context {
             return Some(format!("Your identity is the owo identity \"{id}\". Before you answer, load it with the `context` tool of the owo MCP server, with the argument `identity` set to \"{id}\", and keep to it."));
         }
         let mut argv = self.globals.clone();
         argv.extend(["-i".into(), id.into(), "context".into()]);
-        run(argv)
+        self.owo
+            .run(argv)
             .map(|out| out.text)
-            .map_err(|e| eprintln!("owo: warning: {e}"))
+            .map_err(|e| self.owo.warn(&e))
             .ok()
     }
 
@@ -176,147 +177,223 @@ impl State {
     }
 }
 
-/// Runs the agent behind the proxy until it exits, and returns its exit code.
-pub fn serve(cli: &owo::Cli, agent: &[String], context: bool) -> Result<u8> {
-    let start = identity(&crate::global_args(
-        cli,
-        cli.identity.clone(),
-        cli.project.clone(),
-    ))?;
-    let identities = list(crate::global_args(cli, None, None))?;
-    if identities.is_empty() && context {
-        return Err(<owo::Cli as clap::CommandFactory>::command()
-            .error(
-                clap::error::ErrorKind::MissingRequiredArgument,
-                "--inject needs an identity in the root",
-            )
-            .into());
+/// What the proxy does beside the injection.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Options {
+    /// Put the output of `owo context` in the prompt, and add no owo MCP server.
+    pub inject: bool,
+}
+
+/// Runs owo commands in process, and writes warning lines.
+struct Owo {
+    env: crate::Env,
+    warnings: Mutex<Box<dyn Write + Send>>,
+}
+
+impl Owo {
+    /// Runs one owo command line. The error is one line of text.
+    fn run(&self, argv: Vec<String>) -> Result<crate::Output, String> {
+        match crate::run_argv(argv, &self.env, "") {
+            Ok((_, out)) => match out.error {
+                Some(e) => Err(format!("{e:#}")),
+                None => Ok(out),
+            },
+            Err(e) => Err(e.to_string().lines().next().unwrap_or_default().to_string()),
+        }
     }
-    let globals = crate::global_args(cli, None, cli.project.clone());
-    let setup = (!identities.is_empty()).then(|| {
-        let args = match &start {
-            Some(id) => json!(["mcp", "-i", id]),
-            None => json!(["mcp"]),
-        };
-        Arc::new(Setup {
-            identities,
-            context,
-            server: (!context)
-                .then(|| json!({ "name": "owo", "command": "owo", "args": args, "env": [] })),
-            globals: globals.clone(),
-        })
-    });
-    let mut child = Command::new(&agent[0])
-        .args(&agent[1..])
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::inherit())
-        .spawn()
-        .with_context(|| format!("starting {}", agent[0]))?;
-    let mut to_agent = child.stdin.take().expect("piped stdin");
-    let mut from_agent = BufReader::new(child.stdout.take().expect("piped stdout"));
-    let state = Arc::new(Mutex::new(State {
-        start,
-        ..State::default()
-    }));
 
-    // Client to agent. This thread may stay blocked on stdin after the agent exits. It answers
-    // the requests the proxy handles itself, without waiting for the agent.
-    let (client_setup, client_state) = (setup.clone(), state.clone());
-    std::thread::spawn(move || {
-        let mut stdin = std::io::stdin().lock();
-        let mut line = vec![];
-        while stdin.read_until(b'\n', &mut line).is_ok_and(|n| n > 0) {
-            let mut msg: Option<Value> = serde_json::from_slice(&line).ok();
-            let reply = client_setup
-                .as_deref()
-                .zip(msg.as_mut())
-                .and_then(|(setup, msg)| from_client(msg, &client_state, setup));
-            let bytes = match (reply, &msg) {
-                (Some(Reply::Answer(lines)), _) => {
-                    for l in &lines {
-                        let _ = emit(&encode(l));
-                    }
-                    line.clear();
-                    continue;
-                }
-                (Some(Reply::Changed), Some(msg)) => encode(msg),
-                _ => std::mem::take(&mut line),
+    /// Writes `text` to the warnings writer. A failed write is ignored.
+    fn write(&self, text: &str) {
+        let mut w = self.warnings.lock().unwrap();
+        let _ = w.write_all(text.as_bytes()).and_then(|_| w.flush());
+    }
+
+    /// Writes one `owo: warning: <text>` line.
+    fn warn(&self, text: &str) {
+        self.write(&format!("owo: warning: {text}\n"));
+    }
+}
+
+/// An ACP proxy that knows its identities and waits for its streams.
+pub struct Proxy {
+    owo: Arc<Owo>,
+    /// None when the root has no identity: the proxy then changes and stores nothing.
+    setup: Option<Arc<Setup>>,
+    /// The identity resolved at start.
+    start: Option<String>,
+    /// The `--root` and `--project` flags of each store.
+    globals: Vec<String>,
+}
+
+impl Proxy {
+    /// Resolves the identity and reads the identities of the root, before the agent starts.
+    /// `cli` gives `--root`, `-i` and `--project`. Warning lines go to `warnings`. An identity
+    /// with no folder, or a project that is not found, is a config error; `inject` with no
+    /// identity in the root is a usage error.
+    pub fn new(
+        cli: &crate::Cli,
+        env: &crate::Env,
+        options: Options,
+        warnings: impl Write + Send + 'static,
+    ) -> Result<Self> {
+        let owo = Arc::new(Owo {
+            env: env.clone(),
+            warnings: Mutex::new(Box::new(warnings)),
+        });
+        let start = identity(
+            &owo,
+            &crate::global_args(cli, cli.identity.clone(), cli.project.clone()),
+        )?;
+        let identities = list(&owo, crate::global_args(cli, None, None))?;
+        let context = options.inject;
+        if identities.is_empty() && context {
+            return Err(<crate::Cli as clap::CommandFactory>::command()
+                .error(
+                    clap::error::ErrorKind::MissingRequiredArgument,
+                    "--inject needs an identity in the root",
+                )
+                .into());
+        }
+        let globals = crate::global_args(cli, None, cli.project.clone());
+        let setup = (!identities.is_empty()).then(|| {
+            let args = match &start {
+                Some(id) => json!(["mcp", "-i", id]),
+                None => json!(["mcp"]),
             };
-            if to_agent
-                .write_all(&bytes)
-                .and_then(|_| to_agent.flush())
-                .is_err()
-            {
-                break;
+            Arc::new(Setup {
+                identities,
+                context,
+                server: (!context)
+                    .then(|| json!({ "name": "owo", "command": "owo", "args": args, "env": [] })),
+                globals: globals.clone(),
+                owo: owo.clone(),
+            })
+        });
+        Ok(Self {
+            owo,
+            setup,
+            start,
+            globals,
+        })
+    }
+
+    /// Copies lines between the client and the agent until `agent_out` ends, then stores the
+    /// turns the agent left open. When writing to `client_out` fails, it stops copying, stores
+    /// the open turns and returns the error; the caller then stops the agent. The thread that
+    /// reads `client_in` may stay blocked on it after this returns; it closes `agent_in` when
+    /// `client_in` ends.
+    pub fn run(
+        self,
+        client_in: impl BufRead + Send + 'static,
+        client_out: impl Write + Send + 'static,
+        mut agent_in: impl Write + Send + 'static,
+        mut agent_out: impl BufRead,
+    ) -> std::io::Result<()> {
+        let Proxy {
+            owo,
+            setup,
+            start,
+            globals,
+        } = self;
+        let client_out = Arc::new(Mutex::new(client_out));
+        let state = Arc::new(Mutex::new(State {
+            start,
+            ..State::default()
+        }));
+
+        // Client to agent. It answers the requests the proxy handles itself, without waiting
+        // for the agent.
+        let (client_setup, client_state, client_emit) =
+            (setup.clone(), state.clone(), client_out.clone());
+        std::thread::spawn(move || {
+            let mut client_in = client_in;
+            let mut line = vec![];
+            while client_in.read_until(b'\n', &mut line).is_ok_and(|n| n > 0) {
+                let mut msg: Option<Value> = serde_json::from_slice(&line).ok();
+                let reply = client_setup
+                    .as_deref()
+                    .zip(msg.as_mut())
+                    .and_then(|(setup, msg)| from_client(msg, &client_state, setup));
+                let bytes = match (reply, &msg) {
+                    (Some(Reply::Answer(lines)), _) => {
+                        for l in &lines {
+                            let _ = emit(&client_emit, &encode(l));
+                        }
+                        line.clear();
+                        continue;
+                    }
+                    (Some(Reply::Changed), Some(msg)) => encode(msg),
+                    _ => std::mem::take(&mut line),
+                };
+                if agent_in
+                    .write_all(&bytes)
+                    .and_then(|_| agent_in.flush())
+                    .is_err()
+                {
+                    break;
+                }
+                line.clear();
             }
-            line.clear();
-        }
-        // Dropping `to_agent` closes the agent's stdin.
-    });
+            // Dropping `agent_in` closes the agent's input.
+        });
 
-    // Stores run on their own thread, so they never delay the pass-through.
-    let (store, jobs) = mpsc::channel::<Job>();
-    let storer = std::thread::spawn(move || {
-        for (identity, session, turns) in jobs {
-            push(&globals, &identity, &session, turns);
-        }
-    });
+        // Stores run on their own thread, so they never delay the pass-through.
+        let (store, jobs) = mpsc::channel::<Job>();
+        let storer = std::thread::spawn(move || {
+            for (identity, session, turns) in jobs {
+                push(&owo, &globals, &identity, &session, turns);
+            }
+        });
 
-    // Agent to client. The state changes, and a finished turn goes to the store, before the
-    // line is written, so the client's next request already sees them.
-    let copied = (|| -> std::io::Result<()> {
-        let mut line = vec![];
-        while from_agent.read_until(b'\n', &mut line)? > 0 {
-            let act = setup
-                .as_deref()
-                .and_then(|s| from_agent_line(&line, &state, s))
-                .unwrap_or_default();
-            if let Some(job) = act.store {
+        // Agent to client. The state changes, and a finished turn goes to the store, before the
+        // line is written, so the client's next request already sees them.
+        let copied = (|| -> std::io::Result<()> {
+            let mut line = vec![];
+            while agent_out.read_until(b'\n', &mut line)? > 0 {
+                let act = setup
+                    .as_deref()
+                    .and_then(|s| from_agent_line(&line, &state, s))
+                    .unwrap_or_default();
+                if let Some(job) = act.store {
+                    let _ = store.send(job);
+                }
+                match &act.line {
+                    Some(msg) => emit(&client_out, &encode(msg))?,
+                    None => emit(&client_out, &line)?,
+                }
+                if let Some(msg) = &act.after {
+                    emit(&client_out, &encode(msg))?;
+                }
+                line.clear();
+            }
+            Ok(())
+        })();
+        // The agent is gone, or the client closed its output: store the turns left open.
+        let mut st = state.lock().unwrap();
+        let open: Vec<_> = st.turns.drain().collect();
+        for (session, open) in open {
+            let left: Vec<Value> = open.into_iter().flat_map(turns).collect();
+            if let Some(job) = st.job(&session, left) {
                 let _ = store.send(job);
             }
-            match &act.line {
-                Some(msg) => emit(&encode(msg))?,
-                None => emit(&line)?,
-            }
-            if let Some(msg) = &act.after {
-                emit(&encode(msg))?;
-            }
-            line.clear();
         }
-        Ok(())
-    })();
-    // A client that closed its stdout ends the session: stop the agent, then finish the stores.
-    if copied.is_err() {
-        let _ = child.kill();
+        drop((st, store));
+        let _ = storer.join();
+        copied
     }
-    let status = child.wait()?;
-    // The agent is gone: store the turns it left open.
-    let mut st = state.lock().unwrap();
-    let open: Vec<_> = st.turns.drain().collect();
-    for (session, open) in open {
-        let left: Vec<Value> = open.into_iter().flat_map(turns).collect();
-        if let Some(job) = st.job(&session, left) {
-            let _ = store.send(job);
-        }
-    }
-    drop((st, store));
-    let _ = storer.join();
-    copied?;
-    Ok(status.code().unwrap_or(1) as u8)
 }
 
 /// The identity the library resolves from the flags, `OWO_IDENTITY` and the config. An
 /// identity with no folder, or a project that is not found, is a config error here, before the
 /// agent starts.
-fn identity(globals: &[String]) -> Result<Option<String>> {
-    let run = |command: &str| -> Result<owo::Output> {
+fn identity(owo: &Owo, globals: &[String]) -> Result<Option<String>> {
+    let run = |command: &str| -> Result<crate::Output> {
         let mut argv = globals.to_vec();
         argv.extend(["--json".into(), command.into()]);
-        Ok(crate::run_argv(argv, String::new())?.1)
+        Ok(crate::run_argv(argv, &owo.env, "")?.1)
     };
     let config = run("config")?;
-    eprint!("{}", crate::warnings(&config));
+    owo.write(&config.warning_lines());
     if let Some(e) = config.error {
         return Err(e);
     }
@@ -331,9 +408,9 @@ fn identity(globals: &[String]) -> Result<Option<String>> {
 }
 
 /// The slug and name of each identity in the root, from `owo list --json`.
-fn list(mut argv: Vec<String>) -> Result<Vec<(String, String)>> {
+fn list(owo: &Owo, mut argv: Vec<String>) -> Result<Vec<(String, String)>> {
     argv.extend(["--json".into(), "list".into()]);
-    let out = crate::run_argv(argv, String::new())?.1;
+    let out = crate::run_argv(argv, &owo.env, "")?.1;
     if let Some(e) = out.error {
         return Err(e);
     }
@@ -682,16 +759,16 @@ fn encode(msg: &Value) -> Vec<u8> {
     bytes
 }
 
-/// Writes one whole line to the client and flushes it. Both threads write through the stdout
+/// Writes one whole line to the client and flushes it. Both threads write through the one
 /// lock, so their lines never mix.
-fn emit(bytes: &[u8]) -> std::io::Result<()> {
-    let mut out = std::io::stdout().lock();
+fn emit(out: &Mutex<impl Write>, bytes: &[u8]) -> std::io::Result<()> {
+    let mut out = out.lock().unwrap();
     out.write_all(bytes)?;
     out.flush()
 }
 
-/// Stores the turns with `owo sync push` for `identity`. A failure is one warning line on stderr.
-fn push(globals: &[String], identity: &str, session: &str, turns: Vec<Value>) {
+/// Stores the turns with `owo sync push` for `identity`. A failure is one warning line.
+fn push(owo: &Owo, globals: &[String], identity: &str, session: &str, turns: Vec<Value>) {
     let mut argv = globals.to_vec();
     argv.extend([
         "-i".into(),
@@ -703,18 +780,7 @@ fn push(globals: &[String], identity: &str, session: &str, turns: Vec<Value>) {
         format!("--every={}", usize::MAX),
         format!("--turns={}", Value::from(turns)),
     ]);
-    if let Err(e) = run(argv) {
-        eprintln!("owo: warning: {e}");
-    }
-}
-
-/// Runs one owo command line in process. The error is one line of text.
-fn run(argv: Vec<String>) -> Result<owo::Output, String> {
-    match crate::run_argv(argv, String::new()) {
-        Ok((_, out)) => match out.error {
-            Some(e) => Err(format!("{e:#}")),
-            None => Ok(out),
-        },
-        Err(e) => Err(e.to_string().lines().next().unwrap_or_default().to_string()),
+    if let Err(e) = owo.run(argv) {
+        owo.warn(&e);
     }
 }

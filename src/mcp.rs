@@ -1,6 +1,7 @@
-//! `owo mcp`: an MCP server. Each tool parses the matching command line with clap and calls
-//! `owo::run` in process, so a tool call and a CLI call share one code path and one output.
-//! Messages are JSON-RPC 2.0: one per line on stdio, or one per POST to `/mcp` with `--remote`.
+//! The MCP server. Each tool parses the matching command line with clap and calls `run` in
+//! process, so a tool call and a CLI call share one code path and one output. Messages are
+//! JSON-RPC 2.0: one per line with `serve`, or one per POST to `/mcp` with `serve_http`.
+//! `reply` answers one message, for a caller with its own transport.
 
 use anyhow::{Context, Result};
 use serde_json::{json, Map, Value};
@@ -62,7 +63,7 @@ fn tools() -> Vec<Tool> {
     }
     let mut out = vec![];
     walk(
-        &<owo::Cli as clap::CommandFactory>::command(),
+        &<crate::Cli as clap::CommandFactory>::command(),
         &[],
         &mut out,
     );
@@ -188,7 +189,7 @@ fn scalar(v: &Value) -> Option<String> {
 fn argv(
     tool: &Tool,
     args: &Map<String, Value>,
-    cli: &owo::Cli,
+    cli: &crate::Cli,
 ) -> Result<(Vec<String>, String), String> {
     if let Some(k) = args
         .keys()
@@ -244,8 +245,8 @@ fn result(text: String, error: bool) -> Value {
 }
 
 /// Runs one tool call. A panic becomes an error result, so the server answers the next request.
-fn call(tool: &Tool, params: &Value, cli: &owo::Cli) -> Value {
-    guarded(|| run_tool(tool, params, cli))
+fn call(tool: &Tool, params: &Value, cli: &crate::Cli, env: &crate::Env) -> Value {
+    guarded(|| run_tool(tool, params, cli, env))
 }
 
 fn guarded(f: impl FnOnce() -> Value) -> Value {
@@ -261,7 +262,7 @@ fn guarded(f: impl FnOnce() -> Value) -> Value {
 
 /// Parses the tool's argv with clap and calls `owo::run` in process. The text is the command's
 /// stdout, or its stderr when stdout is blank, or both joined with a newline.
-fn run_tool(tool: &Tool, params: &Value, cli: &owo::Cli) -> Value {
+fn run_tool(tool: &Tool, params: &Value, cli: &crate::Cli, env: &crate::Env) -> Value {
     let empty = Map::new();
     let args = params["arguments"].as_object().unwrap_or(&empty);
     let (argv, stdin) = match argv(tool, args, cli) {
@@ -272,9 +273,9 @@ fn run_tool(tool: &Tool, params: &Value, cli: &owo::Cli) -> Value {
     if argv.iter().any(|a| a.contains('\0')) {
         return result("an argument holds a NUL character".into(), true);
     }
-    let ((stdout, stderr), code) = match crate::run_argv(argv, stdin) {
-        Ok((parsed, out)) => (crate::render(&parsed, &out), out.code),
-        Err(e) => (crate::usage_text(&e, String::new()), e.exit_code()),
+    let ((stdout, stderr), code) = match crate::run_argv(argv, env, &stdin) {
+        Ok((parsed, out)) => (out.render(parsed.json), out.code),
+        Err(e) => (crate::output::usage_text(&e, String::new()), e.exit_code()),
     };
     let text = match (stdout.trim().is_empty(), stderr.trim().is_empty()) {
         (true, _) => stderr,
@@ -284,7 +285,13 @@ fn run_tool(tool: &Tool, params: &Value, cli: &owo::Cli) -> Value {
     result(text, code != 0)
 }
 
-fn respond(id: &Value, method: &str, params: &Value, cli: &owo::Cli) -> Option<Value> {
+fn respond(
+    id: &Value,
+    method: &str,
+    params: &Value,
+    cli: &crate::Cli,
+    env: &crate::Env,
+) -> Option<Value> {
     let ok = |result: Value| Some(json!({ "jsonrpc": "2.0", "id": id, "result": result }));
     let error = |code: i64, message: String| {
         Some(json!({ "jsonrpc": "2.0", "id": id, "error": { "code": code, "message": message } }))
@@ -306,7 +313,7 @@ fn respond(id: &Value, method: &str, params: &Value, cli: &owo::Cli) -> Option<V
         "tools/call" => {
             let name = params["name"].as_str().unwrap_or_default();
             match tools().iter().find(|t| t.name == name) {
-                Some(tool) => ok(call(tool, params, cli)),
+                Some(tool) => ok(call(tool, params, cli, env)),
                 None => error(-32602, format!("unknown tool {name:?}")),
             }
         }
@@ -316,11 +323,11 @@ fn respond(id: &Value, method: &str, params: &Value, cli: &owo::Cli) -> Option<V
 
 /// The reply to one JSON-RPC message, or None for notifications and responses.
 /// Bytes that are not UTF-8 JSON get a parse error.
-fn handle(bytes: &[u8], cli: &owo::Cli) -> Option<Value> {
-    match serde_json::from_slice::<Value>(bytes) {
+pub fn reply(message: &[u8], cli: &crate::Cli, env: &crate::Env) -> Option<Value> {
+    match serde_json::from_slice::<Value>(message) {
         Ok(msg) if msg.get("id").is_some() && msg.get("method").is_some() => {
             let method = msg["method"].as_str().unwrap_or_default();
-            respond(&msg["id"], method, &msg["params"], cli)
+            respond(&msg["id"], method, &msg["params"], cli, env)
         }
         Ok(_) => None,
         Err(e) => Some(json!({
@@ -331,46 +338,20 @@ fn handle(bytes: &[u8], cli: &owo::Cli) -> Option<Value> {
     }
 }
 
-/// Points the process's stdin at `/dev/null` and its stdout at stderr. A tool call runs in this
-/// process, so a tool path such as `/dev/stdin` or `/dev/stdout` must not reach the server's
-/// own streams.
-#[cfg(unix)]
-fn detach_stdio() -> std::io::Result<()> {
-    use std::os::fd::AsRawFd;
-    let null = std::fs::File::open("/dev/null")?;
-    // SAFETY: `dup2` only replaces descriptors 0 and 1 with copies of open descriptors.
-    if unsafe { libc::dup2(null.as_raw_fd(), 0) < 0 || libc::dup2(2, 1) < 0 } {
-        return Err(std::io::Error::last_os_error());
-    }
-    Ok(())
-}
-
-/// The server's own stdin and stdout for the protocol, taken before `detach_stdio`. The copies
-/// are close-on-exec, so a `git` child does not inherit them.
-#[cfg(unix)]
-fn own_stdio() -> std::io::Result<(std::fs::File, std::fs::File)> {
-    use std::os::fd::AsFd;
-    let input = std::io::stdin().as_fd().try_clone_to_owned()?;
-    let output = std::io::stdout().as_fd().try_clone_to_owned()?;
-    detach_stdio()?;
-    Ok((input.into(), output.into()))
-}
-
-/// Serves MCP on stdin and stdout until stdin closes.
-pub fn serve(cli: &owo::Cli) -> Result<()> {
-    #[cfg(unix)]
-    let (mut stdin, mut stdout) = {
-        let (input, output) = own_stdio()?;
-        (BufReader::new(input), output)
-    };
-    #[cfg(not(unix))]
-    let (mut stdin, mut stdout) = (std::io::stdin().lock(), std::io::stdout());
+/// Serves MCP on `input` and `output`, one message per line, until `input` ends. `cli` gives
+/// the default `--root`, `-i` and `--project` of each tool call.
+pub fn serve(
+    mut input: impl BufRead,
+    mut output: impl Write,
+    cli: &crate::Cli,
+    env: &crate::Env,
+) -> Result<()> {
     let mut line = vec![];
-    while stdin.read_until(b'\n', &mut line)? > 0 {
+    while input.read_until(b'\n', &mut line)? > 0 {
         if !line.trim_ascii().is_empty() {
-            if let Some(r) = handle(&line, cli) {
-                writeln!(stdout, "{r}")?;
-                stdout.flush()?;
+            if let Some(r) = reply(&line, cli, env) {
+                writeln!(output, "{r}")?;
+                output.flush()?;
             }
         }
         line.clear();
@@ -378,33 +359,32 @@ pub fn serve(cli: &owo::Cli) -> Result<()> {
     Ok(())
 }
 
-pub const DEFAULT_PORT: u16 = 4224;
+const DEFAULT_PORT: u16 = 4224;
 /// Largest request body the HTTP mode reads; a tool call is a few kilobytes.
-pub const MAX_BODY: usize = 8 << 20;
+const MAX_BODY: usize = 8 << 20;
 /// Largest request line plus headers the HTTP mode reads.
 const MAX_HEAD: usize = 16 << 10;
 /// Time one HTTP request may take to arrive, and its reply to leave.
 const DEADLINE: Duration = Duration::from_secs(30);
 
-/// Serves MCP over HTTP at `http://<addr>:<port>/mcp` (Streamable HTTP with JSON replies).
-/// Without `port` it takes 4224, or the next free port up to 4323. Prints the URL, then
-/// handles one request at a time.
-pub fn serve_http(addr: &str, port: Option<u16>, cli: &owo::Cli) -> Result<()> {
-    let listener = match port {
+/// The listener for the HTTP mode on `addr`. Without `port` it takes 4224, or the next free
+/// port up to 4323. The server URL is `http://<local_addr>/mcp`.
+pub fn bind(addr: &str, port: Option<u16>) -> Result<TcpListener> {
+    Ok(match port {
         Some(p) => TcpListener::bind((addr, p)).with_context(|| format!("binding {addr}:{p}"))?,
         None => (DEFAULT_PORT..DEFAULT_PORT + 100)
             .find_map(|p| TcpListener::bind((addr, p)).ok())
             .with_context(|| format!("no free port on {addr} from {DEFAULT_PORT}"))?,
-    };
-    let bound = listener.local_addr()?;
-    println!("http://{bound}/mcp");
-    std::io::stdout().flush()?;
-    #[cfg(unix)]
-    detach_stdio()?;
+    })
+}
+
+/// Serves MCP over HTTP on `listener` at `/mcp` (Streamable HTTP with JSON replies), one
+/// request at a time.
+pub fn serve_http(listener: TcpListener, cli: &crate::Cli, env: &crate::Env) -> Result<()> {
     for stream in listener.incoming() {
         let Ok(stream) = stream else { continue };
         // A broken or slow client only ends its own request.
-        let _ = http_request(stream, cli);
+        let _ = http_request(stream, cli, env);
     }
     Ok(())
 }
@@ -427,7 +407,7 @@ impl Read for Timed {
     }
 }
 
-fn http_request(stream: TcpStream, cli: &owo::Cli) -> std::io::Result<()> {
+fn http_request(stream: TcpStream, cli: &crate::Cli, env: &crate::Env) -> std::io::Result<()> {
     stream.set_write_timeout(Some(DEADLINE))?;
     let timed = Timed {
         stream: stream.try_clone()?,
@@ -482,7 +462,7 @@ fn http_request(stream: TcpStream, cli: &owo::Cli) -> std::io::Result<()> {
         ("POST", "/mcp") if !json_body => ("415 Unsupported Media Type", String::new()),
         ("POST", "/mcp") if length.is_none() => ("411 Length Required", String::new()),
         ("POST", "/mcp") if length > Some(MAX_BODY) => ("413 Payload Too Large", String::new()),
-        ("POST", "/mcp") => match handle(&body, cli) {
+        ("POST", "/mcp") => match reply(&body, cli, env) {
             Some(reply) => ("200 OK", reply.to_string()),
             None => ("202 Accepted", String::new()),
         },

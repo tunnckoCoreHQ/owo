@@ -122,6 +122,48 @@ pub struct Output {
     pub code: i32,
 }
 
+impl Output {
+    /// The warnings, one `owo: warning: <text>` line each.
+    pub fn warning_lines(&self) -> String {
+        self.warnings
+            .iter()
+            .map(|w| format!("owo: warning: {w}\n"))
+            .collect()
+    }
+
+    /// The stdout text and the stderr text. Stderr holds the warnings, then a usage error as
+    /// clap words it or the error line `owo: <error>`; stdout holds the JSON envelope when
+    /// `json` is set, else the text.
+    pub fn render(&self, json: bool) -> (String, String) {
+        let mut stderr = self.warning_lines();
+        if let Some(usage) = self.error.as_ref().and_then(|e| e.downcast_ref()) {
+            return usage_text(usage, stderr);
+        }
+        let stdout = if json {
+            let text = serde_json::to_string_pretty(&self.envelope).expect("envelope serializes");
+            format!("{text}\n")
+        } else {
+            if let Some(e) = &self.error {
+                stderr.push_str(&format!("owo: {e:#}\n"));
+            }
+            self.text.clone()
+        };
+        (stdout, stderr)
+    }
+}
+
+/// The stdout and stderr text of a clap error, as clap prints it: help and version on stdout,
+/// errors on stderr after `stderr`.
+pub fn usage_text(usage: &clap::Error, mut stderr: String) -> (String, String) {
+    let text = usage.render().to_string();
+    if usage.use_stderr() {
+        stderr.push_str(&text);
+        (String::new(), stderr)
+    } else {
+        (text, stderr)
+    }
+}
+
 impl From<anyhow::Error> for Output {
     /// A failed command: a fail envelope, and the exit code for the error kind.
     fn from(e: anyhow::Error) -> Self {

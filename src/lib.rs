@@ -1,8 +1,11 @@
 //! owo: one world, one identity. The library core for living agent identities.
 //!
-//! `run` takes a parsed command and the environment values, and returns an `Output`; it prints
-//! nothing. The CLI and other adapters print or return that `Output`.
+//! `run` takes a parsed command, the environment values and a stdin reader, and returns an
+//! `Output`; it prints nothing. `mcp` serves every command as an MCP tool and `acp` runs the
+//! ACP proxy, on streams the caller gives them. The library reads nothing from the process:
+//! the `owo` binary passes in its arguments, environment and streams.
 
+pub mod acp;
 mod add;
 mod changes;
 mod cli;
@@ -17,6 +20,7 @@ mod index;
 mod kb;
 mod lint;
 mod markdown;
+pub mod mcp;
 mod migrate;
 mod output;
 mod review;
@@ -40,10 +44,12 @@ use config::{need_identity, need_project, ConfigError};
 use identity::Kind;
 use output::{Envelope, Level, Out};
 use serde_json::json;
+use std::io::Read;
 use std::path::PathBuf;
 
-/// What a command reads from its process: environment values, the working folder and stdin.
-/// The caller reads them; `run` only uses them.
+/// What a command reads from its process: environment values and the working folder. The
+/// caller reads them once; `run`, `mcp` and `acp` only use them.
+#[derive(Debug, Clone, Default)]
 pub struct Env {
     /// `OWO_ROOT`, `OWO_IDENTITY` and `OWO_PROJECT`, when set and not empty.
     pub owo_root: Option<String>,
@@ -55,26 +61,48 @@ pub struct Env {
     /// `XDG_CONFIG_HOME` and `XDG_DATA_HOME`, when set and not empty.
     pub xdg_config_home: Option<PathBuf>,
     pub xdg_data_home: Option<PathBuf>,
-    /// Reads the text for `owo write` and `owo sync push` when they take no `--content` or
-    /// `--turns`. `run` calls it only when the command needs the text.
-    pub stdin: Option<Box<dyn FnOnce() -> std::io::Result<String>>>,
 }
 
-/// Runs one command and returns what it produced. `Command::Mcp` is a server and `Command::Acp`
-/// a proxy, not commands, so they return an error here.
-pub fn run(cli: &Cli, mut env: Env) -> Output {
+/// Runs one command and returns what it produced. `stdin` gives the text for `owo write` and
+/// `owo sync push` when they take no `--content` or `--turns`; `run` reads it only when the
+/// command needs the text. `Command::Mcp` is a server and `Command::Acp` a proxy, not
+/// commands, so they return an error here.
+pub fn run(cli: &Cli, env: &Env, stdin: &mut dyn Read) -> Output {
     let mut out = Out {
         json: cli.json,
         quiet: cli.quiet,
         warnings: vec![],
     };
-    match dispatch(cli, &mut env, &mut out) {
+    match dispatch(cli, env, stdin, &mut out) {
         Ok(o) => o,
         Err(e) => Output {
             warnings: out.warnings,
             ..Output::from(e)
         },
     }
+}
+
+/// The global `--root`, `-i` and `--project` flags of a command line that runs in process.
+fn global_args(cli: &Cli, identity: Option<String>, project: Option<String>) -> Vec<String> {
+    let mut out = vec![];
+    if let Some(root) = &cli.root {
+        out.extend(["--root".into(), root.display().to_string()]);
+    }
+    if let Some(i) = identity {
+        out.extend(["-i".into(), i]);
+    }
+    if let Some(p) = project {
+        out.extend(["--project".into(), p]);
+    }
+    out
+}
+
+/// Parses `argv` (without the program name) with clap and calls `run` in process, with
+/// `stdin` as the stdin text.
+fn run_argv(argv: Vec<String>, env: &Env, stdin: &str) -> Result<(Cli, Output), clap::Error> {
+    let cli: Cli = clap::Parser::try_parse_from(std::iter::once("owo".into()).chain(argv))?;
+    let out = run(&cli, env, &mut stdin.as_bytes());
+    Ok((cli, out))
 }
 
 fn resolved(cli: &Cli, env: &Env, out: &mut Out) -> Result<config::Resolved> {
@@ -96,14 +124,6 @@ fn load(cli: &Cli, env: &Env, out: &mut Out) -> Result<(config::Resolved, Identi
     let mut id = Identity::load(&r.root, &need_identity(&r)?)?;
     id.home = env.home.clone();
     Ok((r, id))
-}
-
-/// The stdin text, read now; empty when `run` was given no reader.
-fn stdin(env: &mut Env) -> Result<String> {
-    Ok(env
-        .stdin
-        .take()
-        .map_or_else(|| Ok(String::new()), |read| read())?)
 }
 
 /// Runs `sync start` or `sync push` with the shared identity, project and run size.
@@ -141,7 +161,7 @@ fn sync_cmd(
     })
 }
 
-fn dispatch(cli: &Cli, env: &mut Env, out: &mut Out) -> Result<Output> {
+fn dispatch(cli: &Cli, env: &Env, stdin: &mut dyn Read, out: &mut Out) -> Result<Output> {
     match &cli.command {
         Command::Slug { text } => {
             let value = slug::slugify(&text.join(" "));
@@ -154,8 +174,8 @@ fn dispatch(cli: &Cli, env: &mut Env, out: &mut Out) -> Result<Output> {
             out.emit(Envelope::ok(json!({ "slug": value })), |t| t.line(&value))
         }
         Command::Templates { action } => templates_cmd(cli, action.as_ref(), env, out),
-        Command::Mcp { .. } => anyhow::bail!("`owo mcp` is a server; run it from the owo binary"),
-        Command::Acp { .. } => anyhow::bail!("`owo acp` is a proxy; run it from the owo binary"),
+        Command::Mcp { .. } => anyhow::bail!("`owo mcp` is a server; serve it with `owo::mcp`"),
+        Command::Acp { .. } => anyhow::bail!("`owo acp` is a proxy; run it with `owo::acp`"),
         Command::Config => {
             let r = resolved(cli, env, out)?;
             out.emit(Envelope::ok(serde_json::to_value(&r)?), |t| {
@@ -231,7 +251,7 @@ fn dispatch(cli: &Cli, env: &mut Env, out: &mut Out) -> Result<Output> {
             let (_, id) = load(cli, env, out)?;
             let text = match content {
                 Some(c) => c.clone(),
-                None => stdin(env)?,
+                None => std::io::read_to_string(stdin)?,
             };
             let created = add::write(&id, path, &text)?;
             out.emit(
@@ -477,13 +497,11 @@ fn dispatch(cli: &Cli, env: &mut Env, out: &mut Out) -> Result<Output> {
                     every,
                 },
         } => {
-            // The reader runs inside the step, after the config resolves.
-            let reader = env.stdin.take();
+            // The stdin text is read inside the step, after the config resolves.
             sync_cmd(cli, env, out, session, *now, *every, |req| {
-                let turns = match (turns, reader) {
-                    (Some(t), _) => t.clone(),
-                    (None, Some(read)) => read()?,
-                    (None, None) => String::new(),
+                let turns = match turns {
+                    Some(t) => t.clone(),
+                    None => std::io::read_to_string(stdin)?,
                 };
                 sync::push(req, &turns)
             })
