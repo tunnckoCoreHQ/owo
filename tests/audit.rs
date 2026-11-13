@@ -3,7 +3,8 @@
 mod common;
 
 use common::acp::{
-    chunk, end, init, init_reply, parse, prompt, request, response, s, start, stored, turn, Proxy,
+    chunk, end, init, init_reply, parse, picker, prompt, request, response, s, start, stored, turn,
+    Proxy,
 };
 use common::{copy_example, json, owo};
 use serde_json::{json, Value};
@@ -619,9 +620,11 @@ fn help_into_a_closed_pipe_exits_zero() {
 fn acp_session(root: &Path, flags: &[&str]) -> Proxy {
     let mut p = start(root, flags, 0);
     p.send(&init(), &[init_reply(json!({}))]);
-    p.send(
+    p.open(
         &request(1, "session/new", json!({ "cwd": "/tmp", "mcpServers": [] })),
         &[response(1, json!({ "sessionId": "s1" }))],
+        "s1",
+        json!([picker("nicole", &["nicole"])]),
     );
     p
 }
@@ -647,7 +650,7 @@ fn acp_a_prompt_sent_before_the_last_response_keeps_both_turns() {
     );
     p.finish();
     assert_eq!(
-        stored(tmp.path(), "s1"),
+        stored(tmp.path(), "s1.nicole"),
         [
             turn("m1.user", "user", "first question"),
             turn("m1", "assistant", "answer one"),
@@ -667,7 +670,7 @@ fn acp_an_open_turn_is_stored_when_the_agent_exits() {
     );
     p.finish();
     assert_eq!(
-        stored(tmp.path(), "s1"),
+        stored(tmp.path(), "s1.nicole"),
         [
             turn("m1.user", "user", "question before quit"),
             turn("m1", "assistant", "half an answer"),
@@ -692,7 +695,7 @@ fn acp_chunks_without_an_id_split_at_a_tool_call() {
         ],
     );
     p.finish();
-    let answers: Vec<Value> = stored(tmp.path(), "s1")
+    let answers: Vec<Value> = stored(tmp.path(), "s1.nicole")
         .into_iter()
         .filter(|t| t["role"] == "assistant")
         .map(|t| t["text"].clone())
@@ -728,13 +731,15 @@ fn acp_mcp_keeps_one_owo_server() {
     let mut p = start(tmp.path(), &[], 0);
     p.send(&init(), &[init_reply(json!({}))]);
     let own = json!({ "name": "owo", "command": "/usr/bin/owo", "args": ["mcp"], "env": [] });
-    p.send(
+    p.open(
         &request(
             1,
             "session/new",
             json!({ "cwd": "/tmp", "mcpServers": [own] }),
         ),
         &[response(1, json!({ "sessionId": "s1" }))],
+        "s1",
+        json!([picker("nicole", &["nicole"])]),
     );
     let (_, got) = p.finish();
     assert_eq!(parse(&got[1])["params"]["mcpServers"], json!([own]));

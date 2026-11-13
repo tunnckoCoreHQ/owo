@@ -29,7 +29,7 @@ Each module owns one job. The library (`lib.rs`) holds every module but `mcp.rs`
 - `sync.rs` parses transcripts and writes session slices; `migrate.rs` converts v1 identities.
 - `output.rs` defines diagnostics, the envelope, exit codes, `Out`, which collects the envelope or the text, and `Output`: the envelope, the text, the warnings, the error and the exit code. A `clap::Error` in `Output` is a usage error (exit 2), which the binary prints as clap does.
 - `mcp.rs` is a module of the binary. It serves the MCP tools over stdio or HTTP, built from the clap definitions with only the public library interface. Each tool call parses its argv with clap, calls `owo::run` in process with the `env` and `render` of `main.rs`, and turns a panic into an `isError` result; see [[decisions#MCP calls the library]].
-- `acp.rs` is a module of the binary. It runs an ACP agent as a child process and copies lines both ways, changes only the session requests it injects into, and stores turns through `run_argv` with `sync push`, on the public library interface only; see [[decisions#ACP proxy passes lines through]].
+- `acp.rs` is a module of the binary. It runs an ACP agent as a child process and copies lines both ways, changes only the lines that carry the injection, the identity picker and the `/owo` command, answers the picker and the command itself, and stores turns per session identity through `run_argv` with `sync push`, on the public library interface only; see [[decisions#ACP proxy passes lines through]].
 
 ## Loading an identity
 

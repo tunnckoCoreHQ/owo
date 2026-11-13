@@ -222,7 +222,7 @@ pub enum Command {
     },
     /// Run an ACP agent behind a pass-through proxy that stores turns and injects the identity
     Acp {
-        /// Put the identity context in the first prompt of a new session, and add no owo MCP server (needs an identity)
+        /// Put the identity context in the prompt, and add no owo MCP server (needs an identity in the root)
         #[arg(long)]
         inject: bool,
         /// The agent command and its arguments, after --

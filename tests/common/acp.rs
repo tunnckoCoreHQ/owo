@@ -50,18 +50,34 @@ pub fn start(root: &Path, flags: &[&str], code: u8) -> Proxy {
 impl Proxy {
     /// Sends one client line; the agent answers it with `reply`, which must arrive byte for byte.
     pub fn send(&mut self, line: &str, reply: &[String]) {
+        let got = self.call(line, reply, reply.len());
+        for (got, want) in got.iter().zip(reply) {
+            assert_eq!(got, want);
+        }
+    }
+
+    /// Sends one client line the agent answers with `reply`, and returns the next `n` lines the
+    /// client gets.
+    pub fn call(&mut self, line: &str, reply: &[String], n: usize) -> Vec<String> {
         self.sent += 1;
         let text: String = reply.iter().map(|l| format!("{l}\n")).collect();
         fs::write(self.dir.path().join(format!("reply.{}", self.sent)), &text).unwrap();
+        self.ask(line, n)
+    }
+
+    /// Sends one client line the agent never gets, and returns the next `n` lines the client gets.
+    pub fn ask(&mut self, line: &str, n: usize) -> Vec<String> {
         self.stdin
             .write_all(format!("{line}\n").as_bytes())
             .unwrap();
         self.stdin.flush().unwrap();
-        for want in reply {
-            let mut got = String::new();
-            self.stdout.read_line(&mut got).unwrap();
-            assert_eq!(got, format!("{want}\n"));
-        }
+        (0..n)
+            .map(|_| {
+                let mut got = String::new();
+                self.stdout.read_line(&mut got).unwrap();
+                got.strip_suffix('\n').unwrap().to_string()
+            })
+            .collect()
     }
 
     /// Closes the client's stdin and returns the exit code and the lines the agent got.
@@ -154,4 +170,57 @@ pub fn stored(root: &Path, session: &str) -> Vec<Value> {
 
 pub fn turn(id: &str, role: &str, text: &str) -> Value {
     json!({ "id": id, "role": role, "text": text })
+}
+
+/// A temporary root with both example identities.
+pub fn both() -> TempDir {
+    let tmp = super::copy_example("nicole");
+    super::copy_tree(
+        &super::examples().join("reviewer"),
+        &tmp.path().join("reviewer"),
+    );
+    tmp
+}
+
+/// The `identity` config option the proxy adds, with `current` selected among `ids`.
+pub fn picker(current: &str, ids: &[&str]) -> Value {
+    let mut options = vec![json!({ "value": "_none", "name": "None" })];
+    for id in ids {
+        let name = if *id == "nicole" {
+            "Nicole"
+        } else {
+            "Rook Halvorsen"
+        };
+        options.push(json!({ "value": id, "name": name }));
+    }
+    json!({ "id": "identity", "name": "Identity", "description": "The owo identity this session records into", "category": "_owo", "type": "select", "currentValue": current, "options": options })
+}
+
+/// An `available_commands_update` with `agent` and then the proxy's `owo` command.
+pub fn commands(session: &str, agent: &[Value]) -> Value {
+    let mut all = agent.to_vec();
+    all.push(json!({ "name": "owo", "description": "Switch the owo identity of this session", "input": { "hint": "identity" } }));
+    session_update(
+        session,
+        json!({ "sessionUpdate": "available_commands_update", "availableCommands": all }),
+    )
+}
+
+pub fn session_update(session: &str, update: Value) -> Value {
+    json!({ "jsonrpc": "2.0", "method": "session/update", "params": { "sessionId": session, "update": update } })
+}
+
+impl Proxy {
+    /// Sends a session request. The agent's `reply` reaches the client unchanged but the last
+    /// line, the response, whose `configOptions` become `options`, and the proxy's own command
+    /// list follows it.
+    pub fn open(&mut self, line: &str, reply: &[String], session: &str, options: Value) {
+        let got = self.call(line, reply, reply.len() + 1);
+        let (last, rest) = reply.split_last().unwrap();
+        assert_eq!(&got[..rest.len()], rest);
+        let mut want = parse(last);
+        want["result"]["configOptions"] = options;
+        assert_eq!(parse(&got[rest.len()]), want);
+        assert_eq!(parse(&got[reply.len()]), commands(session, &[]));
+    }
 }
