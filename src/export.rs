@@ -170,14 +170,18 @@ pub fn card(
             .filter(|s| !s.is_empty())
             .unwrap_or_else(|| body_without(&e.text, &["Sources", "Identifiers"]));
     }
-    for e in &id.entries {
-        let include = match e.kind {
+    let mut lorebook: Vec<&Entry> = id
+        .entries
+        .iter()
+        .filter(|e| match e.kind {
             Kind::Project => project_md.is_some_and(|p| p.rel == e.rel),
             k => order(k).is_some(),
-        };
-        if include {
-            entries.push(lore(e, entries.len()));
-        }
+        })
+        .collect();
+    // Kinds in lorebook order; within a kind, path order.
+    lorebook.sort_by_key(|e| order(e.kind));
+    for e in lorebook {
+        entries.push(lore(e, entries.len()));
     }
     let tags = soul_json.get("tags").cloned().unwrap_or(json!([]));
     let creator = soul_json
