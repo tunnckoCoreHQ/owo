@@ -36,6 +36,8 @@ struct Turn {
     user: String,
     /// Agent messages in order: the `messageId`, when there is one, and the joined text.
     agent: Vec<(Option<String>, String)>,
+    /// Another update, such as a tool call, came after the last message chunk.
+    split: bool,
 }
 
 #[derive(Default)]
@@ -270,6 +272,7 @@ fn turn(request: &str, replay: bool, user: String) -> Turn {
         replay,
         user,
         agent: vec![],
+        split: false,
     }
 }
 
@@ -279,22 +282,27 @@ fn from_agent_line(line: &[u8], state: &Mutex<State>) -> Option<(String, Vec<Val
     let mut st = state.lock().unwrap();
     if msg["method"] == "session/update" {
         let (params, update) = (&msg["params"], &msg["params"]["update"]);
-        if update["sessionUpdate"] == "agent_message_chunk" && update["content"]["type"] == "text" {
-            let turn = st
-                .turns
-                .get_mut(params["sessionId"].as_str()?)?
-                .front_mut()?;
-            let text = update["content"]["text"].as_str()?;
-            let id = update["messageId"].as_str().map(String::from);
-            // Chunks with one `messageId` are one message; chunks with none join while adjacent.
-            let same = match &id {
-                Some(_) => turn.agent.iter_mut().find(|(i, _)| *i == id),
-                None => turn.agent.last_mut().filter(|(i, _)| i.is_none()),
-            };
-            match same {
-                Some((_, joined)) => joined.push_str(text),
-                None => turn.agent.push((id, text.to_string())),
-            }
+        let turn = st
+            .turns
+            .get_mut(params["sessionId"].as_str()?)?
+            .front_mut()?;
+        if update["sessionUpdate"] != "agent_message_chunk" || update["content"]["type"] != "text" {
+            turn.split = true;
+            return None;
+        }
+        let text = update["content"]["text"].as_str()?;
+        let id = update["messageId"].as_str().map(String::from);
+        // Chunks with one `messageId` are one message. Chunks with none are one message until
+        // another update, such as a tool call, comes between them.
+        let same = match &id {
+            Some(_) => turn.agent.iter_mut().find(|(i, _)| *i == id),
+            None if turn.split => None,
+            None => turn.agent.last_mut().filter(|(i, _)| i.is_none()),
+        };
+        turn.split = false;
+        match same {
+            Some((_, joined)) => joined.push_str(text),
+            None => turn.agent.push((id, text.to_string())),
         }
         return None;
     }
