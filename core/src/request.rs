@@ -413,9 +413,15 @@ impl<'a> Reader<'a> {
         })
     }
 
-    /// A `YYYY-MM-DD` day.
+    /// A `YYYY-MM-DD` day. In check mode, a base day outside the years 0000 to 9999 is an error.
     pub fn day(&mut self, f: Field, base: Option<NaiveDate>) -> Option<NaiveDate> {
+        let name = f.name;
         let Some((name, a)) = self.declare(f, given(base.is_some())) else {
+            if let (Mode::Check, Some(day)) = (&self.mode, base) {
+                if let Err(e) = crate::parse_day(&day.to_string()) {
+                    self.fail(format!("argument {name:?}: {e}"));
+                }
+            }
             return base;
         };
         let Some(text) = self.one(name, a) else {
@@ -483,11 +489,15 @@ pub trait Request: Default + Clone {
         r.error.map_or(Ok(req), Err)
     }
 
-    /// Checks the request against the rules declared on its fields (`range`, `conflicts`,
-    /// `requires`): a usage error with a fault when one is broken. Each typed call runs it.
+    /// Checks the request against its field types and the rules declared on its fields
+    /// (`required` paths, `range`, `conflicts`, `requires`): a usage error when one is broken.
+    /// Each typed call runs it.
     fn check(&self) -> Result<()> {
         let mut r = Reader::new(Mode::Check);
         Self::read(&mut r, self.clone());
+        if let Some(e) = r.error {
+            return Err(e);
+        }
         let values = Args { map: r.values };
         r.fields.iter().try_for_each(|f| values.check_rules(f))
     }
