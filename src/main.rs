@@ -26,14 +26,28 @@ fn main() -> ExitCode {
                 Err(e) => Output::from(e),
             }
         }
-        _ => owo::run(&cli, env(&cli)),
+        _ => owo::run(
+            &cli,
+            env(&cli, || std::io::read_to_string(std::io::stdin())),
+        ),
     };
-    print(&cli, &out);
+    match usage(&out) {
+        // clap prints its own error, so it keeps its colour on a terminal.
+        Some(e) => {
+            eprint!("{}", warnings(&out));
+            let _ = e.print();
+        }
+        None => {
+            let (stdout, stderr) = render(&cli, &out);
+            eprint!("{stderr}");
+            print!("{stdout}");
+        }
+    }
     ExitCode::from(out.code as u8)
 }
 
-/// The environment values `owo::run` uses, and stdin only for a command that reads it.
-fn env(cli: &Cli) -> owo::Env {
+/// The environment values `owo::run` uses, and `stdin` read only for a command that takes it.
+fn env(cli: &Cli, stdin: impl FnOnce() -> std::io::Result<String>) -> owo::Env {
     let non_empty = |key: &str| std::env::var(key).ok().filter(|v| !v.is_empty());
     let reads_stdin = matches!(
         &cli.command,
@@ -50,28 +64,50 @@ fn env(cli: &Cli) -> owo::Env {
         home: std::env::var_os("HOME").map(PathBuf::from),
         xdg_config_home: non_empty("XDG_CONFIG_HOME").map(PathBuf::from),
         xdg_data_home: non_empty("XDG_DATA_HOME").map(PathBuf::from),
-        stdin: reads_stdin.then(|| std::io::read_to_string(std::io::stdin())),
+        stdin: reads_stdin.then(stdin),
     }
 }
 
-/// Warnings to stderr; then a usage error, the JSON envelope, or the error line and the text.
-fn print(cli: &Cli, out: &Output) {
-    for w in &out.warnings {
-        eprintln!("owo: warning: {w}");
+/// The warnings of an `Output`, one `owo: warning: <text>` line each.
+fn warnings(out: &Output) -> String {
+    out.warnings
+        .iter()
+        .map(|w| format!("owo: warning: {w}\n"))
+        .collect()
+}
+
+/// The clap usage error in an `Output`, if it holds one.
+fn usage(out: &Output) -> Option<&clap::Error> {
+    out.error.as_ref().and_then(|e| e.downcast_ref())
+}
+
+/// The stdout and stderr text of an `Output`. Stderr holds the warnings, then a usage error
+/// or the error line; stdout holds the JSON envelope with `--json`, else the text.
+fn render(cli: &Cli, out: &Output) -> (String, String) {
+    let mut stderr = warnings(out);
+    if let Some(usage) = usage(out) {
+        return usage_text(usage, stderr);
     }
-    if let Some(usage) = out
-        .error
-        .as_ref()
-        .and_then(|e| e.downcast_ref::<clap::Error>())
-    {
-        let _ = usage.print();
-    } else if cli.json {
+    let stdout = if cli.json {
         let text = serde_json::to_string_pretty(&out.envelope).expect("envelope serializes");
-        println!("{text}");
+        format!("{text}\n")
     } else {
         if let Some(e) = &out.error {
-            eprintln!("owo: {e:#}");
+            stderr.push_str(&format!("owo: {e:#}\n"));
         }
-        print!("{}", out.text);
+        out.text.clone()
+    };
+    (stdout, stderr)
+}
+
+/// The stdout and stderr text of a clap error, as clap prints it: help and version on stdout,
+/// errors on stderr after `stderr`.
+fn usage_text(usage: &clap::Error, mut stderr: String) -> (String, String) {
+    let text = usage.render().to_string();
+    if usage.use_stderr() {
+        stderr.push_str(&text);
+        (String::new(), stderr)
+    } else {
+        (text, stderr)
     }
 }

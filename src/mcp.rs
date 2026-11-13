@@ -1,13 +1,11 @@
-//! `owo mcp`: a stdio MCP server. Each tool runs this same binary with the matching
-//! command line, so a tool call and a CLI call share one code path and one output.
+//! `owo mcp`: an MCP server. Each tool parses the matching command line with clap and calls
+//! `owo::run` in process, so a tool call and a CLI call share one code path and one output.
 //! Messages are JSON-RPC 2.0: one per line on stdio, or one per POST to `/mcp` with `--remote`.
 
 use anyhow::{Context, Result};
 use serde_json::{json, Map, Value};
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{TcpListener, TcpStream};
-use std::path::PathBuf;
-use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
 const PROTOCOL: &str = "2025-06-18";
@@ -21,7 +19,7 @@ enum Arg {
     Flag(String),
     /// `--flag` when true.
     Switch(String),
-    /// A JSON value written to the child's stdin.
+    /// A JSON value passed as the command's stdin text.
     Stdin,
 }
 
@@ -246,43 +244,50 @@ fn argv(
     Ok((out, stdin))
 }
 
+fn result(text: String, error: bool) -> Value {
+    json!({ "content": [{ "type": "text", "text": text }], "isError": error })
+}
+
+/// Runs one tool call. A panic becomes an error result, so the server answers the next request.
 fn call(tool: &Tool, params: &Value, cli: &owo::Cli) -> Value {
+    guarded(|| run_tool(tool, params, cli))
+}
+
+fn guarded(f: impl FnOnce() -> Value) -> Value {
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(f)).unwrap_or_else(|panic| {
+        let why = panic
+            .downcast_ref::<&str>()
+            .map(|s| s.to_string())
+            .or_else(|| panic.downcast_ref::<String>().cloned())
+            .unwrap_or_default();
+        result(format!("owo panicked: {why}"), true)
+    })
+}
+
+/// Parses the tool's argv with clap and calls `owo::run` in process. The text is the command's
+/// stdout, or its stderr when stdout is blank, or both joined with a newline.
+fn run_tool(tool: &Tool, params: &Value, cli: &owo::Cli) -> Value {
     let empty = Map::new();
     let args = params["arguments"].as_object().unwrap_or(&empty);
-    let result = |text: String, error: bool| json!({ "content": [{ "type": "text", "text": text }], "isError": error });
     let (argv, stdin) = match argv(tool, args, cli) {
         Ok(a) => a,
         Err(e) => return result(e, true),
     };
-    let exe = std::env::current_exe().unwrap_or_else(|_| PathBuf::from("owo"));
-    let run = || {
-        let mut child = Command::new(exe)
-            .args(&argv)
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()?;
-        // A child that exits before reading (a usage error) closes the pipe; its output says why.
-        let _ = child
-            .stdin
-            .take()
-            .expect("piped")
-            .write_all(stdin.as_bytes());
-        child.wait_with_output()
+    let ((stdout, stderr), code) =
+        match <owo::Cli as clap::Parser>::try_parse_from(std::iter::once("owo".into()).chain(argv))
+        {
+            Ok(parsed) => {
+                let out = owo::run(&parsed, crate::env(&parsed, || Ok(stdin)));
+                (crate::render(&parsed, &out), out.code)
+            }
+            Err(e) => (crate::usage_text(&e, String::new()), e.exit_code()),
+        };
+    let text = match (stdout.trim().is_empty(), stderr.trim().is_empty()) {
+        (true, _) => stderr,
+        (false, true) => stdout,
+        (false, false) => format!("{stdout}\n{stderr}"),
     };
-    match run() {
-        Ok(o) => {
-            let stdout = String::from_utf8_lossy(&o.stdout).into_owned();
-            let stderr = String::from_utf8_lossy(&o.stderr).into_owned();
-            let text = match (stdout.trim().is_empty(), stderr.trim().is_empty()) {
-                (true, _) => stderr,
-                (false, true) => stdout,
-                (false, false) => format!("{stdout}\n{stderr}"),
-            };
-            result(text, !o.status.success())
-        }
-        Err(e) => result(format!("could not run owo: {e}"), true),
-    }
+    result(text, code != 0)
 }
 
 fn respond(id: &Value, method: &str, params: &Value, cli: &owo::Cli) -> Option<Value> {
@@ -477,4 +482,18 @@ fn http_request(stream: TcpStream, cli: &owo::Cli) -> std::io::Result<()> {
         while Instant::now() < stop && matches!(stream.read(&mut buf), Ok(n) if n > 0) {}
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_panic_is_an_error_result_and_the_next_call_runs() {
+        let failed = guarded(|| panic!("boom"));
+        assert_eq!(failed["isError"], true);
+        assert_eq!(failed["content"][0]["text"], "owo panicked: boom");
+        let next = guarded(|| result("ok".into(), false));
+        assert_eq!(next["isError"], false);
+    }
 }

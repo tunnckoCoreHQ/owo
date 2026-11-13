@@ -7,7 +7,7 @@ owo is one Rust crate with a library and the `owo` binary. Each command loads an
 Each module owns one job. The library (`lib.rs`) holds every module but `mcp.rs`, and its public interface is small: `owo::run`, `Env`, `Output`, `Identity`, and `Cli` with its commands.
 
 - `lib.rs` has `owo::run(&cli, env) -> Output`. It dispatches each command and collects its result through one `Out::emit` path. It prints nothing, reads no environment variables and does not exit. `Env` carries the `OWO_ROOT`, `OWO_IDENTITY`, `OWO_PROJECT`, `HOME` and XDG values, the working folder, and the stdin text for `owo write` and `owo sync push`.
-- `main.rs` is the binary. It parses arguments, reads the environment, reads stdin only for a command that takes it, calls `owo::run`, and prints the `Output`: warnings to stderr as `owo: warning: <text>`, then the JSON envelope with `--json`, else the error line `owo: <error>` and the text. It runs `owo mcp` itself, and it keeps the SIGPIPE handling.
+- `main.rs` is the binary. It parses arguments, builds `Env` from the process with `env` (stdin read only for a command that takes it), calls `owo::run`, and prints the two strings `render` makes from the `Output`. Stderr gets the warnings as `owo: warning: <text>`, then a usage error as clap words it or the error line `owo: <error>`; stdout gets the JSON envelope with `--json`, else the text. It runs `owo mcp` itself, and it keeps the SIGPIPE handling.
 
 - `cli.rs` holds the clap definitions: every command, flag and help line.
 
@@ -28,7 +28,7 @@ Each module owns one job. The library (`lib.rs`) holds every module but `mcp.rs`
 - `export.rs` writes character cards (JSON or PNG), SoulSpec packages and skill wrappers.
 - `sync.rs` parses transcripts and writes session slices; `migrate.rs` converts v1 identities.
 - `output.rs` defines diagnostics, the envelope, exit codes, `Out`, which collects the envelope or the text, and `Output`: the envelope, the text, the warnings, the error and the exit code. A `clap::Error` in `Output` is a usage error (exit 2), which the binary prints as clap does.
-- `mcp.rs` is a module of the binary. It serves the MCP tools over stdio or HTTP, built from the clap definitions with only the public library interface; see [[decisions#MCP calls the library]].
+- `mcp.rs` is a module of the binary. It serves the MCP tools over stdio or HTTP, built from the clap definitions with only the public library interface. Each tool call parses its argv with clap, calls `owo::run` in process with the `env` and `render` of `main.rs`, and turns a panic into an `isError` result; see [[decisions#MCP calls the library]].
 
 ## Loading an identity
 
