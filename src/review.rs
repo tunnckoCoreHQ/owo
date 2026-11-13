@@ -63,10 +63,13 @@ const STOP_WORDS: &[&str] = &[
 fn recurring(days: &[Day]) -> Vec<(String, usize)> {
     let content = |w: &str| !STOP_WORDS.contains(&w);
     let mut seen: BTreeMap<String, BTreeSet<&str>> = BTreeMap::new();
+    // A phrase stays inside one line, so two bullets never join into one.
     for d in days {
-        let toks = crate::search::tokens(&d.body);
-        for w in toks.windows(3).filter(|w| content(&w[0]) && content(&w[2])) {
-            seen.entry(w.join(" ")).or_default().insert(&d.date);
+        for line in d.body.lines() {
+            let toks = crate::search::tokens(line);
+            for w in toks.windows(3).filter(|w| content(&w[0]) && content(&w[2])) {
+                seen.entry(w.join(" ")).or_default().insert(&d.date);
+            }
         }
     }
     let mut out: Vec<(String, usize)> = seen
