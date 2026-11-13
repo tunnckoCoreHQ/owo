@@ -1,0 +1,33 @@
+version: 2.1
+
+# CI of owo: the checks that AGENTS.md asks for before a commit. rustup
+# installs the toolchain of rust-toolchain.toml. The cargo cache is keyed on
+# the lockfile and the toolchain.
+
+jobs:
+  check:
+    docker:
+      - image: cimg/rust:1.99.1
+    resource_class: large
+    steps:
+      - checkout
+      - restore_cache:
+          keys:
+            - v1-cargo-{{ arch }}-{{ checksum "Cargo.lock" }}-{{ checksum "rust-toolchain.toml" }}
+            - v1-cargo-{{ arch }}-
+      - run:
+          name: Set up Rust
+          command: |
+            rustup toolchain install
+            rustup show active-toolchain
+      - run: cargo fmt --check
+      - run: cargo clippy --all-targets -- -D warnings
+      - run: cargo test
+      - save_cache:
+          key: v1-cargo-{{ arch }}-{{ checksum "Cargo.lock" }}-{{ checksum "rust-toolchain.toml" }}
+          paths: [~/.cargo/registry, ~/.cargo/git, target]
+
+workflows:
+  ci:
+    jobs:
+      - check
