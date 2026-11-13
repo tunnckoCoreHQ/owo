@@ -60,7 +60,8 @@ pub fn run(id: &Identity, check: bool) -> Result<Report> {
         bail!("{} is not valid UTF-8; fix it before stamping", e.rel);
     }
     let at = state::now();
-    let today = state::day(&at);
+    // Frontmatter dates name the local day, like `owo add`; state stamps stay UTC.
+    let today = state::local_today();
     let mut docs = SCOPES
         .iter()
         .map(|s| Ok((*s, load(id, s)?)))
@@ -101,7 +102,7 @@ pub fn run(id: &Identity, check: bool) -> Result<Report> {
         }
         let mut text = e.text.clone();
         if recorded.is_some() && e.kind.has_frontmatter() {
-            if let Some(new_text) = touch_updated(&text, today) {
+            if let Some(new_text) = touch_updated(&text, &today) {
                 touched.push((e.rel.clone(), new_text.clone()));
                 text = new_text;
             }

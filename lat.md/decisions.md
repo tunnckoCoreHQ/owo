@@ -18,7 +18,7 @@ Indexes and the timeline depend only on entry content, so `owo index --check` an
 
 Decision record: [ADR-0003](../docs/adr/0003-stamp-touches-frontmatter.md).
 
-`owo stamp` moves a file's state timestamp only when its hash changes, and then sets `updated:` in that entry's frontmatter to today and re-hashes it.
+`owo stamp` moves a file's state timestamp only when its hash changes, and then sets `updated:` in that entry's frontmatter to the local day (the day `owo add` uses) and re-hashes it.
 
 A changed soul file bumps the minor version in `soul/soul.json`. New identities get `review.memory_hash` set at creation, so a fresh identity lints without a memory warning.
 
