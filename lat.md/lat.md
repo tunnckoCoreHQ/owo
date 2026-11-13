@@ -7,4 +7,4 @@ This is owo's knowledge graph and the one description of its behavior: what an i
 - [[cli]] — Commands, flags, output envelope and exit codes
 - [[lint]] — Lint rules, levels, and what each checks
 - [[architecture]] — Modules, data flow, and how an identity is loaded
-- [[decisions]] — Implementation decisions and their reasons
+- [[decisions]] — Implementation decisions; each links its decision record in `docs/adr/`
