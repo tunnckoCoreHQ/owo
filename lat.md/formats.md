@@ -42,7 +42,7 @@ One slug function turns a name into a path segment: transliterate to ASCII, lowe
 
 Links are Obsidian-style wiki-links: `[[Title]]`, `[[Title|shown text]]`, `[[Title#Section]]`. Resolution is in [[architecture#Link resolution]].
 
-Links inside inline code or fenced code (fences of ` ``` ` or `~~~`) do not count. A backtick with no closing backtick on its line is plain text.
+Links inside inline code or fenced code do not count. A fence opens with three or more backticks or tildes and closes on a run of the same character at least as long. A backtick with no closing backtick on its line is plain text.
 
 Soul files link by name: `[[IDENTITY]]`, `[[SOUL]]`, `[[VOICE]]`, `[[LOOK]]`, `[[MEMORY]]`. Links into a project KB are `[[kb:<project>:<path>#<Section>]]`, resolved against the KB path in [[cli#Context]].
 

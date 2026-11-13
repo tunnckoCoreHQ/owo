@@ -67,16 +67,21 @@ pub fn heading(line: &str) -> Option<(usize, &str)> {
 }
 
 /// Lines with their 0-based index, marking each as outside fenced code (fence lines are not).
-/// A fence opens with ``` or ~~~ and closes on the same character.
+/// A fence opens with 3+ backticks or tildes and closes on a run of the same character at
+/// least as long.
 pub fn unfenced(body: &str) -> impl Iterator<Item = (usize, &str, bool)> {
-    let mut fence: Option<&str> = None;
+    let mut fence: Option<(char, usize)> = None;
     body.lines().enumerate().map(move |(i, line)| {
-        let mark = ["```", "~~~"]
-            .into_iter()
-            .find(|m| line.trim_start().starts_with(m));
+        let text = line.trim_start();
+        let mark = text
+            .chars()
+            .next()
+            .filter(|c| matches!(c, '`' | '~'))
+            .map(|c| (c, text.chars().take_while(|x| *x == c).count()))
+            .filter(|(_, n)| *n >= 3);
         match (fence, mark) {
             (None, Some(m)) => fence = Some(m),
-            (Some(f), Some(m)) if f == m => fence = None,
+            (Some((c, n)), Some((m, k))) if c == m && k >= n => fence = None,
             _ => return (i, line, fence.is_none()),
         }
         (i, line, false)
