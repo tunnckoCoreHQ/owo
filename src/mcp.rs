@@ -64,7 +64,7 @@ fn tools() -> Vec<Tool> {
     }
     let mut out = vec![];
     walk(
-        &<crate::cli::Cli as clap::CommandFactory>::command(),
+        &<owo::Cli as clap::CommandFactory>::command(),
         &[],
         &mut out,
     );
@@ -190,7 +190,7 @@ fn scalar(v: &Value) -> Option<String> {
 fn argv(
     tool: &Tool,
     args: &Map<String, Value>,
-    cli: &crate::cli::Cli,
+    cli: &owo::Cli,
 ) -> Result<(Vec<String>, String), String> {
     if let Some(k) = args
         .keys()
@@ -246,7 +246,7 @@ fn argv(
     Ok((out, stdin))
 }
 
-fn call(tool: &Tool, params: &Value, cli: &crate::cli::Cli) -> Value {
+fn call(tool: &Tool, params: &Value, cli: &owo::Cli) -> Value {
     let empty = Map::new();
     let args = params["arguments"].as_object().unwrap_or(&empty);
     let result = |text: String, error: bool| json!({ "content": [{ "type": "text", "text": text }], "isError": error });
@@ -285,7 +285,7 @@ fn call(tool: &Tool, params: &Value, cli: &crate::cli::Cli) -> Value {
     }
 }
 
-fn respond(id: &Value, method: &str, params: &Value, cli: &crate::cli::Cli) -> Option<Value> {
+fn respond(id: &Value, method: &str, params: &Value, cli: &owo::Cli) -> Option<Value> {
     let ok = |result: Value| Some(json!({ "jsonrpc": "2.0", "id": id, "result": result }));
     let error = |code: i64, message: String| {
         Some(json!({ "jsonrpc": "2.0", "id": id, "error": { "code": code, "message": message } }))
@@ -317,7 +317,7 @@ fn respond(id: &Value, method: &str, params: &Value, cli: &crate::cli::Cli) -> O
 
 /// The reply to one JSON-RPC message, or None for notifications and responses.
 /// Bytes that are not UTF-8 JSON get a parse error.
-fn handle(bytes: &[u8], cli: &crate::cli::Cli) -> Option<Value> {
+fn handle(bytes: &[u8], cli: &owo::Cli) -> Option<Value> {
     match serde_json::from_slice::<Value>(bytes) {
         Ok(msg) if msg.get("id").is_some() && msg.get("method").is_some() => {
             let method = msg["method"].as_str().unwrap_or_default();
@@ -333,7 +333,7 @@ fn handle(bytes: &[u8], cli: &crate::cli::Cli) -> Option<Value> {
 }
 
 /// Serves MCP on stdin and stdout until stdin closes.
-pub fn serve(cli: &crate::cli::Cli) -> Result<()> {
+pub fn serve(cli: &owo::Cli) -> Result<()> {
     let mut stdin = std::io::stdin().lock();
     let mut stdout = std::io::stdout();
     let mut line = vec![];
@@ -360,7 +360,7 @@ const DEADLINE: Duration = Duration::from_secs(30);
 /// Serves MCP over HTTP at `http://<addr>:<port>/mcp` (Streamable HTTP with JSON replies).
 /// Without `port` it takes 4224, or the next free port up to 4323. Prints the URL, then
 /// handles one request at a time.
-pub fn serve_http(addr: &str, port: Option<u16>, cli: &crate::cli::Cli) -> Result<()> {
+pub fn serve_http(addr: &str, port: Option<u16>, cli: &owo::Cli) -> Result<()> {
     let listener = match port {
         Some(p) => TcpListener::bind((addr, p)).with_context(|| format!("binding {addr}:{p}"))?,
         None => (DEFAULT_PORT..DEFAULT_PORT + 100)
@@ -396,7 +396,7 @@ impl Read for Timed {
     }
 }
 
-fn http_request(stream: TcpStream, cli: &crate::cli::Cli) -> std::io::Result<()> {
+fn http_request(stream: TcpStream, cli: &owo::Cli) -> std::io::Result<()> {
     stream.set_write_timeout(Some(DEADLINE))?;
     let timed = Timed {
         stream: stream.try_clone()?,

@@ -1,14 +1,17 @@
 # Architecture
 
-owo is one Rust binary crate. Each command loads an identity folder into memory, works on files only, and prints text or a JSON envelope.
+owo is one Rust crate with a library and the `owo` binary. Each command loads an identity folder into memory, works on files only, and returns text or a JSON envelope; see [ADR-0004](../docs/adr/0004-library-core-thin-adapters.md).
 
 ## Modules
 
-Each module owns one job; `main.rs` parses arguments, dispatches each command, and prints its result through one `Out::emit` path.
+Each module owns one job. The library (`lib.rs`) holds every module but `mcp.rs`, and its public interface is small: `owo::run`, `Env`, `Output`, `Identity`, and `Cli` with its commands.
+
+- `lib.rs` has `owo::run(&cli, env) -> Output`. It dispatches each command and collects its result through one `Out::emit` path. It prints nothing, reads no environment variables and does not exit. `Env` carries the `OWO_ROOT`, `OWO_IDENTITY`, `OWO_PROJECT`, `HOME` and XDG values, the working folder, and the stdin text for `owo write` and `owo sync push`.
+- `main.rs` is the binary. It parses arguments, reads the environment, reads stdin only for a command that takes it, calls `owo::run`, and prints the `Output`: warnings to stderr as `owo: warning: <text>`, then the JSON envelope with `--json`, else the error line `owo: <error>` and the text. It runs `owo mcp` itself, and it keeps the SIGPIPE handling.
 
 - `cli.rs` holds the clap definitions: every command, flag and help line.
 
-- `config.rs` resolves root, identity, project and KB, and checks the selected identity and project (exit 3). See [[formats#Config resolution]].
+- `config.rs` resolves root, identity, project and KB from the flags and `Env`, and checks the selected identity and project (exit 3). See [[formats#Config resolution]].
 - `identity.rs` walks one identity folder and parses every Markdown file into an `Entry` with a `Kind` decided by its path. `Kind::name` is the one name of a kind in output and `--type` values, and `Entry::label` gives the title, else the stem key.
 - `markdown.rs` splits frontmatter and parses it with `serde-saphyr` into `serde_json` values, reads sections, extracts wiki-links outside code, counts words.
 - `slug.rs` holds the one slug function.
@@ -18,14 +21,14 @@ Each module owns one job; `main.rs` parses arguments, dispatches each command, a
 - `state.rs` and `stamp.rs` hash files and maintain the three `state.json` files; `state::parse_day` is the one strict `YYYY-MM-DD` parser. Readers go through `state::doc` for a whole file, and `state::updated`, `state::stamps`, `state::history` and `state::review` for its parts, over the copies `Identity::load` reads; writers read, change and write a fresh copy.
 - `lint.rs` runs the rules in [[lint]]; each rule appends findings and the runner names them after the rule.
 - `find.rs` resolves names, shows sections, and lists backlinks, outlinks and orphans. `find::show` picks a `kb:` link or an entry for `owo show`, and `find::section_text` writes the one "no section" error for both. `find::unresolved` writes the one "does not resolve" error for `owo resolve` and every `find::one` caller (`show`, `links`, `context --with`, soul-note evidence, `export --scenario`); lint words its own link errors.
-- `kb.rs` finds a project KB, builds the pointer `owo context` prints, and resolves `[[kb:...]]` links for `owo show` and lint.
+- `kb.rs` finds a project KB (`~/` is `Identity::home`, which `owo::run` sets from `Env`), builds the pointer `owo context` prints, and resolves `[[kb:...]]` links for `owo show` and lint.
 - `status.rs` derives current state and the Now block; `context.rs` builds the tiered load set.
 - `search.rs` is the BM25 ranker; `review.rs` builds the review packet, records finished reviews, and keeps the soul history.
 - `git.rs` wraps the `git` binary; `changes.rs` implements `owo changes` and the changed-file set for `lint --changed`.
 - `export.rs` writes character cards (JSON or PNG), SoulSpec packages and skill wrappers.
 - `sync.rs` parses transcripts and writes session slices; `migrate.rs` converts v1 identities.
-- `output.rs` defines diagnostics, the envelope, exit codes and `Out`, which prints the envelope or the text.
-- `mcp.rs` serves the MCP tools over stdio or HTTP, built from the clap definitions; see [[decisions#MCP calls the library]].
+- `output.rs` defines diagnostics, the envelope, exit codes, `Out`, which collects the envelope or the text, and `Output`: the envelope, the text, the warnings, the error and the exit code. A `clap::Error` in `Output` is a usage error (exit 2), which the binary prints as clap does.
+- `mcp.rs` is a module of the binary. It serves the MCP tools over stdio or HTTP, built from the clap definitions with only the public library interface; see [[decisions#MCP calls the library]].
 
 ## Loading an identity
 

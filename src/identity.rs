@@ -245,6 +245,8 @@ pub struct Identity {
     pub entries: Vec<Entry>,
     /// Lowercase link key to the entries it can point at; see `resolve_link`.
     pub keys: BTreeMap<String, Vec<usize>>,
+    /// The home folder for `~/` in a project KB path; the caller sets it.
+    pub home: Option<PathBuf>,
 }
 
 pub fn classify(rel: &str) -> Kind {
@@ -389,6 +391,7 @@ impl Identity {
             manifest_error,
             state,
             keys: Self::link_keys(&entries),
+            home: None,
             entries,
         })
     }
