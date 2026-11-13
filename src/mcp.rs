@@ -405,7 +405,7 @@ fn http_request(stream: TcpStream, cli: &crate::cli::Cli) -> std::io::Result<()>
     let mut reader = BufReader::new(timed.take((MAX_HEAD + MAX_BODY) as u64));
     let mut request = String::new();
     let mut head = reader.read_line(&mut request)?;
-    let (mut length, mut json_body, mut origin) = (0, false, false);
+    let (mut length, mut chunked, mut json_body, mut origin) = (None, false, false, false);
     loop {
         let mut header = String::new();
         let n = reader.read_line(&mut header)?;
@@ -418,7 +418,9 @@ fn http_request(stream: TcpStream, cli: &crate::cli::Cli) -> std::io::Result<()>
         };
         let (k, v) = (k.trim().to_ascii_lowercase(), v.trim());
         match k.as_str() {
-            "content-length" => length = v.parse().unwrap_or(0),
+            "content-length" => length = v.parse::<usize>().ok(),
+            // owo reads only a Content-Length body, so a chunked one gets 411.
+            "transfer-encoding" => chunked = true,
             "content-type" => {
                 json_body = v
                     .split(';')
@@ -432,7 +434,8 @@ fn http_request(stream: TcpStream, cli: &crate::cli::Cli) -> std::io::Result<()>
     // Read the body even for a refused request: closing with unread data resets the connection
     // and the client never sees the status.
     let mut body = vec![];
-    if head <= MAX_HEAD && length <= MAX_BODY {
+    let length = length.filter(|_| !chunked);
+    if let Some(length) = length.filter(|n| head <= MAX_HEAD && *n <= MAX_BODY) {
         body.resize(length, 0);
         reader.read_exact(&mut body)?;
     }
@@ -444,7 +447,8 @@ fn http_request(stream: TcpStream, cli: &crate::cli::Cli) -> std::io::Result<()>
         // A browser sends Origin with every POST from a page, also after DNS rebinding.
         _ if origin => ("403 Forbidden", String::new()),
         ("POST", "/mcp") if !json_body => ("415 Unsupported Media Type", String::new()),
-        ("POST", "/mcp") if length > MAX_BODY => ("413 Payload Too Large", String::new()),
+        ("POST", "/mcp") if length.is_none() => ("411 Length Required", String::new()),
+        ("POST", "/mcp") if length > Some(MAX_BODY) => ("413 Payload Too Large", String::new()),
         ("POST", "/mcp") => match handle(&body, cli) {
             Some(reply) => ("200 OK", reply.to_string()),
             None => ("202 Accepted", String::new()),
