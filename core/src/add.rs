@@ -4,19 +4,10 @@ use crate::identity::{write_file, Identity, Kind};
 use crate::slug::slugify;
 use crate::templates;
 use anyhow::{bail, Context, Result};
-use chrono::NaiveDate;
 use std::collections::BTreeMap;
 use std::fs;
 
-pub struct Request<'a> {
-    pub kind: Kind,
-    pub title: &'a str,
-    pub date: Option<NaiveDate>,
-    pub parent: Option<&'a str>,
-    pub aliases: &'a [String],
-    /// KB path for a project (`kb:` in project.md)
-    pub kb: Option<&'a str>,
-}
+use crate::AddRequest as Request;
 
 /// Returns the entry path and true when the file is new.
 /// `project` is the project of a note, checked to exist.
@@ -59,6 +50,7 @@ pub fn add(id: &Identity, req: &Request, project: Option<&str>) -> Result<(Strin
     let parent_slug = if req.kind == Kind::LocationDetail {
         let parent = req
             .parent
+            .as_deref()
             .context("location-detail needs --parent <location>")?;
         let parent_slug = slugify(parent);
         let overview = Kind::Location
@@ -114,7 +106,7 @@ pub fn add(id: &Identity, req: &Request, project: Option<&str>) -> Result<(Strin
             .collect::<String>();
         text = text.replacen("\naliases: []", &format!("\naliases:{list}"), 1);
     }
-    if let (Some(kb), Kind::Project) = (req.kb, req.kind) {
+    if let (Some(kb), Kind::Project) = (req.kb.as_deref(), req.kind) {
         if !text.contains("kb: \"\"") {
             bail!("the project template has no `kb: \"\"` line for --kb");
         }

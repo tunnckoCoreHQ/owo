@@ -1,7 +1,7 @@
 //! The MCP server on in-memory streams, with no process.
 
-use crate::mcp;
-use owo::{Env, Select};
+use owo_core::mcp;
+use owo_core::{Env, Select};
 use serde_json::{json, Value};
 
 use std::path::Path;

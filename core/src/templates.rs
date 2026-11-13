@@ -8,37 +8,43 @@ use std::sync::OnceLock;
 
 /// Templates used by `owo new`, keyed by their identity-relative output path.
 pub const IDENTITY_FILES: &[(&str, &str)] = &[
-    ("identity.json", include_str!("../templates/identity.json")),
+    (
+        "identity.json",
+        include_str!("../../templates/identity.json"),
+    ),
     (
         "soul/soul.json",
-        include_str!("../templates/soul/soul.json"),
+        include_str!("../../templates/soul/soul.json"),
     ),
     (
         "soul/IDENTITY.md",
-        include_str!("../templates/soul/IDENTITY.md"),
+        include_str!("../../templates/soul/IDENTITY.md"),
     ),
-    ("soul/SOUL.md", include_str!("../templates/soul/SOUL.md")),
-    ("soul/VOICE.md", include_str!("../templates/soul/VOICE.md")),
-    ("soul/LOOK.md", include_str!("../templates/soul/LOOK.md")),
+    ("soul/SOUL.md", include_str!("../../templates/soul/SOUL.md")),
+    (
+        "soul/VOICE.md",
+        include_str!("../../templates/soul/VOICE.md"),
+    ),
+    ("soul/LOOK.md", include_str!("../../templates/soul/LOOK.md")),
     (
         "soul/MEMORY.md",
-        include_str!("../templates/soul/MEMORY.md"),
+        include_str!("../../templates/soul/MEMORY.md"),
     ),
     (
         "soul/examples/good.md",
-        include_str!("../templates/soul/examples-good.md"),
+        include_str!("../../templates/soul/examples-good.md"),
     ),
     (
         "soul/examples/bad.md",
-        include_str!("../templates/soul/examples-bad.md"),
+        include_str!("../../templates/soul/examples-bad.md"),
     ),
     (
         "soul/examples/greetings.md",
-        include_str!("../templates/soul/examples-greetings.md"),
+        include_str!("../../templates/soul/examples-greetings.md"),
     ),
     (
         "work/README.md",
-        include_str!("../templates/work-README.md"),
+        include_str!("../../templates/work-README.md"),
     ),
 ];
 
@@ -46,25 +52,46 @@ pub const IDENTITY_FILES: &[(&str, &str)] = &[
 pub const ENTRY_TEMPLATES: &[(&str, &str)] = &[
     (
         "character",
-        include_str!("../templates/entries/character.md"),
+        include_str!("../../templates/entries/character.md"),
     ),
-    ("location", include_str!("../templates/entries/location.md")),
+    (
+        "location",
+        include_str!("../../templates/entries/location.md"),
+    ),
     (
         "location-detail",
-        include_str!("../templates/entries/location-detail.md"),
+        include_str!("../../templates/entries/location-detail.md"),
     ),
-    ("culture", include_str!("../templates/entries/culture.md")),
-    ("faction", include_str!("../templates/entries/faction.md")),
-    ("era", include_str!("../templates/entries/era.md")),
-    ("event", include_str!("../templates/entries/event.md")),
-    ("thread", include_str!("../templates/entries/thread.md")),
-    ("conflict", include_str!("../templates/entries/conflict.md")),
-    ("lesson", include_str!("../templates/entries/lesson.md")),
-    ("writing", include_str!("../templates/entries/writing.md")),
-    ("log", include_str!("../templates/entries/log.md")),
-    ("journal", include_str!("../templates/entries/journal.md")),
-    ("project", include_str!("../templates/entries/project.md")),
-    ("note", include_str!("../templates/entries/note.md")),
+    (
+        "culture",
+        include_str!("../../templates/entries/culture.md"),
+    ),
+    (
+        "faction",
+        include_str!("../../templates/entries/faction.md"),
+    ),
+    ("era", include_str!("../../templates/entries/era.md")),
+    ("event", include_str!("../../templates/entries/event.md")),
+    ("thread", include_str!("../../templates/entries/thread.md")),
+    (
+        "conflict",
+        include_str!("../../templates/entries/conflict.md"),
+    ),
+    ("lesson", include_str!("../../templates/entries/lesson.md")),
+    (
+        "writing",
+        include_str!("../../templates/entries/writing.md"),
+    ),
+    ("log", include_str!("../../templates/entries/log.md")),
+    (
+        "journal",
+        include_str!("../../templates/entries/journal.md"),
+    ),
+    (
+        "project",
+        include_str!("../../templates/entries/project.md"),
+    ),
+    ("note", include_str!("../../templates/entries/note.md")),
 ];
 
 /// Every template as (name shown by `owo templates`, file name looked up in `.templates/`, built-in text).

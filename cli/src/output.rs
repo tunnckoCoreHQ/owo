@@ -1,10 +1,10 @@
-//! Output envelope shared by every command: text for people, JSON for agents.
+//! What one command prints: the JSON envelope or the text, the warnings, the error and the exit
+//! code.
 
-use owo::{ErrorKind, Fault};
-use serde::Serialize;
+use owo_core::{Envelope, ErrorKind, Fault};
 use serde_json::Value;
 
-/// Exit codes from the design: 0 ok, 1 problems found, 2 usage, 3 config, 4 I/O.
+/// Exit codes: 0 ok, 1 problems found, 2 usage, 3 config, 4 I/O.
 pub mod exit {
     pub const OK: i32 = 0;
     pub const PROBLEMS: i32 = 1;
@@ -22,45 +22,7 @@ pub mod exit {
     }
 }
 
-/// The JSON shape every command prints with `--json`.
-#[derive(Debug, Serialize)]
-pub struct Envelope {
-    pub ok: bool,
-    pub data: Value,
-    pub warnings: Vec<Value>,
-    pub errors: Vec<Value>,
-}
-
-impl Envelope {
-    pub fn new(ok: bool, data: Value) -> Self {
-        Self {
-            ok,
-            data,
-            warnings: vec![],
-            errors: vec![],
-        }
-    }
-
-    pub fn ok(data: Value) -> Self {
-        Self::new(true, data)
-    }
-
-    pub fn fail(message: &str) -> Self {
-        Self::new(false, Value::Null).with_errors([message])
-    }
-
-    pub fn with_warnings(mut self, items: impl IntoIterator<Item = impl Into<Value>>) -> Self {
-        self.warnings.extend(items.into_iter().map(Into::into));
-        self
-    }
-
-    pub fn with_errors(mut self, items: impl IntoIterator<Item = impl Into<Value>>) -> Self {
-        self.errors.extend(items.into_iter().map(Into::into));
-        self
-    }
-}
-
-/// What one command produced. An adapter prints it or returns it.
+/// What one command produced.
 pub struct Output {
     /// The `{ ok, data, warnings, errors }` envelope, the result with `--json`.
     pub envelope: Value,
@@ -105,7 +67,7 @@ impl Output {
 
 /// The stdout and stderr text of a clap error, as clap prints it: help and version on stdout,
 /// errors on stderr after `stderr`.
-pub fn usage_text(usage: &clap::Error, mut stderr: String) -> (String, String) {
+fn usage_text(usage: &clap::Error, mut stderr: String) -> (String, String) {
     let text = usage.render().to_string();
     if usage.use_stderr() {
         stderr.push_str(&text);
@@ -117,15 +79,15 @@ pub fn usage_text(usage: &clap::Error, mut stderr: String) -> (String, String) {
 
 impl From<anyhow::Error> for Output {
     /// A failed command: a fail envelope, and the exit code for the error kind. A library error
-    /// takes the CLI's words for its fault; a library usage error becomes a clap error, so it is
-    /// worded as clap words its own.
+    /// takes its text with the command to run next; a library usage error becomes a clap
+    /// error, so it is worded as clap words its own.
     fn from(e: anyhow::Error) -> Self {
-        let (e, code) = match e.downcast_ref::<owo::Error>() {
+        let (e, code) = match e.downcast_ref::<owo_core::Error>() {
             Some(err) => {
-                let text = cli_text(err);
+                let text = hinted(err);
                 match err.kind {
                     ErrorKind::Usage => (
-                        <crate::cli::Cli as clap::CommandFactory>::command()
+                        crate::cli::command(&owo_core::operations())
                             .error(clap::error::ErrorKind::MissingRequiredArgument, text)
                             .into(),
                         exit::USAGE,
@@ -150,12 +112,13 @@ impl From<anyhow::Error> for Output {
     }
 }
 
-/// The text of a library error, with the fault worded in CLI terms: the command to run.
-fn cli_text(e: &owo::Error) -> String {
+/// The text of a library error with what to run next, worded with `owo` commands, such as
+/// "run `owo add project`". The core's text names no command.
+fn hinted(e: &owo_core::Error) -> String {
     let Some(fault) = &e.fault else {
         return e.to_string();
     };
-    let cli = match fault {
+    let hinted = match fault {
         Fault::NeedsTitle(kind) => format!("`owo add {}` needs a title", kind.name()),
         Fault::UnknownTemplate(_) => format!("{fault}; run `owo templates` for the list"),
         Fault::NoIdentityFolder(_) => {
@@ -175,76 +138,9 @@ fn cli_text(e: &owo::Error) -> String {
             format!("--until {until} is past the {seen} messages the last `sync start` read")
         }
         // Clap refuses these before the call, with its own text.
-        Fault::DaysOutOfRange(_) | Fault::SinceWithDays | Fault::PngNeedsOut => fault.to_string(),
+        Fault::OutOfRange { .. } | Fault::Conflict(..) | Fault::Needs(..) => fault.to_string(),
         Fault::InjectNeedsIdentity => "--inject needs an identity in the root".into(),
     };
-    // The library text may carry a context before the fault; keep it.
-    e.to_string().replace(&fault.to_string(), &cli)
-}
-
-/// How a command's result is collected: the envelope with `--json`, else text for people.
-pub struct Out {
-    pub json: bool,
-    pub quiet: bool,
-    /// Warnings found before the result, such as a config warning.
-    pub warnings: Vec<String>,
-}
-
-/// The text result of one command.
-pub struct Text {
-    quiet: bool,
-    buf: String,
-}
-
-impl Text {
-    /// Adds a confirmation line unless `--quiet` is set.
-    pub fn say(&mut self, text: impl AsRef<str>) {
-        if !self.quiet {
-            self.line(text);
-        }
-    }
-
-    /// Adds a line.
-    pub fn line(&mut self, text: impl AsRef<str>) {
-        self.push(text);
-        self.buf.push('\n');
-    }
-
-    /// Adds text as it is.
-    pub fn push(&mut self, text: impl AsRef<str>) {
-        self.buf.push_str(text.as_ref());
-    }
-}
-
-impl Out {
-    /// The output for `envelope`. Without `--json` it adds the envelope's text warnings and
-    /// runs `text`. The exit code follows the envelope's `ok`.
-    pub fn emit(
-        &mut self,
-        envelope: Envelope,
-        text: impl FnOnce(&mut Text),
-    ) -> anyhow::Result<Output> {
-        let mut warnings = std::mem::take(&mut self.warnings);
-        let mut t = Text {
-            quiet: self.quiet,
-            buf: String::new(),
-        };
-        if !self.json {
-            warnings.extend(
-                envelope
-                    .warnings
-                    .iter()
-                    .filter_map(Value::as_str)
-                    .map(str::to_string),
-            );
-            text(&mut t);
-        }
-        Ok(Output {
-            code: exit::of(envelope.ok),
-            envelope: serde_json::to_value(envelope)?,
-            text: t.buf,
-            warnings,
-            error: None,
-        })
-    }
+    // The text may carry a context before the fault; keep it.
+    e.to_string().replace(&fault.to_string(), &hinted)
 }

@@ -42,12 +42,17 @@ pub enum Fault {
     NoBookmark(String),
     /// `Root::sync_done` past the messages the last sync step read.
     PastMessages { until: usize, seen: u64 },
-    /// A number of days outside 0 to `MAX_DAYS`.
-    DaysOutOfRange(i64),
-    /// `ChangesRequest` with both `since` and `days`.
-    SinceWithDays,
-    /// `CardRequest` with `png` and no `out`.
-    PngNeedsOut,
+    /// A number outside the range of its field, such as `days` outside 0 to `MAX_DAYS`.
+    OutOfRange {
+        name: &'static str,
+        value: i64,
+        min: i64,
+        max: i64,
+    },
+    /// Two fields that cannot be given together, such as `since` and `days` of `changes`.
+    Conflict(&'static str, &'static str),
+    /// A field given without the field it needs, such as `png` without `out` of a card.
+    Needs(&'static str, &'static str),
     /// The proxy option `inject` in a root with no identity.
     InjectNeedsIdentity,
 }
@@ -56,9 +61,9 @@ impl Fault {
     pub fn kind(&self) -> ErrorKind {
         match self {
             Fault::NeedsTitle(_)
-            | Fault::DaysOutOfRange(_)
-            | Fault::SinceWithDays
-            | Fault::PngNeedsOut
+            | Fault::OutOfRange { .. }
+            | Fault::Conflict(..)
+            | Fault::Needs(..)
             | Fault::InjectNeedsIdentity => ErrorKind::Usage,
             Fault::NoIdentityFolder(_) | Fault::NoProject(_) => ErrorKind::Config,
             _ => ErrorKind::Failed,
@@ -92,11 +97,14 @@ impl std::fmt::Display for Fault {
                 f,
                 "until {until} is past the {seen} messages the last sync step read"
             ),
-            Fault::DaysOutOfRange(days) => {
-                write!(f, "days must be from 0 to {}, not {days}", crate::MAX_DAYS)
-            }
-            Fault::SinceWithDays => f.write_str("since and days cannot be used together"),
-            Fault::PngNeedsOut => f.write_str("a PNG card needs an output file"),
+            Fault::OutOfRange {
+                name,
+                value,
+                min,
+                max,
+            } => write!(f, "{name} must be from {min} to {max}, not {value}"),
+            Fault::Conflict(a, b) => write!(f, "{a} and {b} cannot be used together"),
+            Fault::Needs(a, b) => write!(f, "{a} needs {b}"),
             Fault::InjectNeedsIdentity => f.write_str("inject needs an identity in the root"),
         }
     }

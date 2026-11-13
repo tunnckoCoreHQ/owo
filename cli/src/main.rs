@@ -1,49 +1,55 @@
-//! owo: one world, one identity. The binary holds the CLI and the MCP server, which call the owo
-//! library and render its results. `main` connects them and the library's ACP proxy to the
-//! process: it parses arguments, builds `owo::Env` from the environment, hands over stdio and
-//! the agent process, prints the output and returns the exit code.
+//! owo: one world, one identity. The binary is the CLI of the owo core: it builds its commands
+//! from the core's operations, maps the parsed arguments into their requests, runs them and
+//! renders the outcome as text or the JSON envelope, with an exit code. `main` also connects
+//! the process (arguments, environment, stdio, the agent process) to the core's MCP server and
+//! ACP proxy.
 
 mod cli;
-mod mcp;
 mod output;
 mod render;
-mod run;
 mod text;
 
-use clap::Parser;
-use cli::{Cli, Command};
+use clap::ArgMatches;
+use cli::Global;
 use output::Output;
+use owo_core::{mcp, operations, Args, Operation};
 use std::io::Write;
 use std::path::PathBuf;
 use std::process::{ExitCode, Stdio};
 
 fn main() -> ExitCode {
-    let cli = Cli::parse();
+    let ops = operations();
+    let matches = cli::command(&ops).get_matches();
+    let global = Global::of(&matches);
+    let (name, sub) = matches.subcommand().expect("a command is required");
     // Exit quietly when stdout closes early (`owo search x | head`). `owo mcp` and `owo acp` keep
     // the ignored signal: a closed pipe is a write error there, not a kill.
     #[cfg(unix)]
-    if !matches!(cli.command, Command::Mcp { .. } | Command::Acp { .. }) {
+    if !matches!(name, "mcp" | "acp") {
         unsafe {
             libc::signal(libc::SIGPIPE, libc::SIG_DFL);
         }
     }
     let env = env();
-    let out = match &cli.command {
-        Command::Mcp { remote, port } => {
-            let served = match remote {
-                Some(addr) => mcp_http(addr, *port, &cli, &env),
-                None => mcp_stdio(&cli, &env),
+    let out = match name {
+        "mcp" => {
+            let served = match sub.get_one::<String>("remote") {
+                Some(addr) => mcp_http(addr, sub.get_one::<u16>("port").copied(), &global, &env),
+                None => mcp_stdio(&global, &env),
             };
             match served {
                 Ok(()) => return ExitCode::SUCCESS,
                 Err(e) => Output::from(e),
             }
         }
-        Command::Acp { inject, agent } => match acp(&cli, &env, agent, *inject) {
-            Ok(code) => return ExitCode::from(code),
-            Err(e) => Output::from(e),
-        },
-        _ => run::run(&cli, &env, &mut std::io::stdin()),
+        "acp" => {
+            let agent: Vec<String> = sub.get_many("agent").unwrap().cloned().collect();
+            match acp(&global, &env, &agent, sub.get_flag("inject")) {
+                Ok(code) => return ExitCode::from(code),
+                Err(e) => Output::from(e),
+            }
+        }
+        _ => run(&ops, &matches, &global, &env),
     };
     match out
         .error
@@ -56,7 +62,7 @@ fn main() -> ExitCode {
             let _ = e.print();
         }
         None => {
-            let (stdout, stderr) = out.render(cli.json);
+            let (stdout, stderr) = out.render(global.json);
             eprint!("{stderr}");
             print!("{stdout}");
         }
@@ -64,10 +70,34 @@ fn main() -> ExitCode {
     ExitCode::from(out.code as u8)
 }
 
+/// Runs the operation of the parsed command. The process stdin gives the text `owo write` and
+/// `owo sync push` read when they take no `--content` or `--turns`.
+fn run(ops: &[Operation], matches: &ArgMatches, global: &Global, env: &owo_core::Env) -> Output {
+    let mut path = vec![];
+    let mut m = matches;
+    while let Some((name, sub)) = m.subcommand() {
+        path.push(name);
+        m = sub;
+    }
+    let op = ops
+        .iter()
+        .find(|op| op.path == path.as_slice())
+        .expect("every command is an operation");
+    let ran = Args::new(&op.name(), &op.fields, cli::args(op, m))
+        .and_then(|args| op.run(&args, &global.select, env, &mut std::io::stdin()));
+    match ran {
+        Ok(ran) => render::output(ran, global.json, global.quiet),
+        // Clap checked the arguments, so this is a usage error it missed.
+        Err(e) => Output::from(anyhow::Error::from(
+            cli::command(ops).error(clap::error::ErrorKind::ValueValidation, e),
+        )),
+    }
+}
+
 /// The environment values the library uses, read from the process.
-fn env() -> owo::Env {
+fn env() -> owo_core::Env {
     let non_empty = |key: &str| std::env::var(key).ok().filter(|v| !v.is_empty());
-    owo::Env {
+    owo_core::Env {
         owo_root: non_empty("OWO_ROOT"),
         owo_identity: non_empty("OWO_IDENTITY"),
         owo_project: non_empty("OWO_PROJECT"),
@@ -79,34 +109,39 @@ fn env() -> owo::Env {
 }
 
 /// Serves MCP on the process's stdin and stdout until stdin closes.
-fn mcp_stdio(cli: &Cli, env: &owo::Env) -> anyhow::Result<()> {
+fn mcp_stdio(global: &Global, env: &owo_core::Env) -> anyhow::Result<()> {
     #[cfg(unix)]
     {
         let (input, output) = own_stdio()?;
-        mcp::serve(
+        Ok(mcp::serve(
             std::io::BufReader::new(input),
             output,
-            &run::select(cli),
+            &global.select,
             env,
-        )
+        )?)
     }
     #[cfg(not(unix))]
-    mcp::serve(
+    Ok(mcp::serve(
         std::io::stdin().lock(),
         std::io::stdout(),
-        &run::select(cli),
+        &global.select,
         env,
-    )
+    )?)
 }
 
 /// Serves MCP over HTTP on `addr`, after it prints the URL.
-fn mcp_http(addr: &str, port: Option<u16>, cli: &Cli, env: &owo::Env) -> anyhow::Result<()> {
+fn mcp_http(
+    addr: &str,
+    port: Option<u16>,
+    global: &Global,
+    env: &owo_core::Env,
+) -> anyhow::Result<()> {
     let listener = mcp::bind(addr, port)?;
     println!("http://{}/mcp", listener.local_addr()?);
     std::io::stdout().flush()?;
     #[cfg(unix)]
     detach_stdio()?;
-    mcp::serve_http(listener, &run::select(cli), env)
+    Ok(mcp::serve_http(listener, &global.select, env)?)
 }
 
 /// Points the process's stdin at `/dev/null` and its stdout at stderr. A tool call runs in this
@@ -136,12 +171,12 @@ fn own_stdio() -> std::io::Result<(std::fs::File, std::fs::File)> {
 
 /// Runs the agent behind the ACP proxy until it exits, and returns its exit code, or 1 when a
 /// signal killed it.
-fn acp(cli: &Cli, env: &owo::Env, agent: &[String], inject: bool) -> anyhow::Result<u8> {
+fn acp(global: &Global, env: &owo_core::Env, agent: &[String], inject: bool) -> anyhow::Result<u8> {
     use anyhow::Context;
-    let proxy = owo::acp::Proxy::new(
-        &run::select(cli),
+    let proxy = owo_core::acp::Proxy::new(
+        &global.select,
         env,
-        owo::acp::Options { inject },
+        owo_core::acp::Options { inject },
         std::io::stderr(),
     )?;
     let mut child = std::process::Command::new(&agent[0])
@@ -163,6 +198,3 @@ fn acp(cli: &Cli, env: &owo::Env, agent: &[String], inject: bool) -> anyhow::Res
     copied?;
     Ok(status.code().unwrap_or(1) as u8)
 }
-
-#[cfg(test)]
-mod tests;

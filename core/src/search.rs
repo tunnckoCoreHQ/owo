@@ -1,8 +1,7 @@
 //! `owo search`: small in-crate BM25 over title, aliases, summary and body.
 //! Fields are weighted by repeating their tokens: title and aliases x3, summary x2, body x1.
 
-use crate::identity::{Entry, Identity, Kind};
-use chrono::NaiveDate;
+use crate::identity::{Entry, Identity};
 use serde::Serialize;
 use std::collections::HashMap;
 
@@ -74,33 +73,9 @@ impl Scope {
     }
 }
 
-/// Which entries a search looks at, and how many hits it returns.
-pub struct Request<'a> {
-    pub scope: Option<Scope>,
-    /// Every kind when empty.
-    pub types: &'a [Kind],
-    /// only `work/projects/<p>/`
-    pub project: Option<&'a str>,
-    /// story `date`, else `updated`, on or after this day
-    pub since: Option<NaiveDate>,
-    /// The most hits to return.
-    pub limit: usize,
-}
+use crate::SearchRequest as Request;
 
-impl Default for Request<'_> {
-    /// Every entry, and ten hits.
-    fn default() -> Self {
-        Self {
-            scope: None,
-            types: &[],
-            project: None,
-            since: None,
-            limit: 10,
-        }
-    }
-}
-
-impl Request<'_> {
+impl Request {
     fn keep(&self, e: &Entry) -> bool {
         let since = self.since.map(|d| d.to_string());
         self.scope
@@ -108,6 +83,7 @@ impl Request<'_> {
             && (self.types.is_empty() || self.types.contains(&e.kind))
             && self
                 .project
+                .as_deref()
                 .is_none_or(|p| e.rel.starts_with(&format!("work/projects/{p}/")))
             && since.is_none_or(|s| {
                 e.field_str("date")
@@ -117,8 +93,8 @@ impl Request<'_> {
     }
 }
 
-pub fn search(id: &Identity, query: &str, filter: &Request) -> Vec<Hit> {
-    let q = tokens(query);
+pub fn search(id: &Identity, filter: &Request) -> Vec<Hit> {
+    let q = tokens(&filter.query);
     let docs: Vec<(&Entry, Vec<String>)> = id
         .entries
         .iter()

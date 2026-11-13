@@ -1,7 +1,7 @@
 //! The text each command prints without `--json`, built from the typed results of the library.
 
-use owo::{
-    Changes, Context, Diagnostic, Hit, Level, Link, LinkRef, MigrateReport, Packet, Row, SearchHit,
+use owo_core::{
+    Changes, Diagnostic, Hit, Level, Link, LinkRef, MigrateReport, Packet, Row, SearchHit,
     SoulChange, State, SyncRun,
 };
 
@@ -36,7 +36,7 @@ pub fn list(rows: &[Row]) -> String {
 
 pub fn state(s: &State) -> String {
     let mut out = format!("# {}\n\n", s.identity);
-    out.push_str(&owo::now_block(s, None));
+    out.push_str(&owo_core::now_block(s, None));
     if let Some(change) = &s.last_soul_change {
         out.push_str(&format!(
             "- Last soul change: {} {}\n",
@@ -54,29 +54,6 @@ pub fn state(s: &State) -> String {
     }
     if s.review.memory_changed_outside_review {
         out.push_str("- MEMORY.md changed outside a review\n");
-    }
-    out
-}
-
-pub fn context_paths(c: &Context) -> String {
-    let mut out = String::new();
-    // The Now block follows the core files, as in the text format.
-    let core = c.items.iter().take_while(|it| it.tier == "core").count();
-    for (n, it) in c.items.iter().enumerate() {
-        if n == core {
-            out.push_str("now      (generated block)\n");
-        }
-        out.push_str(&format!("{:<8} {}  ({})\n", it.tier, it.path, it.reason));
-    }
-    if core == c.items.len() {
-        out.push_str("now      (generated block)\n");
-    }
-    if let Some(kb) = &c.kb {
-        out.push_str(&format!(
-            "kb       {}{}\n",
-            kb.path,
-            if kb.exists { "" } else { "  (missing)" }
-        ));
     }
     out
 }
@@ -293,9 +270,4 @@ fn join_links(links: &[Link]) -> String {
         _ => format!("[[{}]]", l.title),
     };
     links.iter().map(wiki).collect::<Vec<_>>().join(", ")
-}
-
-/// The error text for a name that does not resolve to one entry, without the candidates.
-pub fn unresolved(name: &str) -> String {
-    format!("{name:?} does not resolve to one entry")
 }

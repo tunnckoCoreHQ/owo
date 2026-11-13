@@ -1,7 +1,8 @@
 //! Tests that use only the library: the typed API with no binary, command line or rendered
 //! output, and the ACP proxy on in-memory streams.
 
-use owo::{
+use owo_core as req;
+use owo_core::{
     acp, AddRequest, ContextRequest, Env, ErrorKind, Fault, Kind, Root, Scope, SearchRequest,
     Select,
 };
@@ -14,7 +15,7 @@ use tempfile::TempDir;
 /// A temporary root holding a copy of each example identity in `ids`.
 fn root(ids: &[&str]) -> TempDir {
     let tmp = TempDir::new().unwrap();
-    let examples = Path::new(env!("CARGO_MANIFEST_DIR")).join("examples");
+    let examples = Path::new(env!("CARGO_MANIFEST_DIR")).join("../examples");
     for id in ids {
         let from = examples.join(id);
         for entry in walkdir::WalkDir::new(&from) {
@@ -80,29 +81,48 @@ fn read_side_calls_return_typed_results() {
     let tmp = root(&["nicole"]);
     let id = open(tmp.path(), Some("nicole")).identity().unwrap();
 
-    let hit = id.resolve("First Firing", None).unwrap();
+    let hit = id
+        .resolve(&req::ResolveRequest {
+            name: "First Firing".into(),
+            kind: None,
+        })
+        .unwrap();
     assert_eq!(hit.path, "life/events/first-firing.md");
-    assert!(id.resolve("no such entry at all", None).is_err());
+    assert!(id
+        .resolve(&req::ResolveRequest {
+            name: "no such entry at all".into(),
+            kind: None
+        })
+        .is_err());
 
-    let (path, text) = id.show("First Firing", None).unwrap();
+    let (path, text) = id
+        .show(&req::ShowRequest {
+            name: "First Firing".into(),
+            section: None,
+        })
+        .unwrap();
     assert_eq!(path, "life/events/first-firing.md");
     assert!(text.contains("title: \"First Firing\""));
     assert!(matches!(
-        id.show("First Firing", Some("no such section")),
+        id.show(&req::ShowRequest { name: "First Firing".into(), section: Some("no such section".into()) }),
         Err(e) if e.kind == ErrorKind::Failed
     ));
 
-    let links = id.links("First Firing", true, false).unwrap();
+    let links = id
+        .links(&req::LinksRequest {
+            name: "First Firing".into(),
+            inbound: true,
+            ..Default::default()
+        })
+        .unwrap();
     assert!(!links.inbound.is_empty() && links.outbound.is_empty());
 
-    let hits = id.search(
-        "glaze",
-        &SearchRequest {
-            scope: Some(Scope::Life),
-            limit: 3,
-            ..Default::default()
-        },
-    );
+    let hits = id.search(&SearchRequest {
+        query: "glaze".into(),
+        scope: Some(Scope::Life),
+        limit: 3,
+        ..Default::default()
+    });
     assert!(!hits.is_empty() && hits.len() <= 3);
     assert!(hits.iter().all(|h| h.path.starts_with("life/")));
 
@@ -110,8 +130,9 @@ fn read_side_calls_return_typed_results() {
         .context(&ContextRequest {
             voice: true,
             look: false,
-            with: &[],
+            with: vec![],
             notes: 3,
+            paths: false,
         })
         .unwrap();
     let paths: Vec<&str> = ctx.items.iter().map(|i| i.path.as_str()).collect();
@@ -128,10 +149,10 @@ fn read_side_calls_return_typed_results() {
     assert!(text.contains("<!-- owo: now -->\n## Now"));
     assert!(text.contains("<!-- owo: soul/VOICE.md (voice) -->"));
 
-    let state = id.state(&owo::StateRequest::default()).unwrap();
+    let state = id.state(&owo_core::StateRequest::default()).unwrap();
     assert!(matches!(
-        id.state(&owo::StateRequest { days: owo::MAX_DAYS + 1 }),
-        Err(e) if e.fault == Some(Fault::DaysOutOfRange(owo::MAX_DAYS + 1))
+        id.state(&owo_core::StateRequest { days: owo_core::MAX_DAYS + 1 }),
+        Err(e) if e.fault == Some(Fault::OutOfRange { name: "days", value: owo_core::MAX_DAYS + 1, min: 0, max: owo_core::MAX_DAYS })
     ));
     assert_eq!(state.identity, "nicole");
     // The loaded identity carries the working project; a project that does not exist is a
@@ -139,33 +160,45 @@ fn read_side_calls_return_typed_results() {
     let mut other = open(tmp.path(), Some("nicole")).identity().unwrap();
     other.project = Some("no-such-project".into());
     assert!(matches!(
-        other.state(&owo::StateRequest::default()),
+        other.state(&owo_core::StateRequest::default()),
         Err(e) if e.fault == Some(Fault::NoProject("no-such-project".into()))
     ));
     assert!(other
-        .lint(&[], false)
+        .lint(&Default::default())
         .iter()
-        .all(|d| d.level != owo::Level::Error));
+        .all(|d| d.level != owo_core::Level::Error));
 
     assert!(id
-        .lint(&[], false)
+        .lint(&Default::default())
         .iter()
-        .all(|d| d.level != owo::Level::Error));
-    assert!(id.stamp(true).unwrap().is_clean());
-    assert!(id.stale_index().is_empty());
+        .all(|d| d.level != owo_core::Level::Error));
+    assert!(id
+        .stamp(&req::StampRequest { check: true })
+        .unwrap()
+        .is_clean());
+    assert!(id
+        .index(&req::IndexRequest { check: true })
+        .unwrap()
+        .is_empty());
     assert_eq!(id.review().identity, "nicole");
     assert_eq!(id.changes(&Default::default()).unwrap().source, "state");
-    let both = owo::ChangesRequest {
-        since: Some("2026-01-01"),
+    let both = owo_core::ChangesRequest {
+        since: Some("2026-01-01".into()),
         days: Some(3),
     };
-    assert!(matches!(id.changes(&both), Err(e) if e.fault == Some(Fault::SinceWithDays)));
-    assert!(id.export_card(&owo::CardRequest::default()).unwrap().card["data"]["name"].is_string());
-    let png = owo::CardRequest {
-        png: Some(Path::new("avatar.png")),
+    assert!(
+        matches!(id.changes(&both), Err(e) if e.fault == Some(Fault::Conflict("since", "days")))
+    );
+    assert!(id
+        .export_card(&owo_core::CardRequest::default())
+        .unwrap()
+        .card["data"]["name"]
+        .is_string());
+    let png = owo_core::CardRequest {
+        png: Some("avatar.png".into()),
         ..Default::default()
     };
-    assert!(matches!(id.export_card(&png), Err(e) if e.fault == Some(Fault::PngNeedsOut)));
+    assert!(matches!(id.export_card(&png), Err(e) if e.fault == Some(Fault::Needs("png", "out"))));
 }
 
 #[test]
@@ -176,10 +209,10 @@ fn write_side_calls_change_the_identity() {
 
     let req = AddRequest {
         kind: Kind::Thread,
-        title: "Find the glaze recipe",
+        title: "Find the glaze recipe".into(),
         date: None,
         parent: None,
-        aliases: &[],
+        aliases: vec![],
         kb: None,
     };
     let (path, created) = id.add(&req).unwrap();
@@ -187,54 +220,75 @@ fn write_side_calls_change_the_identity() {
     assert!(created);
     assert!(!id.add(&req).unwrap().1, "a second add finds the file");
     assert!(matches!(
-        id.add(&AddRequest { title: " ", ..req }),
+        id.add(&AddRequest { title: " ".into(), ..req }),
         Err(e) if e.fault == Some(Fault::NeedsTitle(Kind::Thread))
     ));
 
     assert!(id
-        .write("life/journal/2026-11-05_note.md", "# A note\n")
+        .write(&req::WriteRequest {
+            path: "life/journal/2026-11-05_note.md".into(),
+            content: Some("# A note\n".into())
+        })
         .unwrap());
 
     // A fresh load sees the new files; stamp and index pick them up.
     let id = r.identity().unwrap();
-    let stamped = id.stamp(false).unwrap();
+    let stamped = id.stamp(&Default::default()).unwrap();
     assert!(stamped.added.contains(&path));
-    id.index().unwrap();
-    assert!(r.identity().unwrap().stale_index().is_empty());
+    id.index(&Default::default()).unwrap();
+    assert!(r
+        .identity()
+        .unwrap()
+        .index(&req::IndexRequest { check: true })
+        .unwrap()
+        .is_empty());
 
     let sync = r.sync().unwrap();
-    let turns = owo::parse_turns(r#"[{"id": 1, "role": "user", "text": "hi"}]"#).unwrap();
+    let turns = owo_core::parse_turns(r#"[{"id": 1, "role": "user", "text": "hi"}]"#).unwrap();
     assert_eq!(
         turns,
-        [owo::Turn {
+        [owo_core::Turn {
             id: "1".into(),
-            role: owo::Role::User,
+            role: owo_core::Role::User,
             text: "hi".into()
         }]
     );
     let run = sync.push("s1", &turns, &Default::default()).unwrap();
     assert_eq!(run.added, Some(1));
     assert!(!run.due);
-    assert!(owo::parse_turns("not json").is_err());
-    let bad = owo::Turn {
+    assert!(owo_core::parse_turns("not json").is_err());
+    let bad = owo_core::Turn {
         id: "a\u{7}".into(),
         ..turns[0].clone()
     };
     assert!(sync.push("s1", &[bad], &Default::default()).is_err());
     assert!(matches!(
-        r.sync_done("s1", 9),
+        r.sync_done(&req::SyncDoneRequest { session: "s1".into(), until: 9 }),
         Err(e) if e.fault == Some(Fault::PastMessages { until: 9, seen: 1 })
     ));
-    let bookmark = r.sync_done("s1", 1).unwrap();
+    let bookmark = r
+        .sync_done(&req::SyncDoneRequest {
+            session: "s1".into(),
+            until: 1,
+        })
+        .unwrap();
     assert_eq!((bookmark.until, bookmark.messages), (1, Some(1)));
 }
 
 #[test]
 fn free_functions_need_no_root() {
-    assert_eq!(owo::slug("Hello World").unwrap(), "hello-world");
-    assert!(matches!(owo::slug("!!"), Err(e) if e.kind == ErrorKind::Failed));
-    assert!(owo::entry_types().any(|t| t == "event"));
-    assert!(owo::Rule::all().any(|r| r.name() == "links"));
+    assert_eq!(
+        owo_core::slug(&req::SlugRequest {
+            text: "Hello World".into()
+        })
+        .unwrap(),
+        "hello-world"
+    );
+    assert!(
+        matches!(owo_core::slug(&req::SlugRequest { text: "!!".into() }), Err(e) if e.kind == ErrorKind::Failed)
+    );
+    assert!(owo_core::entry_types().any(|t| t == "event"));
+    assert!(owo_core::Rule::all().any(|r| r.name() == "links"));
 }
 /// A running proxy with a scripted agent thread. The test is the client.
 struct Session {
@@ -424,8 +478,9 @@ fn acp_inject_puts_the_context_in_the_first_prompt() {
         &id.context(&ContextRequest {
             voice: false,
             look: false,
-            with: &[],
+            with: vec![],
             notes: 3,
+            paths: false,
         })
         .unwrap(),
     );

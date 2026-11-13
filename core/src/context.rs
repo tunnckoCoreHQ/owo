@@ -8,25 +8,7 @@ use anyhow::Result;
 use serde::Serialize;
 use std::fs;
 
-pub struct Request<'a> {
-    pub voice: bool,
-    pub look: bool,
-    pub with: &'a [String],
-    /// Recent project notes to include.
-    pub notes: usize,
-}
-
-impl Default for Request<'_> {
-    /// The core files and three recent project notes.
-    fn default() -> Self {
-        Self {
-            voice: false,
-            look: false,
-            with: &[],
-            notes: 3,
-        }
-    }
-}
+use crate::ContextRequest as Request;
 
 #[derive(Debug, Serialize)]
 pub struct Item {
@@ -43,6 +25,33 @@ pub struct Context {
     pub now: String,
     pub kb: Option<crate::kb::Kb>,
     pub warnings: Vec<String>,
+}
+
+impl Context {
+    /// The file list of the load set: one `tier path (reason)` line per file, with the Now block
+    /// after the core files, then the KB pointer.
+    pub fn paths_text(&self) -> String {
+        let mut out = String::new();
+        // The Now block follows the core files, as in the text.
+        let core = self.items.iter().take_while(|it| it.tier == "core").count();
+        for (n, it) in self.items.iter().enumerate() {
+            if n == core {
+                out.push_str("now      (generated block)\n");
+            }
+            out.push_str(&format!("{:<8} {}  ({})\n", it.tier, it.path, it.reason));
+        }
+        if core == self.items.len() {
+            out.push_str("now      (generated block)\n");
+        }
+        if let Some(kb) = &self.kb {
+            out.push_str(&format!(
+                "kb       {}{}\n",
+                kb.path,
+                if kb.exists { "" } else { "  (missing)" }
+            ));
+        }
+        out
+    }
 }
 
 fn item(tier: &'static str, path: &str, reason: &str) -> Item {
@@ -83,7 +92,7 @@ pub fn build(id: &Identity, req: &Request, project: Option<&str>) -> Result<Cont
         kb = pointer;
         warnings.extend(warning);
     }
-    for name in req.with {
+    for name in &req.with {
         match crate::find::one(id, name) {
             // A file already in the load set is loaded once.
             Ok(i) if items.iter().any(|it| it.path == id.entries[i].rel) => {}
