@@ -65,11 +65,18 @@ fn sections(id: &Identity, rel: &str) -> Vec<String> {
         .entry(rel)
         .map(|e| body_without(&e.text, &[]))
         .unwrap_or_default();
-    // Intro text before the first `## ` heading is not a greeting.
-    format!("\n{body}")
-        .split("\n## ")
-        .skip(1)
-        .filter_map(|s| s.split_once('\n').map(|(_, rest)| rest.trim().to_string()))
+    // Intro text before the first `## ` heading is not a greeting; headings in fences do not count.
+    let mut out: Vec<String> = vec![];
+    for (_, line, open) in markdown::unfenced(&body) {
+        if open && line.starts_with("## ") {
+            out.push(String::new());
+        } else if let Some(section) = out.last_mut() {
+            section.push_str(line);
+            section.push('\n');
+        }
+    }
+    out.into_iter()
+        .map(|s| s.trim().to_string())
         .filter(|s| !s.is_empty())
         .collect()
 }

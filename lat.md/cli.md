@@ -66,7 +66,7 @@ The KB path comes from `project.md` `kb`, relative to the identity folder, with 
 | `system_prompt` | IDENTITY "Who she/he/they is/are" section, then VOICE.md |
 | `personality` | SOUL.md body |
 | `scenario` | with `--project`: project.md summary and body |
-| `first_mes`, `alternate_greetings` | `soul/examples/greetings.md`, one per `##`; text before the first `##` is left out |
+| `first_mes`, `alternate_greetings` | `soul/examples/greetings.md`, one per `##` (headings inside fenced code do not count); text before the first `##` is left out |
 | `mes_example` | `soul/examples/good.md`, prefixed `<START>` |
 | `tags`, `creator`, `character_version` | `soul/soul.json` |
 | `character_book` | MEMORY.md as a constant entry, then characters, locations, cultures, factions, eras, events, lessons, and the scoped project; keys are title plus aliases; content is the summary plus `## Key facts`, or the body without its `# ` headings and without an `Identifiers` or `Sources` section at any level (headings inside fenced code do not count) when an entry has no key facts |
