@@ -435,9 +435,11 @@ fn http_request(stream: TcpStream, cli: &crate::cli::Cli) -> std::io::Result<()>
     // and the client never sees the status.
     let mut body = vec![];
     let length = length.filter(|_| !chunked);
+    let mut body_read = false;
     if let Some(length) = length.filter(|n| head <= MAX_HEAD && *n <= MAX_BODY) {
         body.resize(length, 0);
         reader.read_exact(&mut body)?;
+        body_read = true;
     }
     let mut parts = request.split_whitespace();
     let (method, path) = (parts.next().unwrap_or(""), parts.next().unwrap_or(""));
@@ -462,5 +464,13 @@ fn http_request(stream: TcpStream, cli: &crate::cli::Cli) -> std::io::Result<()>
         "HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{reply}",
         reply.len()
     )?;
-    stream.flush()
+    stream.flush()?;
+    // A refused body that was not read (no length, or past a cap) would reset the connection on
+    // close and cut the reply. Send the reply's end first, then discard what the client still
+    // sends, within the same caps and deadline.
+    if !body_read {
+        stream.shutdown(std::net::Shutdown::Write)?;
+        let _ = std::io::copy(&mut reader, &mut std::io::sink());
+    }
+    Ok(())
 }
