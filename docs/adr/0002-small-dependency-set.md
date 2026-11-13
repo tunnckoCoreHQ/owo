@@ -4,5 +4,5 @@ When a job needs only a small part of what a crate offers, owo writes that part 
 
 - Search is about 100 lines of BM25 in `src/search.rs`, rebuilt on each call, with no index cache. An identity has a few hundred files, so a scan takes milliseconds. Tantivy fits if identities grow past a few thousand files.
 - Embedding a character card only appends `tEXt` chunks before `IEND`, so `src/export.rs` walks PNG chunks with a small CRC32 and base64 instead of an image crate.
-- The MCP server in `src/mcp.rs` is a newline-delimited JSON-RPC loop with no MCP crate, and its `--remote` mode is a small HTTP/1.1 loop over `std::net`.
+- The MCP server in `cli/src/mcp.rs` is a newline-delimited JSON-RPC loop with no MCP crate, and its `--remote` mode is a small HTTP/1.1 loop over `std::net`.
 - Templates are compiled in with `include_str!` in `src/templates.rs`, so the binary works with no install step. A root can override them in `<root>/.templates/`.
