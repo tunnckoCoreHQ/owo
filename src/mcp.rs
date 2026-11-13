@@ -11,6 +11,8 @@ use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
 const PROTOCOL: &str = "2025-06-18";
+/// Versions whose messages this server speaks; `initialize` echoes one of these, else `PROTOCOL`.
+const SUPPORTED: &[&str] = &[PROTOCOL, "2025-03-26", "2024-11-05"];
 
 enum Arg {
     /// A value after `--`.
@@ -292,7 +294,7 @@ fn respond(id: &Value, method: &str, params: &Value, cli: &crate::cli::Cli) -> O
     let ok = |result: Value| Some(json!({ "jsonrpc": "2.0", "id": id, "result": result }));
     match method {
         "initialize" => ok(json!({
-            "protocolVersion": params["protocolVersion"].as_str().unwrap_or(PROTOCOL),
+            "protocolVersion": params["protocolVersion"].as_str().filter(|v| SUPPORTED.contains(v)).unwrap_or(PROTOCOL),
             "capabilities": { "tools": {} },
             "serverInfo": { "name": "owo", "version": env!("CARGO_PKG_VERSION") },
             "instructions": "owo manages one identity: soul/, life/ and work/. Start with `context`, read more with `resolve`, `search`, `show` and `links`, create entries with `add`, fill or edit their text with `write`, then run `stamp`, `index` and `lint`.",
