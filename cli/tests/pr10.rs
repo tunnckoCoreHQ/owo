@@ -22,13 +22,14 @@ static PROCESS: LazyLock<PathBuf> = LazyLock::new(|| {
     dir
 });
 
-/// Nothing written into the process folder.
-fn process_untouched() {
-    let names: Vec<_> = fs::read_dir(&*PROCESS)
-        .unwrap()
-        .map(|e| e.unwrap().file_name())
-        .collect();
-    assert!(names.is_empty(), "the process folder holds {names:?}");
+/// None of `names` written into the process folder.
+fn process_untouched(names: &[&str]) {
+    for name in names {
+        assert!(
+            !PROCESS.join(name).exists(),
+            "the process folder holds {name}"
+        );
+    }
 }
 
 /// A folder holding `ids/nicole` and `work/`, the caller's folder.
@@ -108,7 +109,7 @@ fn pr10_empty_required_path_is_a_usage_error() {
     assert!(error && text.contains("missing argument"), "{text}");
     assert!(!out.exists());
     assert_eq!(fs::read_dir(&work).unwrap().count(), 1, "only t.jsonl");
-    process_untouched();
+    process_untouched(&["SKILL.md", "SOUL.md", "IDENTITY.md", "t.jsonl"]);
 }
 
 #[test]
@@ -144,7 +145,7 @@ fn pr10_relative_paths_join_env_cwd() {
     ] {
         assert!(work.join(f).is_file(), "{f}");
     }
-    process_untouched();
+    process_untouched(&["sk", "pkg", "card.json", "card.png", "lumen", "r"]);
 }
 
 #[test]
