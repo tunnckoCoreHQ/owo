@@ -8,7 +8,7 @@ With `--json` every command prints `{ "ok", "data", "warnings", "errors" }`; oth
 
 With `--quiet` commands drop their confirmation lines: the path `add` and `write` print, `stamp`, `index`, `lint` and `sync` summaries, `wrote <file>`. Output that is the result itself (`show`, `search`, `context` and the like), warnings and problems still print. Lint also drops its warning diagnostics.
 
-Exit codes: 0 success, 1 problems found (lint errors, exists, unknown template, stale check), 2 usage error (clap, including a date that is not YYYY-MM-DD), 3 config error (no identity selected, identity folder missing, project that is not a slug or has no `project.md`), 4 I/O error. A closed stdout (`owo search x | head`) ends the process quietly, except in `owo mcp`, which must outlive a tool child that closes its stdin early.
+Exit codes: 0 success, 1 problems found (lint errors, exists, unknown template, stale check), 2 usage error (clap, including a date that is not YYYY-MM-DD), 3 config error (no identity selected, identity folder missing, project that is not a slug or has no `project.md`), 4 I/O error. A closed stdout (`owo search x | head`) ends the process quietly, except in `owo mcp` and `owo acp`, where a closed pipe is a write error.
 
 ## Commands
 
