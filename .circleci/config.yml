@@ -1,0 +1,87 @@
+version: 2.1
+
+# CI of owo. Each OS runs its own chain: check, then test. No OS waits on
+# another. Every branch saves the cargo cache of each job, keyed on the
+# lockfile and the toolchain.
+
+executors:
+  linux:
+    docker:
+      - image: cimg/rust:1.99.1
+    resource_class: large
+  macos:
+    macos:
+      xcode: 27.0.0
+    resource_class: m4pro.medium
+
+commands:
+  setup:
+    description: Check out, restore the cargo cache and set up Rust.
+    parameters:
+      cache:
+        type: string
+    steps:
+      - checkout
+      - restore_cache:
+          keys:
+            - v1-cargo-<< parameters.cache >>-{{ arch }}-{{ checksum "Cargo.lock" }}-{{ checksum "rust-toolchain.toml" }}
+            - v1-cargo-<< parameters.cache >>-{{ arch }}-
+      - run:
+          name: Set up Rust
+          command: bash scripts/ci/setup.sh
+  save:
+    description: Save the cargo cache.
+    parameters:
+      cache:
+        type: string
+    steps:
+      - save_cache:
+          key: v1-cargo-<< parameters.cache >>-{{ arch }}-{{ checksum "Cargo.lock" }}-{{ checksum "rust-toolchain.toml" }}
+          paths: [~/.cargo/registry, ~/.cargo/git, target]
+
+jobs:
+  check:
+    parameters:
+      os:
+        type: enum
+        enum: [linux, macos]
+    executor: << parameters.os >>
+    retention:
+      caches: 7d
+    steps:
+      - setup:
+          cache: check-<< parameters.os >>
+      - run: cargo fmt --check
+      - run: cargo clippy --all-targets -- -D warnings
+      - save:
+          cache: check-<< parameters.os >>
+
+  test:
+    parameters:
+      os:
+        type: enum
+        enum: [linux, macos]
+    executor: << parameters.os >>
+    retention:
+      caches: 7d
+    steps:
+      - setup:
+          cache: test-<< parameters.os >>
+      - run: cargo test
+      - save:
+          cache: test-<< parameters.os >>
+
+workflows:
+  ci:
+    jobs:
+      - check:
+          name: check (<< matrix.os >>)
+          matrix:
+            parameters:
+              os: [linux, macos]
+      - test:
+          name: test (<< matrix.os >>)
+          matrix:
+            parameters:
+              os: [linux, macos]
+          requires: [check (<< matrix.os >>)]
