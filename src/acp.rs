@@ -36,6 +36,8 @@ struct Turn {
     user: String,
     /// Agent messages in order: the `messageId`, when there is one, and the joined text.
     agent: Vec<(Option<String>, String)>,
+    /// The prompt carried the identity block.
+    intro: bool,
     /// Another update, such as a tool call, came after the last message chunk.
     split: bool,
 }
@@ -247,12 +249,16 @@ fn from_client(line: &[u8], state: &Mutex<State>, inject: &Inject) -> Option<Vec
                 .filter_map(|b| b["text"].as_str())
                 .collect();
             let user = user.join("\n");
+            let intro = st.intro.remove(&session);
             st.turns
                 .entry(session.clone())
                 .or_default()
-                .push_back(turn(&id, false, user));
+                .push_back(Turn {
+                    intro,
+                    ..turn(&id, false, user)
+                });
             st.pending.insert(id, Pending::Prompt(session.clone()));
-            if !st.intro.remove(&session) {
+            if !intro {
                 return None;
             }
             prompt.insert(0, json!({ "type": "text", "text": inject.text }));
@@ -273,6 +279,7 @@ fn turn(request: &str, replay: bool, user: String) -> Turn {
         user,
         agent: vec![],
         split: false,
+        intro: false,
     }
 }
 
@@ -326,6 +333,10 @@ fn from_agent_line(line: &[u8], state: &Mutex<State>) -> Option<(String, Vec<Val
         Pending::Load(session) | Pending::Prompt(session) => {
             let open = st.turns.get_mut(&session)?;
             let turn = open.remove(open.iter().position(|t| t.request == request)?)?;
+            // A refused prompt did not deliver the identity block, so the next prompt carries it.
+            if turn.intro && msg.get("error").is_some() {
+                st.intro.insert(session.clone());
+            }
             let turns = turns(turn);
             (!turns.is_empty()).then_some((session, turns))
         }
