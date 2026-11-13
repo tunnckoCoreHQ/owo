@@ -467,10 +467,14 @@ fn http_request(stream: TcpStream, cli: &crate::cli::Cli) -> std::io::Result<()>
     stream.flush()?;
     // A refused body that was not read (no length, or past a cap) would reset the connection on
     // close and cut the reply. Send the reply's end first, then discard what the client still
-    // sends, within the same caps and deadline.
+    // sends: stop after 200ms with nothing arriving, or after 2 seconds, so an idle client
+    // cannot hold this one-at-a-time server.
     if !body_read {
         stream.shutdown(std::net::Shutdown::Write)?;
-        let _ = std::io::copy(&mut reader, &mut std::io::sink());
+        stream.set_read_timeout(Some(Duration::from_millis(200)))?;
+        let stop = Instant::now() + Duration::from_secs(2);
+        let mut buf = [0u8; 8192];
+        while Instant::now() < stop && matches!(stream.read(&mut buf), Ok(n) if n > 0) {}
     }
     Ok(())
 }
