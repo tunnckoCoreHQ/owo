@@ -332,11 +332,18 @@ impl<'a> Reader<'a> {
         self.error.get_or_insert_with(|| usage(message));
     }
 
-    /// The text of a single-value argument, when it is there.
+    /// The text of a single-value argument, when it is there. A value that is not one string,
+    /// number or boolean is an error that names the type of the field last declared.
     fn one(&mut self, name: &str, args: &Args) -> Option<String> {
         let text = scalar(args.one(name)?);
         if text.is_none() {
-            self.fail(format!("argument {name:?} must be a string"));
+            let ty = match &self.fields.last().expect("a declared field").ty {
+                Type::Int => "an integer".to_string(),
+                Type::Day => "a YYYY-MM-DD date".to_string(),
+                Type::Choice(values) => format!("one of {}", values.join(", ")),
+                _ => "a string".to_string(),
+            };
+            self.fail(format!("argument {name:?} must be {ty}"));
         }
         text
     }
