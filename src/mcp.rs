@@ -327,10 +327,36 @@ fn handle(bytes: &[u8], cli: &owo::Cli) -> Option<Value> {
     }
 }
 
+/// Takes the server's own stdin and stdout, then points the process's stdin at `/dev/null` and
+/// its stdout at stderr. A tool call runs in this process, so a tool path such as `/dev/stdin`
+/// or `/dev/stdout` must not reach the protocol stream.
+#[cfg(unix)]
+fn own_stdio() -> std::io::Result<(std::fs::File, std::fs::File)> {
+    use std::os::fd::{AsRawFd, FromRawFd};
+    let null = std::fs::File::open("/dev/null")?;
+    // SAFETY: the calls only copy and replace file descriptors, and each new descriptor gets
+    // one owner.
+    unsafe {
+        let (input, output) = (libc::dup(0), libc::dup(1));
+        if input < 0 || output < 0 || libc::dup2(null.as_raw_fd(), 0) < 0 || libc::dup2(2, 1) < 0 {
+            return Err(std::io::Error::last_os_error());
+        }
+        Ok((
+            std::fs::File::from_raw_fd(input),
+            std::fs::File::from_raw_fd(output),
+        ))
+    }
+}
+
 /// Serves MCP on stdin and stdout until stdin closes.
 pub fn serve(cli: &owo::Cli) -> Result<()> {
-    let mut stdin = std::io::stdin().lock();
-    let mut stdout = std::io::stdout();
+    #[cfg(unix)]
+    let (mut stdin, mut stdout) = {
+        let (input, output) = own_stdio()?;
+        (BufReader::new(input), output)
+    };
+    #[cfg(not(unix))]
+    let (mut stdin, mut stdout) = (std::io::stdin().lock(), std::io::stdout());
     let mut line = vec![];
     while stdin.read_until(b'\n', &mut line)? > 0 {
         if !line.trim_ascii().is_empty() {
@@ -365,6 +391,8 @@ pub fn serve_http(addr: &str, port: Option<u16>, cli: &owo::Cli) -> Result<()> {
     let bound = listener.local_addr()?;
     println!("http://{bound}/mcp");
     std::io::stdout().flush()?;
+    #[cfg(unix)]
+    let _stdio = own_stdio()?;
     for stream in listener.incoming() {
         let Ok(stream) = stream else { continue };
         // A broken or slow client only ends its own request.
