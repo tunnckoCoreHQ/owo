@@ -6,9 +6,7 @@ mod common;
 
 use common::{copy_tree, examples, owo, PNG_1X1};
 use std::collections::BTreeMap;
-use std::ffi::OsStr;
 use std::fs;
-use std::os::unix::ffi::OsStrExt;
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 use tempfile::TempDir;
@@ -299,6 +297,8 @@ fn atomic_export_soulspec_is_all_or_nothing() {
 #[cfg(not(target_os = "macos"))]
 #[test]
 fn atomic_core_turns_a_non_utf8_path_into_utf8_text() {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt;
     let tmp = setup();
     let work = tmp.path().join("work");
     let bad = |s: &[u8]| OsStr::from_bytes(s).to_os_string();
@@ -348,6 +348,8 @@ fn atomic_core_turns_a_non_utf8_path_into_utf8_text() {
 #[test]
 fn atomic_core_api_turns_a_non_utf8_path_into_utf8_text() {
     use owo_core::{Env, Root, Select, SkillRequest};
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt;
     let tmp = setup();
     let work = tmp.path().join("work");
     let sel = Select {
