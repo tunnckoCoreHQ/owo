@@ -13,13 +13,16 @@ pub struct Created {
     pub files: Vec<String>,
 }
 
-pub fn new_identity(root: &Path, name: &str, slug: &str) -> Result<Created> {
+/// Creates `<root>/<slug>`; error text names the folder under `shown`, the root as the request
+/// gave it.
+pub fn new_identity(root: &Path, shown: &Path, name: &str, slug: &str) -> Result<Created> {
     if !crate::slug::is_slug(slug) {
         bail!("invalid slug {slug:?}: use lowercase letters, digits and single hyphens");
     }
     let dir = root.join(slug);
+    let shown = shown.join(slug);
     if dir.exists() {
-        bail!("already exists: {}", dir.display());
+        bail!("already exists: {}", shown.display());
     }
     let mut values = BTreeMap::new();
     values.insert("name", name.to_string());
@@ -28,7 +31,7 @@ pub fn new_identity(root: &Path, name: &str, slug: &str) -> Result<Created> {
 
     let mut files = vec![];
     let write = |rel: &str, content: &str, files: &mut Vec<String>| -> Result<()> {
-        crate::identity::write_file(&dir.join(rel), content)?;
+        crate::identity::write_file_as(&dir.join(rel), &shown.join(rel), content)?;
         files.push(rel.to_string());
         Ok(())
     };

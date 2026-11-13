@@ -283,10 +283,11 @@ pub fn write_card(
     project: Option<&str>,
     scenario: Option<&str>,
     out: &Path,
+    shown: &Path,
     png: Option<&Path>,
 ) -> Result<()> {
     let Some(png) = png else {
-        return crate::identity::write_json(out, main);
+        return crate::identity::write_json_as(out, shown, main);
     };
     let avatar = fs::read(png)?;
     let image = if main["spec"] == "chara_card_v3" {

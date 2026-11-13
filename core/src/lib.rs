@@ -207,6 +207,7 @@ impl Root {
         let slug = req.slug.clone().unwrap_or_else(|| slug::slugify(&req.name));
         Ok(create::new_identity(
             &self.config.root,
+            &self.config.root,
             req.name.trim(),
             &slug,
         )?)
@@ -502,6 +503,7 @@ impl Identity {
                 project,
                 scenario,
                 &self.cwd.join(out),
+                out,
                 png.as_deref(),
             )?;
         }

@@ -335,7 +335,7 @@ pub fn v1(cwd: &Path, src: &Path, out: &Path) -> Result<Report> {
         .unwrap_or_else(|| slug.clone());
     let sources = root.join("sources").join(&slug);
     let had_sources = sources.exists();
-    crate::create::new_identity(root, &name, &slug)?;
+    crate::create::new_identity(root, shown, &name, &slug)?;
     let mut report = fill(src, &refs, root, &slug, &manifest).inspect_err(|_| {
         let _ = fs::remove_dir_all(root.join(&slug));
         if !had_sources {

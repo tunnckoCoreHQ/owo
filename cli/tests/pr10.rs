@@ -282,3 +282,65 @@ fn pr10_cli_keeps_raw_path_bytes() {
         String::from_utf8_lossy(&out.stderr)
     );
 }
+
+/// The stderr of a failed `owo` run in `work`, the caller's folder.
+fn cli_error(tmp: &Path, args: &[&str]) -> String {
+    let out = owo(&tmp.join("ids"))
+        .current_dir(tmp.join("work"))
+        .args(args)
+        .output()
+        .unwrap();
+    assert!(!out.status.success(), "{args:?} succeeded");
+    String::from_utf8_lossy(&out.stderr).into_owned()
+}
+
+/// A read-only folder `ro` in `work`.
+#[cfg(unix)]
+fn read_only(tmp: &Path) {
+    use std::os::unix::fs::PermissionsExt;
+    let ro = tmp.join("work/ro");
+    fs::create_dir(&ro).unwrap();
+    fs::set_permissions(&ro, fs::Permissions::from_mode(0o555)).unwrap();
+}
+
+#[cfg(unix)]
+#[test]
+fn pr10_export_write_error_names_the_path_as_given() {
+    let tmp = setup();
+    read_only(tmp.path());
+    let err = cli_error(
+        tmp.path(),
+        &["-i", "nicole", "export", "card", "--out", "ro/x.json"],
+    );
+    assert!(err.starts_with("owo: writing ro/x.json.tmp: "), "{err}");
+}
+
+#[test]
+fn pr10_export_folder_error_names_the_path_as_given() {
+    let tmp = setup();
+    fs::write(tmp.path().join("work/afile"), "").unwrap();
+    let err = cli_error(
+        tmp.path(),
+        &["-i", "nicole", "export", "card", "--out", "afile/x.json"],
+    );
+    assert!(err.starts_with("owo: creating afile: "), "{err}");
+}
+
+#[cfg(unix)]
+#[test]
+fn pr10_migrate_create_error_names_the_path_as_given() {
+    let tmp = setup();
+    read_only(tmp.path());
+    v1(&tmp.path().join("work/v1"));
+    let err = cli_error(tmp.path(), &["migrate", "v1", "v1", "--out", "ro/lumen"]);
+    assert!(err.starts_with("owo: creating ro/lumen: "), "{err}");
+}
+
+#[test]
+fn pr10_migrate_existing_error_names_the_path_as_given() {
+    let tmp = setup();
+    v1(&tmp.path().join("work/v1"));
+    fs::create_dir_all(tmp.path().join("work/r/nicole")).unwrap();
+    let err = cli_error(tmp.path(), &["migrate", "v1", "v1", "--out", "r/nicole"]);
+    assert_eq!(err.trim_end(), "owo: already exists: r/nicole");
+}
