@@ -86,6 +86,7 @@ fn read_side_calls_return_typed_results() {
             name: "First Firing".into(),
             kind: None,
         })
+        .unwrap()
         .unwrap();
     assert_eq!(hit.path, "life/events/first-firing.md");
     assert!(id
@@ -93,6 +94,7 @@ fn read_side_calls_return_typed_results() {
             name: "no such entry at all".into(),
             kind: None
         })
+        .unwrap()
         .is_err());
 
     let (path, text) = id
@@ -117,12 +119,14 @@ fn read_side_calls_return_typed_results() {
         .unwrap();
     assert!(!links.inbound.is_empty() && links.outbound.is_empty());
 
-    let hits = id.search(&SearchRequest {
-        query: "glaze".into(),
-        scope: Some(Scope::Life),
-        limit: 3,
-        ..Default::default()
-    });
+    let hits = id
+        .search(&SearchRequest {
+            query: "glaze".into(),
+            scope: Some(Scope::Life),
+            limit: 3,
+            ..Default::default()
+        })
+        .unwrap();
     assert!(!hits.is_empty() && hits.len() <= 3);
     assert!(hits.iter().all(|h| h.path.starts_with("life/")));
 
@@ -151,7 +155,7 @@ fn read_side_calls_return_typed_results() {
 
     let state = id.state(&owo_core::StateRequest::default()).unwrap();
     assert!(matches!(
-        request::<owo_core::StateRequest>(json!({ "days": owo_core::MAX_DAYS + 1 })),
+        id.state(&owo_core::StateRequest { days: owo_core::MAX_DAYS + 1 }),
         Err(e) if e.fault == Some(Fault::OutOfRange { name: "days", value: owo_core::MAX_DAYS + 1, min: 0, max: owo_core::MAX_DAYS })
     ));
     assert_eq!(state.identity, "nicole");
@@ -165,11 +169,13 @@ fn read_side_calls_return_typed_results() {
     ));
     assert!(other
         .lint(&Default::default())
+        .unwrap()
         .iter()
         .all(|d| d.level != owo_core::Level::Error));
 
     assert!(id
         .lint(&Default::default())
+        .unwrap()
         .iter()
         .all(|d| d.level != owo_core::Level::Error));
     assert!(id
@@ -182,21 +188,23 @@ fn read_side_calls_return_typed_results() {
         .is_empty());
     assert_eq!(id.review().identity, "nicole");
     assert_eq!(id.changes(&Default::default()).unwrap().source, "state");
-    let both = request::<owo_core::ChangesRequest>(json!({ "since": "2026-01-01", "days": 3 }));
-    assert!(matches!(both, Err(e) if e.fault == Some(Fault::Conflict("since", "days"))));
+    let both = owo_core::ChangesRequest {
+        since: Some("2026-01-01".into()),
+        days: Some(3),
+    };
+    assert!(
+        matches!(id.changes(&both), Err(e) if e.fault == Some(Fault::Conflict("since", "days")))
+    );
     assert!(id
         .export_card(&owo_core::CardRequest::default())
         .unwrap()
         .card["data"]["name"]
         .is_string());
-    let png = request::<owo_core::CardRequest>(json!({ "png": "avatar.png" }));
-    assert!(matches!(png, Err(e) if e.fault == Some(Fault::Needs("png", "out"))));
-}
-
-/// The request of type `R` from JSON arguments, checked against its fields and their rules.
-fn request<R: owo_core::Request>(args: Value) -> owo_core::Result<R> {
-    let map = args.as_object().cloned().unwrap_or_default();
-    owo_core::Args::new("test", &R::fields(), map).and_then(|a| R::from_args(&a))
+    let png = owo_core::CardRequest {
+        png: Some("avatar.png".into()),
+        ..Default::default()
+    };
+    assert!(matches!(id.export_card(&png), Err(e) if e.fault == Some(Fault::Needs("png", "out"))));
 }
 
 #[test]

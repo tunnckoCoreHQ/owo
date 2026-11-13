@@ -164,7 +164,7 @@ pub fn operations() -> Vec<Operation> {
         op::<LintRequest>(&["lint"], "Validate an identity", |r, s| {
             let id = s.identity()?;
             Ok(Outcome::Lint {
-                found: id.lint(&r),
+                found: id.lint(&r)?,
                 identity: id.slug,
             })
         }),
@@ -203,7 +203,7 @@ pub fn operations() -> Vec<Operation> {
             &["resolve"],
             "Resolve a name to an entry path the way links do",
             |r, s| {
-                let found = s.identity()?.resolve(&r);
+                let found = s.identity()?.resolve(&r)?;
                 Ok(Outcome::Resolve {
                     name: r.name,
                     found,
@@ -254,7 +254,7 @@ pub fn operations() -> Vec<Operation> {
             |mut r, s| {
                 // The project filter is the selected project, not the configured one.
                 r.project = s.select.project.clone();
-                Ok(Outcome::Search(s.identity()?.search(&r)))
+                Ok(Outcome::Search(s.identity()?.search(&r)?))
             },
         ),
         op::<()>(
@@ -275,7 +275,7 @@ pub fn operations() -> Vec<Operation> {
         op::<SoulHistoryRequest>(
             &["soul", "history"],
             "Print the soul history, optionally for one file",
-            |r, s| Ok(Outcome::SoulHistory(s.identity()?.soul_history(&r))),
+            |r, s| Ok(Outcome::SoulHistory(s.identity()?.soul_history(&r)?)),
         ),
         op::<ChangesRequest>(
             &["changes"],

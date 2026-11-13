@@ -5,11 +5,11 @@
 //! function returns a typed result or an `Error`. A request type lists its fields (`Request`):
 //! name, type, help text, default, allowed values and rules, and `operations` lists every
 //! operation with its request type, so a caller builds its flags or parameters from them.
-//! `Args::new` checks arguments against the fields and their rules; a typed function trusts that
-//! its request keeps them. `mcp` is the MCP server and `acp` the ACP proxy, both on streams the
-//! caller gives. The library parses no command line, has no exit codes and reads nothing from
-//! the process: the caller passes the environment values in `Env`. The `owo` binary of `owo-cli`
-//! is its CLI.
+//! Each typed function checks its request against the rules declared on its fields, so a request
+//! built by hand is as safe as one built from arguments. `mcp` is the MCP server and `acp` the
+//! ACP proxy, both on streams the caller gives. The library parses no command line, has no exit
+//! codes and reads nothing from the process: the caller passes the environment values in `Env`.
+//! The `owo` binary of `owo-cli` is its CLI.
 
 pub mod acp;
 mod add;
@@ -98,6 +98,7 @@ pub struct Select {
 
 /// The slug of a text; an error when the text has no letters or digits.
 pub fn slug(req: &SlugRequest) -> Result<String> {
+    req.check()?;
     let text = &req.text;
     let value = slug::slugify(text);
     if value.is_empty() {
@@ -116,6 +117,7 @@ pub fn entry_types() -> impl Iterator<Item = &'static str> {
 
 /// Moves a v1 identity folder into a new identity folder (`<root>/<slug>`).
 pub fn migrate_v1(req: &MigrateRequest) -> Result<MigrateReport> {
+    req.check()?;
     Ok(migrate::v1(&req.path, &req.out)?)
 }
 
@@ -196,6 +198,7 @@ impl Root {
 
     /// Creates an identity from the templates.
     pub fn create(&self, req: &NewRequest) -> Result<Created> {
+        req.check()?;
         let slug = req.slug.clone().unwrap_or_else(|| slug::slugify(&req.name));
         Ok(create::new_identity(
             &self.config.root,
@@ -217,6 +220,7 @@ impl Root {
 
     /// One template and its text, as `create` and `add` use it.
     pub fn template(&self, req: &TemplateRequest) -> Result<(Template, String)> {
+        req.check()?;
         let all = templates::all();
         let Some((name, file, builtin)) = all.into_iter().find(|(n, _, _)| *n == req.name) else {
             return Err(Fault::UnknownTemplate(req.name.clone()).into());
@@ -246,6 +250,7 @@ impl Root {
 
     /// Moves the bookmark of a session after an ingest run. Returns the bookmark.
     pub fn sync_done(&self, req: &SyncDoneRequest) -> Result<Bookmark> {
+        req.check()?;
         Ok(sync::done(&self.config.root, &req.session, req.until)?)
     }
 }
@@ -272,6 +277,7 @@ impl SessionSync<'_> {
     /// Reads the host's transcript of the session and, when `every` new user turns arrived or
     /// `now` is set, writes the slice and the ingest prompt.
     pub fn start(&self, req: &SyncStartRequest) -> Result<SyncRun> {
+        req.check()?;
         Ok(sync::start(
             &self.request(&req.session, &req.options),
             &req.transcript,
@@ -282,6 +288,7 @@ impl SessionSync<'_> {
     /// Stores `turns`, skipping stored ids and turns with no text, then runs `start` on the
     /// stored turns.
     pub fn push(&self, session: &str, turns: &[Turn], opts: &SyncOptions) -> Result<SyncRun> {
+        opts.check()?;
         Ok(sync::push(&self.request(session, opts), turns)?)
     }
 }
@@ -299,17 +306,19 @@ impl Identity {
 
     /// The lint findings of the rules (every rule when empty). With `changed`, only the
     /// findings in files changed since the last commit or stamp.
-    pub fn lint(&self, req: &LintRequest) -> Vec<Diagnostic> {
+    pub fn lint(&self, req: &LintRequest) -> Result<Vec<Diagnostic>> {
+        req.check()?;
         let mut found = lint::run(self, &req.rules);
         if req.changed {
             let paths = changes::changed_paths(self);
             found.retain(|d| paths.contains(&d.path));
         }
-        found
+        Ok(found)
     }
 
     /// Writes the full text of one authored file. Returns true when the file is new.
     pub fn write(&self, req: &WriteRequest) -> Result<bool> {
+        req.check()?;
         let text = req.content.as_deref().unwrap_or_default();
         Ok(add::write(self, &req.path, text)?)
     }
@@ -317,6 +326,7 @@ impl Identity {
     /// Creates an entry from its template. Returns its path and true when the file is new. A
     /// note goes under the working project, which must exist; other types ignore it.
     pub fn add(&self, req: &AddRequest) -> Result<(String, bool)> {
+        req.check()?;
         if req.kind.type_name().is_none() {
             return Err(Error::new(
                 ErrorKind::Usage,
@@ -339,12 +349,14 @@ impl Identity {
 
     /// Refreshes the state files, or with `check` only reports the drift.
     pub fn stamp(&self, req: &StampRequest) -> Result<StampReport> {
+        req.check()?;
         Ok(stamp::run(self, req.check)?)
     }
 
     /// Writes the generated files and returns their paths; with `check`, only returns the paths
     /// of the ones that are out of date.
     pub fn index(&self, req: &IndexRequest) -> Result<Vec<String>> {
+        req.check()?;
         if req.check {
             return Ok(index::stale(self));
         }
@@ -352,22 +364,25 @@ impl Identity {
     }
 
     /// The entry the name resolves to, optionally of one type; else the candidates.
-    pub fn resolve(&self, req: &ResolveRequest) -> Result<Hit, Vec<Hit>> {
+    pub fn resolve(&self, req: &ResolveRequest) -> Result<Result<Hit, Vec<Hit>>> {
+        req.check()?;
         let hits = |v: Vec<usize>| v.iter().map(|i| Hit::of(&self.entries[*i])).collect();
-        match find::resolve(self, &req.name, req.kind) {
+        Ok(match find::resolve(self, &req.name, req.kind) {
             find::Resolution::Found(i) => Ok(Hit::of(&self.entries[i])),
             find::Resolution::Ambiguous(v) | find::Resolution::Missing(v) => Err(hits(v)),
-        }
+        })
     }
 
     /// The text of an entry or a `kb:` link, or one section of it, with its path.
     pub fn show(&self, req: &ShowRequest) -> Result<(String, String)> {
+        req.check()?;
         Ok(find::show(self, &req.name, req.section.as_deref())?)
     }
 
     /// The links into and out of the entry. Both when neither is asked for. `orphans` is for
     /// the operation, which calls `Identity::orphans` instead.
     pub fn links(&self, req: &LinksRequest) -> Result<Links> {
+        req.check()?;
         let i = find::one(self, &req.name)?;
         let both = !req.inbound && !req.outbound;
         Ok(Links {
@@ -395,6 +410,7 @@ impl Identity {
 
     /// The tiered load set, with the working project, which must exist.
     pub fn context(&self, req: &ContextRequest) -> Result<Context> {
+        req.check()?;
         let project = self.working_project()?;
         Ok(context::build(self, req, project)?)
     }
@@ -408,6 +424,7 @@ impl Identity {
     /// The derived current state, with events of the last `req.days`, and the state of the
     /// working project, which must exist.
     pub fn state(&self, req: &StateRequest) -> Result<State> {
+        req.check()?;
         let mut s = status::compute(self, req.days, 5);
         if let Some(p) = self.working_project()? {
             s.project = Some(status::project(self, p));
@@ -416,8 +433,9 @@ impl Identity {
     }
 
     /// The BM25 hits for the query, best first, at most `req.limit`.
-    pub fn search(&self, req: &SearchRequest) -> Vec<SearchHit> {
-        search::search(self, req)
+    pub fn search(&self, req: &SearchRequest) -> Result<Vec<SearchHit>> {
+        req.check()?;
+        Ok(search::search(self, req))
     }
 
     /// The review packet.
@@ -428,11 +446,13 @@ impl Identity {
     /// Records a finished review through the story day `through`, else the newest one. Returns
     /// the review record.
     pub fn review_done(&self, req: &ReviewDoneRequest) -> Result<ReviewRecord> {
+        req.check()?;
         Ok(review::done(self, req.through)?)
     }
 
     /// Appends a soul change to the soul history, with its evidence entries.
     pub fn soul_note(&self, req: &SoulNoteRequest) -> Result<SoulNote> {
+        req.check()?;
         Ok(review::soul_note(
             self,
             &req.file,
@@ -442,13 +462,15 @@ impl Identity {
     }
 
     /// The soul history, of one soul file or of all.
-    pub fn soul_history(&self, req: &SoulHistoryRequest) -> Vec<SoulChange> {
-        review::soul_history(self, req.file.as_deref())
+    pub fn soul_history(&self, req: &SoulHistoryRequest) -> Result<Vec<SoulChange>> {
+        req.check()?;
+        Ok(review::soul_history(self, req.file.as_deref()))
     }
 
     /// What changed, grouped by day, since `req.since`, or in the last `req.days` (from the
     /// local day that many days ago).
     pub fn changes(&self, req: &ChangesRequest) -> Result<Changes> {
+        req.check()?;
         let since = req
             .since
             .clone()
@@ -458,6 +480,7 @@ impl Identity {
 
     /// Builds a character card, and writes it when `req.out` is set.
     pub fn export_card(&self, req: &CardRequest) -> Result<Card> {
+        req.check()?;
         let project = self.check_project(req.project.as_deref())?;
         let scenario = req.scenario.as_deref();
         let card = export::card(self, req.spec, project, scenario)?;
@@ -470,11 +493,13 @@ impl Identity {
 
     /// Writes a SKILL.md wrapper into `req.out` and returns its path.
     pub fn export_skill(&self, req: &SkillRequest) -> Result<String> {
+        req.check()?;
         Ok(export::skill(self, &req.out)?)
     }
 
     /// Writes a SoulSpec package into `req.out`.
     pub fn export_soulspec(&self, req: &SoulspecRequest) -> Result<Soulspec> {
+        req.check()?;
         Ok(export::soulspec(self, &req.out)?)
     }
 }

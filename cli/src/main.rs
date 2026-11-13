@@ -70,8 +70,7 @@ fn main() -> ExitCode {
 }
 
 /// Runs the operation of the parsed command. The process stdin gives the text `owo write` and
-/// `owo sync push` read when they take no `--content` or `--turns`. Clap checked the arguments
-/// against the fields and their rules.
+/// `owo sync push` read when they take no `--content` or `--turns`.
 fn run(ops: &[Operation], matches: &ArgMatches, global: &Global, env: &owo_core::Env) -> Output {
     let mut path = vec![];
     let mut m = matches;
@@ -83,8 +82,9 @@ fn run(ops: &[Operation], matches: &ArgMatches, global: &Global, env: &owo_core:
         .iter()
         .find(|op| op.path == path.as_slice())
         .expect("every command is an operation");
-    let args = Args::checked(cli::args(op, m));
-    match op.run(&args, &global.select, env, &mut std::io::stdin()) {
+    let ran = Args::new(&op.name(), &op.fields, cli::args(op, m))
+        .and_then(|args| op.run(&args, &global.select, env, &mut std::io::stdin()));
+    match ran {
         Ok(ran) => render::output(ran, global.json, global.quiet),
         Err(e) => Output::from(anyhow::Error::from(e)),
     }
