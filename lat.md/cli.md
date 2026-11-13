@@ -14,7 +14,7 @@ Exit codes: 0 success, 1 problems found (lint errors, exists, unknown template, 
 
 Each command with its flags and exit behavior.
 
-- `owo new <name> [--slug]` creates an identity from templates, writes indexes and state files. Exits 1 when the folder exists.
+- `owo new <name> [--slug]` creates an identity from templates, writes indexes and state files. Exits 1 when the folder exists. When a write fails, it removes the folder it created.
 - `owo add <type> <title> [--date] [--parent] [--alias]... [--kb]` creates one entry at its deterministic path; `--date` and the `created` and `updated` fields default to the local day. Uses `--project` for notes; `--parent` is only for location-detail and `--kb` only for project. A second `add log` for the same day succeeds and prints `exists <path>`; for other types an existing path exits 1 with an `exists` error.
 - `owo write <path> [--content <text>]` replaces the full text of one authored file under soul/, life/ or work/, from `--content` or stdin; it refuses empty text, generated files (after it drops `.` parts of the path) and paths outside the identity.
 - `owo lint [--rule <code>]...` runs [[lint]] rules. Exits 1 when any error is found.
@@ -27,7 +27,7 @@ Each command with its flags and exit behavior.
 - `owo state [--days N]` prints the derived Now block, plus the last update and recent notes with `--project`.
 - `owo search <query> [--scope soul|life|work] [--type <t>]... [--since <date>] [--limit N]` ranks entries with BM25; no hits gives `ok: false` and exit 1. See [[decisions#Search is in-crate BM25]].
 - `owo review` prints the review packet; see [[cli#Review]]. `owo review done [--through <date>]` records a finished review: `last_reviewed`, `reviewed_through` (default: newest date of a non-blank log, an event or a journal entry) and the MEMORY.md hash.
-- `owo soul note <file> --change <text> --evidence <name>...` appends to `soul/state.json` `history`. Evidence must resolve; a `#Section` or `|label` part is kept in the record and ignored for resolution; fewer than two links and no defining event gives a warning. `owo soul history [file]` prints the trail. A record written by hand comes back as written, also one with a field of the wrong type, so the last record is always the newest one.
+- `owo soul note <file> --change <text> --evidence <name>...` appends to `soul/state.json` `history`. Evidence must resolve; a `#Section` or `|label` part is kept in the record and ignored for resolution; fewer than two links and no defining event gives a warning. `owo soul history [file]` prints the trail; its text shows the string evidence of an array that also holds other values. A record written by hand comes back as written, also one with a field of the wrong type, so the last record is always the newest one.
 - `owo changes [--since | --days N]` lists changes by day; `--days N` starts N days before the local day; see [[decisions#Changes read Git, else stamps]]. `owo lint --changed` keeps diagnostics for changed files only.
 - `owo export card [--spec v3|v2] [--scenario <name>] [--png <avatar> --out <file>]`, `owo export soulspec --out <dir>`, `owo export skill --out <dir>`; see [[cli#Export]].
 - `owo sync start`, `owo sync push` and `owo sync done`; see [[cli#Sync]].

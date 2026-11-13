@@ -520,6 +520,6 @@ impl Identity {
     /// Writes a SoulSpec package into `req.out`.
     pub fn export_soulspec(&self, req: &SoulspecRequest) -> Result<Soulspec> {
         req.check()?;
-        Ok(export::soulspec(self, &self.cwd.join(&req.out))?)
+        Ok(export::soulspec(self, &self.cwd.join(&req.out), &req.out)?)
     }
 }

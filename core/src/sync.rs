@@ -269,7 +269,9 @@ pub fn start(req: &StartRequest, transcript: &Path, format: Format) -> Result<St
             return Err(Fault::PushedSession(req.session.into()).into());
         }
     }
-    run(req, transcript, format)
+    let raw = fs::read_to_string(req.cwd.join(transcript))
+        .with_context(|| format!("reading {}", transcript.display()))?;
+    run(req, transcript, &raw, format)
 }
 
 /// One turn a host pushes: its id (the host's id for the message), role and text.
@@ -373,7 +375,7 @@ pub fn push(req: &StartRequest, turns: &[Turn]) -> Result<Start> {
     let tmp = file.with_extension("jsonl.tmp");
     write_file(&tmp, &stored)?;
     fs::rename(&tmp, &file)?;
-    let mut out = run(req, &file, Format::Jsonl)?;
+    let mut out = run(req, &file, &stored, Format::Jsonl)?;
     out.added = Some(added);
     if let (Some(source), Some(prompt)) = (&out.source, &out.prompt) {
         out.source_text = Some(fs::read_to_string(req.root.join(source))?);
@@ -382,12 +384,10 @@ pub fn push(req: &StartRequest, turns: &[Turn]) -> Result<Start> {
     Ok(out)
 }
 
-/// Reads the transcript, decides whether a run is due and writes the slice and prompt.
-/// The caller holds the session lock.
-fn run(req: &StartRequest, transcript: &Path, format: Format) -> Result<Start> {
-    let raw = fs::read_to_string(req.cwd.join(transcript))
-        .with_context(|| format!("reading {}", transcript.display()))?;
-    let messages = parse(&raw, format)?;
+/// Parses `raw`, the text of `transcript`, decides whether a run is due and writes the slice
+/// and prompt. The caller holds the session lock.
+fn run(req: &StartRequest, transcript: &Path, raw: &str, format: Format) -> Result<Start> {
+    let messages = parse(raw, format)?;
     if messages.is_empty() && !raw.trim().is_empty() {
         return Err(Fault::NoMessages {
             transcript: transcript.to_path_buf(),

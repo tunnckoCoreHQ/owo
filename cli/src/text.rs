@@ -193,12 +193,18 @@ pub fn review(p: &Packet) -> String {
 pub fn soul_history(list: &[SoulChange]) -> String {
     let mut out = String::new();
     for r in list {
+        // An `evidence` array with an entry that is not a string stays in `other`; its strings
+        // still print.
+        let loose = r.other.get("evidence").and_then(|v| v.as_array());
+        let evidence: Vec<&str> = (r.evidence.iter().flatten().map(String::as_str))
+            .chain(loose.into_iter().flatten().filter_map(|v| v.as_str()))
+            .collect();
         out.push_str(&format!(
             "{}  {}  {}\n    evidence: {}\n",
             r.at.as_deref().unwrap_or("?"),
             r.file.as_deref().unwrap_or("?"),
             r.change.as_deref().unwrap_or(""),
-            r.evidence.as_deref().unwrap_or_default().join(", ")
+            evidence.join(", ")
         ));
     }
     out

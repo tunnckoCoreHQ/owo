@@ -6,8 +6,8 @@ mod common;
 use chrono::NaiveDate;
 use common::{copy_tree, examples, owo, PNG_1X1};
 use owo_core::{
-    mcp, AddRequest, Env, ErrorKind, Identity, Kind, ReviewDoneRequest, Root, Select, SkillRequest,
-    SoulHistoryRequest, SoulspecRequest, StateRequest, SyncStartRequest,
+    mcp, parse_turns, AddRequest, Env, ErrorKind, Identity, Kind, ReviewDoneRequest, Root, Select,
+    SkillRequest, SoulHistoryRequest, SoulspecRequest, StateRequest, SyncStartRequest,
 };
 use serde_json::{json, Value};
 use std::fs;
@@ -343,4 +343,59 @@ fn pr10_migrate_existing_error_names_the_path_as_given() {
     fs::create_dir_all(tmp.path().join("work/r/nicole")).unwrap();
     let err = cli_error(tmp.path(), &["migrate", "v1", "v1", "--out", "r/nicole"]);
     assert_eq!(err.trim_end(), "owo: already exists: r/nicole");
+}
+
+#[test]
+fn pr10_push_with_a_relative_env_cwd_reads_the_stored_turns() {
+    LazyLock::force(&PROCESS);
+    let tmp = TempDir::new_in(&*PROCESS).unwrap();
+    copy_tree(&examples().join("nicole"), &tmp.path().join("ids/nicole"));
+    fs::create_dir_all(tmp.path().join("work")).unwrap();
+    let name = tmp.path().file_name().unwrap();
+    let env = env(&Path::new(name).join("work"));
+    let sel = Select {
+        root: Some("../ids".into()),
+        identity: Some("nicole".into()),
+        project: None,
+    };
+    let turns = parse_turns(r#"[{"id":"a","role":"user","text":"hi"}]"#).unwrap();
+    let run = Root::open(&sel, &env)
+        .unwrap()
+        .sync()
+        .unwrap()
+        .push("s1", &turns, &Default::default())
+        .unwrap();
+    assert_eq!(run.added, Some(1));
+}
+
+#[cfg(unix)]
+#[test]
+fn pr10_soulspec_write_error_names_the_path_as_given() {
+    use std::os::unix::fs::PermissionsExt;
+    let tmp = setup();
+    let pkg = tmp.path().join("work/pkg");
+    fs::create_dir_all(pkg.join("examples")).unwrap();
+    fs::set_permissions(&pkg, fs::Permissions::from_mode(0o555)).unwrap();
+    let err = cli_error(
+        tmp.path(),
+        &["-i", "nicole", "export", "soulspec", "--out", "pkg"],
+    );
+    assert!(err.contains("owo: writing pkg/soul.json.tmp: "), "{err}");
+}
+
+#[test]
+fn pr10_soul_history_text_keeps_string_evidence_of_a_mixed_array() {
+    let tmp = setup();
+    let path = tmp.path().join("ids/nicole/soul/state.json");
+    let mut doc: Value = serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+    doc["history"] = json!([
+        { "at": "2026-01-01T00:00:00Z", "file": "SOUL.md", "change": "c", "evidence": ["[[a]]", 3, "[[b]]"] },
+    ]);
+    fs::write(&path, doc.to_string()).unwrap();
+    let out = owo(&tmp.path().join("ids"))
+        .args(["-i", "nicole", "soul", "history"])
+        .output()
+        .unwrap();
+    let text = String::from_utf8_lossy(&out.stdout);
+    assert!(text.contains("    evidence: [[a]], [[b]]\n"), "{text}");
 }

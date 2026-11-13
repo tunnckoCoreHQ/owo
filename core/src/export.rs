@@ -305,7 +305,8 @@ pub struct Report {
     pub warnings: Vec<String>,
 }
 
-pub fn soulspec(id: &Identity, dir: &Path) -> Result<Report> {
+/// Writes the package into `dir`; error text names it as `shown`, as the request gave it.
+pub fn soulspec(id: &Identity, dir: &Path, shown: &Path) -> Result<Report> {
     let soul = id.dir.join("soul");
     let mut manifest = id
         .read_object("soul/soul.json")?
@@ -324,7 +325,7 @@ pub fn soulspec(id: &Identity, dir: &Path) -> Result<Report> {
     manifest["files"]["style"] = json!("STYLE.md");
     manifest["files"]["memory"] = json!("MEMORY.md");
     fs::create_dir_all(dir.join("examples"))?;
-    crate::identity::write_json(&dir.join("soul.json"), &manifest)?;
+    crate::identity::write_json_as(&dir.join("soul.json"), &shown.join("soul.json"), &manifest)?;
     let mut files = vec!["soul.json".to_string()];
     let mut write = |rel: &str, body: String| -> Result<()> {
         fs::write(dir.join(rel), body)?;

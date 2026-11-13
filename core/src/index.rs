@@ -177,11 +177,16 @@ fn work(identity: &Identity) -> String {
 
 /// Writes generated files that differ. Returns the paths written.
 pub fn write(identity: &Identity) -> anyhow::Result<Vec<String>> {
+    write_as(identity, &identity.dir)
+}
+
+/// Like `write`, but error text names the identity folder as `shown`.
+pub fn write_as(identity: &Identity, shown: &std::path::Path) -> anyhow::Result<Vec<String>> {
     let mut written = vec![];
     for (rel, content) in generate(identity) {
         let path = identity.dir.join(&rel);
         if fs::read_to_string(&path).ok().as_deref() != Some(content.as_str()) {
-            crate::identity::write_file(&path, content)?;
+            crate::identity::write_file_as(&path, &shown.join(&rel), content)?;
             written.push(rel);
         }
     }
