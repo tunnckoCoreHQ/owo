@@ -81,10 +81,7 @@ pub fn changes(id: &Identity, since: Option<&str>) -> anyhow::Result<Changes> {
     }
     // Outside Git only a day compares; `git log --since` words such as "yesterday" do not.
     let since = since
-        .map(|s| {
-            crate::state::parse_day(s)
-                .map_err(|e| anyhow::anyhow!("outside Git, --since takes a day: {e}"))
-        })
+        .map(|s| crate::state::parse_day(s).map_err(|e| crate::Fault::SinceNotDay(e.to_string())))
         .transpose()?
         .map(|d| d.to_string());
     // Each tracked file's state stamp, else its frontmatter `updated`; newest first.

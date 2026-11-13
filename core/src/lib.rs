@@ -4,10 +4,12 @@
 //! function of each operation on the `Root` or the `Identity` with its request type. Each
 //! function returns a typed result or an `Error`. A request type lists its fields (`Request`):
 //! name, type, help text, default, allowed values and rules, and `operations` lists every
-//! operation with its request type, so a caller builds its flags or parameters from them. `mcp`
-//! is the MCP server and `acp` the ACP proxy, both on streams the caller gives. The library
-//! parses no command line, has no exit codes and reads nothing from the process: the caller
-//! passes the environment values in `Env`. The `owo` binary of `owo-cli` is its CLI.
+//! operation with its request type, so a caller builds its flags or parameters from them.
+//! `Args::new` checks arguments against the fields and their rules; a typed function trusts that
+//! its request keeps them. `mcp` is the MCP server and `acp` the ACP proxy, both on streams the
+//! caller gives. The library parses no command line, has no exit codes and reads nothing from
+//! the process: the caller passes the environment values in `Env`. The `owo` binary of `owo-cli`
+//! is its CLI.
 
 pub mod acp;
 mod add;
@@ -50,10 +52,10 @@ pub use kb::Kb;
 pub use lint::Rule;
 pub use migrate::Report as MigrateReport;
 pub use operation::{operations, Envelope, Operation, Outcome, Ran};
-pub use output::{Diagnostic, Level};
+pub use output::{warning_line, Diagnostic, Level};
 pub use request::{
     AddRequest, Args, CardRequest, ChangesRequest, ContextRequest, Field, IndexRequest,
-    LinksRequest, LintRequest, MigrateRequest, NewRequest, Request, ResolveRequest,
+    LinksRequest, LintRequest, MigrateRequest, NewRequest, Reader, Request, ResolveRequest,
     ReviewDoneRequest, SearchRequest, ShowRequest, SkillRequest, SlugRequest, SoulHistoryRequest,
     SoulNoteRequest, SoulspecRequest, StampRequest, StateRequest, SyncDoneRequest, SyncOptions,
     SyncPushRequest, SyncStartRequest, TemplateRequest, Type, WriteRequest, MAX_DAYS,
@@ -68,7 +70,6 @@ pub use sync::{
 };
 
 use config::{need_identity, need_project};
-use request::check_days;
 use serde_json::Value;
 use std::path::{Path, PathBuf};
 /// What the library would read from a process: environment values and the working folder.
@@ -155,8 +156,11 @@ impl Root {
     /// reads no identity yet.
     pub fn open(select: &Select, env: &Env) -> Result<Root> {
         let inputs = config::Inputs::new(select, env);
-        let config = config::resolve(&inputs)
-            .map_err(|e| Error::new(ErrorKind::Config, format!("{e:#}")))?;
+        let config = config::resolve(&inputs).map_err(|e| {
+            let mut e = Error::from(e);
+            e.kind = ErrorKind::Config;
+            e
+        })?;
         let mut warnings = vec![];
         if let Source::ProjectFile(file) = &config.root_source {
             if file.parent() != Some(inputs.cwd.as_path()) {
@@ -404,7 +408,7 @@ impl Identity {
     /// The derived current state, with events of the last `req.days`, and the state of the
     /// working project, which must exist.
     pub fn state(&self, req: &StateRequest) -> Result<State> {
-        let mut s = status::compute(self, check_days(req.days)?, 5);
+        let mut s = status::compute(self, req.days, 5);
         if let Some(p) = self.working_project()? {
             s.project = Some(status::project(self, p));
         }
@@ -445,20 +449,15 @@ impl Identity {
     /// What changed, grouped by day, since `req.since`, or in the last `req.days` (from the
     /// local day that many days ago).
     pub fn changes(&self, req: &ChangesRequest) -> Result<Changes> {
-        let since = match (&req.since, req.days) {
-            (Some(_), Some(_)) => return Err(Fault::Conflict("since", "days").into()),
-            (Some(s), None) => Some(s.clone()),
-            (None, Some(days)) => Some(state::local_day_ago(check_days(days)?)),
-            (None, None) => None,
-        };
+        let since = req
+            .since
+            .clone()
+            .or_else(|| req.days.map(state::local_day_ago));
         Ok(changes::changes(self, since.as_deref())?)
     }
 
     /// Builds a character card, and writes it when `req.out` is set.
     pub fn export_card(&self, req: &CardRequest) -> Result<Card> {
-        if req.png.is_some() && req.out.is_none() {
-            return Err(Fault::Needs("png", "out").into());
-        }
         let project = self.check_project(req.project.as_deref())?;
         let scenario = req.scenario.as_deref();
         let card = export::card(self, req.spec, project, scenario)?;

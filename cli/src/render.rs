@@ -4,7 +4,6 @@
 use crate::output::{exit, Output};
 use crate::text;
 use owo_core::{Kind, Level, Outcome, Ran};
-use serde_json::Value;
 
 /// The output of a run. A failure keeps the warnings found before it. Without `json` the
 /// envelope's text warnings join the warnings, and `quiet` drops the confirmation lines.
@@ -22,13 +21,7 @@ pub fn output(ran: Ran, json: bool, quiet: bool) -> Output {
     let mut warnings = ran.warnings;
     let mut text = String::new();
     if !json {
-        warnings.extend(
-            envelope
-                .warnings
-                .iter()
-                .filter_map(Value::as_str)
-                .map(str::to_string),
-        );
+        warnings.extend(envelope.text_warnings());
         let mut t = Text {
             quiet,
             buf: String::new(),

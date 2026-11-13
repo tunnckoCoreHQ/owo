@@ -3,7 +3,7 @@
 
 use crate::markdown::{first_heading, parse_frontmatter, Fields};
 use crate::slug::slugify;
-use anyhow::{bail, Context, Result};
+use anyhow::{bail, Result};
 use serde::Serialize;
 use serde_json::{json, Value};
 use std::fs;
@@ -315,7 +315,7 @@ pub fn v1(src: &Path, out: &Path) -> Result<Report> {
     let slug = out
         .file_name()
         .and_then(|s| s.to_str())
-        .context("--out must end in the identity slug")?
+        .ok_or(crate::Fault::OutNoSlug)?
         .to_string();
     let root = out
         .parent()

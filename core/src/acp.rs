@@ -178,10 +178,13 @@ fn job(identity: Option<String>, session: &str, turns: Vec<crate::Turn>) -> Opti
 }
 
 /// What the proxy does beside the injection.
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Copy)]
 pub struct Options {
-    /// Put the output of `owo context` in the prompt, and add no owo MCP server.
+    /// Put the text of the identity's load set in the prompt, and add no owo MCP server.
     pub inject: bool,
+    /// The command and arguments that start the owo MCP server the proxy adds to each session,
+    /// for the identity resolved at start.
+    pub mcp_server: fn(Option<&str>) -> (String, Vec<String>),
 }
 
 /// Calls the library for a session's identity, and writes warning lines.
@@ -231,7 +234,7 @@ impl Owo {
 
     /// Writes one `owo: warning: <text>` line.
     fn warn(&self, text: &str) {
-        self.write(&format!("owo: warning: {text}\n"));
+        self.write(&crate::warning_line(text));
     }
 }
 
@@ -270,15 +273,14 @@ impl Proxy {
             return Err(crate::Fault::InjectNeedsIdentity.into());
         }
         let setup = (!identities.is_empty()).then(|| {
-            let args = match &start {
-                Some(id) => json!(["mcp", "-i", id]),
-                None => json!(["mcp"]),
-            };
+            let server = (!context).then(|| {
+                let (command, args) = (options.mcp_server)(start.as_deref());
+                json!({ "name": "owo", "command": command, "args": args, "env": [] })
+            });
             Arc::new(Setup {
                 identities,
                 context,
-                server: (!context)
-                    .then(|| json!({ "name": "owo", "command": "owo", "args": args, "env": [] })),
+                server,
                 owo: owo.clone(),
             })
         });

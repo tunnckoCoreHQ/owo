@@ -151,7 +151,7 @@ fn read_side_calls_return_typed_results() {
 
     let state = id.state(&owo_core::StateRequest::default()).unwrap();
     assert!(matches!(
-        id.state(&owo_core::StateRequest { days: owo_core::MAX_DAYS + 1 }),
+        request::<owo_core::StateRequest>(json!({ "days": owo_core::MAX_DAYS + 1 })),
         Err(e) if e.fault == Some(Fault::OutOfRange { name: "days", value: owo_core::MAX_DAYS + 1, min: 0, max: owo_core::MAX_DAYS })
     ));
     assert_eq!(state.identity, "nicole");
@@ -182,23 +182,21 @@ fn read_side_calls_return_typed_results() {
         .is_empty());
     assert_eq!(id.review().identity, "nicole");
     assert_eq!(id.changes(&Default::default()).unwrap().source, "state");
-    let both = owo_core::ChangesRequest {
-        since: Some("2026-01-01".into()),
-        days: Some(3),
-    };
-    assert!(
-        matches!(id.changes(&both), Err(e) if e.fault == Some(Fault::Conflict("since", "days")))
-    );
+    let both = request::<owo_core::ChangesRequest>(json!({ "since": "2026-01-01", "days": 3 }));
+    assert!(matches!(both, Err(e) if e.fault == Some(Fault::Conflict("since", "days"))));
     assert!(id
         .export_card(&owo_core::CardRequest::default())
         .unwrap()
         .card["data"]["name"]
         .is_string());
-    let png = owo_core::CardRequest {
-        png: Some("avatar.png".into()),
-        ..Default::default()
-    };
-    assert!(matches!(id.export_card(&png), Err(e) if e.fault == Some(Fault::Needs("png", "out"))));
+    let png = request::<owo_core::CardRequest>(json!({ "png": "avatar.png" }));
+    assert!(matches!(png, Err(e) if e.fault == Some(Fault::Needs("png", "out"))));
+}
+
+/// The request of type `R` from JSON arguments, checked against its fields and their rules.
+fn request<R: owo_core::Request>(args: Value) -> owo_core::Result<R> {
+    let map = args.as_object().cloned().unwrap_or_default();
+    owo_core::Args::new("test", &R::fields(), map).and_then(|a| R::from_args(&a))
 }
 
 #[test]
@@ -313,6 +311,15 @@ impl Write for Shared {
     }
 }
 
+/// The MCP server entry the CLI gives the proxy: `owo mcp`, with the identity resolved at start.
+fn mcp_server(identity: Option<&str>) -> (String, Vec<String>) {
+    let mut args = vec!["mcp".to_string()];
+    if let Some(id) = identity {
+        args.extend(["-i".to_string(), id.to_string()]);
+    }
+    ("owo".to_string(), args)
+}
+
 /// Starts the proxy. The agent answers its n-th line with `replies[n]`, and ends when its
 /// input ends.
 fn start(root: &Path, options: acp::Options, replies: Vec<Vec<String>>) -> Session {
@@ -406,7 +413,10 @@ fn acp_proxy_runs_on_given_streams() {
     let odd_reply = r#"{"jsonrpc":"2.0",  "id":9, "result":{"x" : 1}}"#;
     let mut p = start(
         tmp.path(),
-        acp::Options::default(),
+        acp::Options {
+            inject: false,
+            mcp_server,
+        },
         vec![
             vec![new_reply()],
             vec![odd_reply.into()],
@@ -486,7 +496,10 @@ fn acp_inject_puts_the_context_in_the_first_prompt() {
     );
     let mut p = start(
         tmp.path(),
-        acp::Options { inject: true },
+        acp::Options {
+            inject: true,
+            mcp_server,
+        },
         vec![vec![new_reply()], vec![end(2)], vec![end(3)]],
     );
     let got: Value = serde_json::from_str(&p.send(&new_session())).unwrap();

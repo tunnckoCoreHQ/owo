@@ -2,7 +2,7 @@
 
 use crate::identity::{Entry, Identity, Kind};
 use crate::markdown;
-use anyhow::{bail, Context, Result};
+use anyhow::{bail, Result};
 use serde_json::{json, Value};
 use std::fs;
 use std::path::Path;
@@ -187,7 +187,11 @@ pub fn card(
         .to_string();
     }
     if let Some(name) = scenario_from {
-        let e = &id.entries[crate::find::one(id, name).context("--scenario")?];
+        let i = crate::find::one(id, name).map_err(|e| crate::Fault::Field {
+            name: "scenario",
+            error: format!("{e:#}"),
+        })?;
+        let e = &id.entries[i];
         scenario = e
             .field_str("summary")
             .filter(|s| !s.is_empty())

@@ -3,6 +3,7 @@
 use crate::identity::{write_file, Identity, Kind};
 use crate::slug::slugify;
 use crate::templates;
+use crate::Fault;
 use anyhow::{bail, Context, Result};
 use std::collections::BTreeMap;
 use std::fs;
@@ -17,10 +18,22 @@ pub fn add(id: &Identity, req: &Request, project: Option<&str>) -> Result<(Strin
         .type_name()
         .expect("`Identity::add` takes only entry types");
     if req.parent.is_some() && req.kind != Kind::LocationDetail {
-        bail!("--parent is for location-detail; a {name} has no parent");
+        return Err(Fault::OnlyFor {
+            field: "parent",
+            noun: "parent",
+            kind: Kind::LocationDetail,
+            given: req.kind,
+        }
+        .into());
     }
     if req.kb.is_some() && req.kind != Kind::Project {
-        bail!("--kb is for project; a {name} has no KB");
+        return Err(Fault::OnlyFor {
+            field: "kb",
+            noun: "KB",
+            kind: Kind::Project,
+            given: req.kind,
+        }
+        .into());
     }
     // The local day, so `owo add log` names the day the user is living.
     let today = crate::state::local_today();
@@ -48,10 +61,10 @@ pub fn add(id: &Identity, req: &Request, project: Option<&str>) -> Result<(Strin
     values.insert("date", date.clone());
 
     let parent_slug = if req.kind == Kind::LocationDetail {
-        let parent = req
-            .parent
-            .as_deref()
-            .context("location-detail needs --parent <location>")?;
+        let parent = req.parent.as_deref().ok_or(Fault::KindNeeds {
+            kind: req.kind,
+            field: "parent",
+        })?;
         let parent_slug = slugify(parent);
         let overview = Kind::Location
             .rel(&parent_slug, &date, None, None)
@@ -72,7 +85,10 @@ pub fn add(id: &Identity, req: &Request, project: Option<&str>) -> Result<(Strin
     };
 
     if req.kind == Kind::Note {
-        let project = project.context("note needs --project <project>")?;
+        let project = project.ok_or(Fault::KindNeeds {
+            kind: req.kind,
+            field: "project",
+        })?;
         values.insert("project", project.to_string());
     }
 
@@ -97,7 +113,12 @@ pub fn add(id: &Identity, req: &Request, project: Option<&str>) -> Result<(Strin
     );
     if !req.aliases.is_empty() {
         if !text.contains("\naliases: []") {
-            bail!("the {name} template has no `aliases: []` line for --alias");
+            return Err(Fault::TemplateLacks {
+                template: name.into(),
+                line: "aliases: []",
+                field: "alias",
+            }
+            .into());
         }
         let list = req
             .aliases
@@ -108,7 +129,12 @@ pub fn add(id: &Identity, req: &Request, project: Option<&str>) -> Result<(Strin
     }
     if let (Some(kb), Kind::Project) = (req.kb.as_deref(), req.kind) {
         if !text.contains("kb: \"\"") {
-            bail!("the project template has no `kb: \"\"` line for --kb");
+            return Err(Fault::TemplateLacks {
+                template: "project".into(),
+                line: "kb: \"\"",
+                field: "kb",
+            }
+            .into());
         }
         let kb = templates::yaml_escape(kb);
         text = text.replacen("kb: \"\"", &format!("kb: \"{kb}\""), 1);
@@ -124,7 +150,7 @@ pub fn add(id: &Identity, req: &Request, project: Option<&str>) -> Result<(Strin
 /// is new. The path stays inside soul/, life/ or work/ and is never a generated file.
 pub fn write(id: &Identity, rel: &str, text: &str) -> Result<bool> {
     if text.trim().is_empty() {
-        bail!("no text for {rel}; pass --content or pipe the full file on stdin");
+        return Err(Fault::NoText(rel.into()).into());
     }
     let parts: Option<Vec<&str>> = std::path::Path::new(rel)
         .components()
@@ -142,7 +168,7 @@ pub fn write(id: &Identity, rel: &str, text: &str) -> Result<bool> {
         bail!("{rel:?} must be an identity-relative .md path under soul/, life/ or work/");
     }
     if crate::identity::classify(&clean) == crate::identity::Kind::Generated {
-        return Err(crate::Fault::Generated(clean).into());
+        return Err(Fault::Generated(clean).into());
     }
     let file = id.dir.join(&clean);
     let created = !file.exists();

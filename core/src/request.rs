@@ -1,10 +1,10 @@
-//! The request type of each operation. A request type lists its fields with `Request::fields`:
-//! the name, type, help text, default, allowed values and rules of each. The CLI builds its
-//! flags from them and the MCP server its parameters, and both map their arguments into the
-//! request with `Request::from_args`. The typed function of each operation checks the rules
-//! when it takes its request.
+//! The request type of each operation. A request type reads itself with `Request::read`, and
+//! each read declares one field: the name, type, help text, default, allowed values and rules.
+//! `Request::fields` lists the fields: the CLI builds its flags from them and the MCP server its
+//! parameters. `Args::new` checks arguments against the fields and their rules, and
+//! `Request::from_args` maps them into the request.
 
-use crate::{Fault, Kind, Result, Rule, Scope, Spec, SyncFormat};
+use crate::{Error, ErrorKind, Fault, Kind, Result, Rule, Scope, Spec, SyncFormat};
 use chrono::NaiveDate;
 use serde_json::{Map, Value};
 use std::path::PathBuf;
@@ -138,7 +138,8 @@ pub struct Args {
     map: Map<String, Value>,
 }
 
-fn scalar(v: &Value) -> Option<String> {
+/// The text of a string, number or boolean.
+pub(crate) fn scalar(v: &Value) -> Option<String> {
     match v {
         Value::String(s) => Some(s.clone()),
         Value::Number(n) => Some(n.to_string()),
@@ -147,137 +148,234 @@ fn scalar(v: &Value) -> Option<String> {
     }
 }
 
+fn usage(message: String) -> Error {
+    Error::new(ErrorKind::Usage, message)
+}
+
 impl Args {
-    /// The arguments in `map` for the operation `name` with `fields`: each one a field, each
-    /// required field there, and each value of a field with a fixed list in it.
-    pub fn new(name: &str, fields: &[Field], map: Map<String, Value>) -> Result<Self, String> {
+    /// The arguments in `map` for the operation `name` with `fields`, checked: each one a field,
+    /// each required field there, each value of a field with a fixed list in it, and the range,
+    /// conflicts and requires rules of each field.
+    pub fn new(name: &str, fields: &[Field], map: Map<String, Value>) -> Result<Self> {
         if let Some(k) = map.keys().find(|k| !fields.iter().any(|f| f.name == *k)) {
-            return Err(format!("unknown argument {k:?} for {name}"));
+            return Err(usage(format!("unknown argument {k:?} for {name}")));
         }
         let args = Args { map };
         for f in fields {
             if f.required && args.get(f.name).is_none() {
-                return Err(format!("missing argument {:?}", f.name));
+                return Err(usage(format!("missing argument {:?}", f.name)));
             }
-            let Type::Choice(values) = &f.ty else {
-                continue;
-            };
-            for v in args.strings(f.name) {
-                if !values.contains(&v.as_str()) {
-                    return Err(format!(
+            if let Type::Choice(values) = &f.ty {
+                if let Some(v) = args.strings(f.name).find(|v| !values.contains(&v.as_str())) {
+                    return Err(usage(format!(
                         "invalid value {v:?} for {:?}; possible values: {}",
                         f.name,
                         values.join(", ")
-                    ));
+                    )));
                 }
             }
+            args.check_rules(f)?;
         }
         Ok(args)
     }
 
+    /// Arguments that the caller checked against the fields and their rules itself, as the CLI
+    /// does with its parser, which it builds from the same fields.
+    pub fn checked(map: Map<String, Value>) -> Self {
+        Args { map }
+    }
+
+    /// The range, conflicts and requires rules of `f`, when it is given.
+    fn check_rules(&self, f: &Field) -> Result<()> {
+        if !self.given(f.name) {
+            return Ok(());
+        }
+        if let Some((min, max)) = f.range {
+            let value = self
+                .one(f.name)
+                .and_then(scalar)
+                .and_then(|s| s.parse().ok());
+            if let Some(value) = value.filter(|v| !(min..=max).contains(v)) {
+                return Err(Fault::OutOfRange {
+                    name: f.name,
+                    value,
+                    min,
+                    max,
+                }
+                .into());
+            }
+        }
+        if let Some(other) = f.conflicts.filter(|o| self.given(o)) {
+            return Err(Fault::Conflict(f.name, other).into());
+        }
+        if let Some(other) = f.requires.filter(|o| !self.given(o)) {
+            return Err(Fault::Needs(f.name, other).into());
+        }
+        Ok(())
+    }
+
     /// An argument that is not null.
-    pub fn get(&self, name: &str) -> Option<&Value> {
+    fn get(&self, name: &str) -> Option<&Value> {
         self.map.get(name).filter(|v| !v.is_null())
     }
 
-    /// The scalar values of an argument: each item of an array, or the one value.
-    pub fn strings(&self, name: &str) -> Vec<String> {
-        match self.get(name) {
-            Some(Value::Array(items)) => items.iter().filter_map(scalar).collect(),
-            Some(v) => scalar(v).into_iter().collect(),
-            None => vec![],
+    /// An argument that is there and not a switch that is off.
+    fn given(&self, name: &str) -> bool {
+        !matches!(self.get(name), None | Some(Value::Bool(false)))
+    }
+
+    /// A single-value argument: the value, or the item of an array of one.
+    fn one(&self, name: &str) -> Option<&Value> {
+        match self.get(name)? {
+            Value::Array(items) if items.len() == 1 => Some(&items[0]),
+            v => Some(v),
         }
     }
 
-    /// A single-value argument: a scalar, or an array of one scalar.
-    pub fn text(&self, name: &str) -> Result<Option<String>, String> {
-        let one = match self.get(name) {
-            None => return Ok(None),
-            Some(Value::Array(items)) if items.len() == 1 => &items[0],
-            Some(v) => v,
+    /// The scalar values of an argument: each item of an array, or the one value.
+    fn strings(&self, name: &str) -> impl Iterator<Item = String> + '_ {
+        let items = match self.get(name) {
+            Some(Value::Array(items)) => items.as_slice(),
+            Some(v) => std::slice::from_ref(v),
+            None => &[],
         };
-        scalar(one)
-            .map(Some)
-            .ok_or_else(|| format!("argument {name:?} must be a string"))
+        items.iter().filter_map(scalar)
+    }
+}
+
+/// Reads a request from its arguments. Each read declares one field and gives its value;
+/// without arguments it only collects the fields. A value of the wrong type is the first error.
+pub struct Reader<'a> {
+    args: Option<&'a Args>,
+    fields: Vec<Field>,
+    error: Option<Error>,
+}
+
+impl Reader<'_> {
+    /// Declares `f` and returns its name.
+    fn declare(&mut self, f: Field) -> &'static str {
+        let name = f.name;
+        self.fields.push(f);
+        name
     }
 
-    /// A required single-value argument; `Args::new` checked it is there.
-    pub fn required(&self, name: &str) -> Result<String, String> {
-        Ok(self.text(name)?.unwrap_or_default())
+    fn fail(&mut self, message: String) {
+        self.error.get_or_insert_with(|| usage(message));
     }
 
-    /// A positional argument of several words: a string, or an array of words.
-    pub fn words(&self, name: &str) -> String {
-        self.strings(name).join(" ")
+    /// A switch.
+    pub fn flag(&mut self, f: Field) -> bool {
+        let name = self.declare(f);
+        self.args.and_then(|a| a.get(name)).and_then(Value::as_bool) == Some(true)
     }
 
-    pub fn flag(&self, name: &str) -> bool {
-        self.get(name).and_then(Value::as_bool) == Some(true)
+    /// A single-value text.
+    pub fn text(&mut self, f: Field) -> Option<String> {
+        let name = self.declare(f);
+        let one = self.args.and_then(|a| a.one(name)).cloned()?;
+        let text = scalar(&one);
+        if text.is_none() {
+            self.fail(format!("argument {name:?} must be a string"));
+        }
+        text
     }
 
-    /// An integer argument: a number, or a string of one.
-    pub fn int<T: std::str::FromStr>(&self, name: &str) -> Result<Option<T>, String> {
-        self.text(name)?
-            .map(|s| {
-                s.parse()
-                    .map_err(|_| format!("argument {name:?} must be an integer, not {s:?}"))
-            })
-            .transpose()
+    /// A required single-value text; `Args::new` checked it is there.
+    pub fn string(&mut self, f: Field) -> String {
+        self.text(f).unwrap_or_default()
     }
 
-    /// A `YYYY-MM-DD` argument.
-    pub fn day(&self, name: &str) -> Result<Option<NaiveDate>, String> {
-        self.text(name)?
-            .map(|s| crate::parse_day(&s).map_err(|e| format!("argument {name:?}: {e}")))
-            .transpose()
+    /// Every value of a repeatable field.
+    pub fn list(&mut self, f: Field) -> Vec<String> {
+        let name = self.declare(f);
+        self.args
+            .map(|a| a.strings(name).collect())
+            .unwrap_or_default()
     }
 
-    pub fn path(&self, name: &str) -> Result<Option<PathBuf>, String> {
-        Ok(self.text(name)?.map(PathBuf::from))
+    /// The words of a positional, joined with spaces: a string, or an array of words.
+    pub fn words(&mut self, f: Field) -> String {
+        self.list(f).join(" ")
+    }
+
+    /// A value parsed from its text; the parse error follows the argument name.
+    fn parsed<T>(
+        &mut self,
+        f: Field,
+        parse: impl FnOnce(&str) -> std::result::Result<T, String>,
+    ) -> Option<T> {
+        let name = f.name;
+        let text = self.text(f)?;
+        match parse(&text) {
+            Ok(v) => Some(v),
+            Err(e) => {
+                self.fail(format!("argument {name:?}{e}"));
+                None
+            }
+        }
+    }
+
+    /// An integer: a number, or a string of one.
+    pub fn int<T: std::str::FromStr>(&mut self, f: Field) -> Option<T> {
+        self.parsed(f, |s| {
+            s.parse()
+                .map_err(|_| format!(" must be an integer, not {s:?}"))
+        })
+    }
+
+    /// A `YYYY-MM-DD` day.
+    pub fn day(&mut self, f: Field) -> Option<NaiveDate> {
+        self.parsed(f, |s| crate::parse_day(s).map_err(|e| format!(": {e}")))
+    }
+
+    pub fn path(&mut self, f: Field) -> Option<PathBuf> {
+        self.text(f).map(PathBuf::from)
     }
 
     /// A value of a fixed list, as its typed value. `Args::new` checked the name.
-    pub fn named<T>(&self, name: &str, from: fn(&str) -> Option<T>) -> Result<Option<T>, String> {
-        Ok(self.text(name)?.and_then(|s| from(&s)))
+    pub fn named<T>(&mut self, f: Field, from: fn(&str) -> Option<T>) -> Option<T> {
+        self.text(f).and_then(|s| from(&s))
     }
 
     /// The values of a repeatable field with a fixed list, as their typed values.
-    pub fn all_named<T>(&self, name: &str, from: fn(&str) -> Option<T>) -> Vec<T> {
-        self.strings(name).iter().filter_map(|s| from(s)).collect()
+    pub fn all_named<T>(&mut self, f: Field, from: fn(&str) -> Option<T>) -> Vec<T> {
+        self.list(f).iter().filter_map(|s| from(s)).collect()
     }
 }
 
 /// The arguments of one operation.
 pub trait Request: Sized {
+    /// The request from `r`, with the defaults for the arguments left out. Each read declares
+    /// one field, in the order the CLI lists them.
+    fn read(r: &mut Reader) -> Self;
+
     /// The fields, in the order the CLI lists them.
-    fn fields() -> Vec<Field>;
-    /// The request from checked arguments, with the defaults for the arguments left out. The
-    /// error is the text of an argument of the wrong type.
-    fn from_args(args: &Args) -> Result<Self, String>;
+    fn fields() -> Vec<Field> {
+        let mut r = Reader {
+            args: None,
+            fields: vec![],
+            error: None,
+        };
+        Self::read(&mut r);
+        r.fields
+    }
+
+    /// The request from arguments checked with `Args::new`. The error is a usage error for an
+    /// argument of the wrong type.
+    fn from_args(args: &Args) -> Result<Self> {
+        let mut r = Reader {
+            args: Some(args),
+            fields: vec![],
+            error: None,
+        };
+        let req = Self::read(&mut r);
+        r.error.map_or(Ok(req), Err)
+    }
 }
 
 /// An operation with no arguments.
 impl Request for () {
-    fn fields() -> Vec<Field> {
-        vec![]
-    }
-    fn from_args(_: &Args) -> Result<Self, String> {
-        Ok(())
-    }
-}
-
-/// A number of days from 0 to `MAX_DAYS`.
-pub(crate) fn check_days(days: i64) -> Result<i64> {
-    if !(0..=MAX_DAYS).contains(&days) {
-        return Err(Fault::OutOfRange {
-            name: "days",
-            value: days,
-            min: 0,
-            max: MAX_DAYS,
-        }
-        .into());
-    }
-    Ok(days)
+    fn read(_: &mut Reader) -> Self {}
 }
 
 #[derive(Debug, Clone, Default)]
@@ -289,21 +387,18 @@ pub struct NewRequest {
 }
 
 impl Request for NewRequest {
-    fn fields() -> Vec<Field> {
-        vec![
-            Field::positional("name", Type::Text, "Display name, for example \"Thea\"").required(),
-            Field::new(
+    fn read(r: &mut Reader) -> Self {
+        Self {
+            name: r.string(
+                Field::positional("name", Type::Text, "Display name, for example \"Thea\"")
+                    .required(),
+            ),
+            slug: r.text(Field::new(
                 "slug",
                 Type::Text,
                 "Slug override (default: slug of the name)",
-            ),
-        ]
-    }
-    fn from_args(a: &Args) -> Result<Self, String> {
-        Ok(Self {
-            name: a.required("name")?,
-            slug: a.text("slug")?,
-        })
+            )),
+        }
     }
 }
 
@@ -317,27 +412,25 @@ pub struct WriteRequest {
 }
 
 impl Request for WriteRequest {
-    fn fields() -> Vec<Field> {
-        vec![
-            Field::positional(
-                "path",
-                Type::Text,
-                "Identity-relative path under soul/, life/ or work/, ending in .md",
-            )
-            .required(),
-            Field::new(
-                "content",
-                Type::Text,
-                "The file text; read from stdin when left out",
-            )
-            .hyphen(),
-        ]
-    }
-    fn from_args(a: &Args) -> Result<Self, String> {
-        Ok(Self {
-            path: a.required("path")?,
-            content: a.text("content")?,
-        })
+    fn read(r: &mut Reader) -> Self {
+        Self {
+            path: r.string(
+                Field::positional(
+                    "path",
+                    Type::Text,
+                    "Identity-relative path under soul/, life/ or work/, ending in .md",
+                )
+                .required(),
+            ),
+            content: r.text(
+                Field::new(
+                    "content",
+                    Type::Text,
+                    "The file text; the caller's input when left out",
+                )
+                .hyphen(),
+            ),
+        }
     }
 }
 
@@ -354,43 +447,46 @@ pub struct AddRequest {
 }
 
 impl Request for AddRequest {
-    fn fields() -> Vec<Field> {
-        vec![
-            Field::positional(
-                "kind",
-                Type::Choice(crate::entry_types().collect()),
-                "Entry type",
-            )
-            .required()
-            .value_name("TYPE"),
-            Field::words("title", "Title (a log without one is titled by its date)"),
-            Field::new(
+    fn read(r: &mut Reader) -> Self {
+        Self {
+            kind: r
+                .named(
+                    Field::positional(
+                        "kind",
+                        Type::Choice(crate::entry_types().collect()),
+                        "Entry type",
+                    )
+                    .required()
+                    .value_name("TYPE"),
+                    Kind::from_type,
+                )
+                // `Args::new` checked it is there; only the read that lists the fields lacks it.
+                .unwrap_or(Kind::Log),
+            title: r.words(Field::words(
+                "title",
+                "Title (a log without one is titled by its date)",
+            )),
+            date: r.day(Field::new(
                 "date",
                 Type::Day,
                 "Date for dated entries (default: today, local time)",
+            )),
+            parent: r.text(Field::new(
+                "parent",
+                Type::Text,
+                "Parent location for location-detail",
+            )),
+            aliases: r.list(
+                Field::new("alias", Type::Text, "Alias (repeatable)")
+                    .many()
+                    .value_name("ALIASES"),
             ),
-            Field::new("parent", Type::Text, "Parent location for location-detail"),
-            Field::new("alias", Type::Text, "Alias (repeatable)")
-                .many()
-                .value_name("ALIASES"),
-            Field::new(
+            kb: r.text(Field::new(
                 "kb",
                 Type::Text,
                 "KB path for a project, relative to the identity folder",
-            ),
-        ]
-    }
-    fn from_args(a: &Args) -> Result<Self, String> {
-        Ok(Self {
-            kind: a
-                .named("kind", Kind::from_type)?
-                .ok_or("missing argument \"kind\"")?,
-            title: a.words("title"),
-            date: a.day("date")?,
-            parent: a.text("parent")?,
-            aliases: a.strings("alias"),
-            kb: a.text("kb")?,
-        })
+            )),
+        }
     }
 }
 
@@ -401,16 +497,10 @@ pub struct StampRequest {
 }
 
 impl Request for StampRequest {
-    fn fields() -> Vec<Field> {
-        vec![Field::switch(
-            "check",
-            "Report drift and exit 1 instead of writing",
-        )]
-    }
-    fn from_args(a: &Args) -> Result<Self, String> {
-        Ok(Self {
-            check: a.flag("check"),
-        })
+    fn read(r: &mut Reader) -> Self {
+        Self {
+            check: r.flag(Field::switch("check", "Report drift instead of writing")),
+        }
     }
 }
 
@@ -423,26 +513,23 @@ pub struct LintRequest {
 }
 
 impl Request for LintRequest {
-    fn fields() -> Vec<Field> {
-        vec![
-            Field::new(
-                "rule",
-                Type::Choice(Rule::all().map(Rule::name).collect()),
-                "Run only these rules (repeatable)",
-            )
-            .many()
-            .value_name("RULES"),
-            Field::switch(
+    fn read(r: &mut Reader) -> Self {
+        Self {
+            rules: r.all_named(
+                Field::new(
+                    "rule",
+                    Type::Choice(Rule::all().map(Rule::name).collect()),
+                    "Run only these rules (repeatable)",
+                )
+                .many()
+                .value_name("RULES"),
+                Rule::from_name,
+            ),
+            changed: r.flag(Field::switch(
                 "changed",
                 "Report only files changed since the last commit or stamp",
-            ),
-        ]
-    }
-    fn from_args(a: &Args) -> Result<Self, String> {
-        Ok(Self {
-            rules: a.all_named("rule", Rule::from_name),
-            changed: a.flag("changed"),
-        })
+            )),
+        }
     }
 }
 
@@ -453,16 +540,13 @@ pub struct IndexRequest {
 }
 
 impl Request for IndexRequest {
-    fn fields() -> Vec<Field> {
-        vec![Field::switch(
-            "check",
-            "Report stale generated files and exit 1 instead of writing",
-        )]
-    }
-    fn from_args(a: &Args) -> Result<Self, String> {
-        Ok(Self {
-            check: a.flag("check"),
-        })
+    fn read(r: &mut Reader) -> Self {
+        Self {
+            check: r.flag(Field::switch(
+                "check",
+                "Report stale generated files instead of writing",
+            )),
+        }
     }
 }
 
@@ -472,13 +556,10 @@ pub struct SlugRequest {
 }
 
 impl Request for SlugRequest {
-    fn fields() -> Vec<Field> {
-        vec![Field::words("text", "Text to turn into a slug")]
-    }
-    fn from_args(a: &Args) -> Result<Self, String> {
-        Ok(Self {
-            text: a.words("text"),
-        })
+    fn read(r: &mut Reader) -> Self {
+        Self {
+            text: r.words(Field::words("text", "Text to turn into a slug")),
+        }
     }
 }
 
@@ -488,18 +569,13 @@ pub struct TemplateRequest {
 }
 
 impl Request for TemplateRequest {
-    fn fields() -> Vec<Field> {
-        vec![Field::positional(
-            "name",
-            Type::Text,
-            "Template name from `owo templates list`",
-        )
-        .required()]
-    }
-    fn from_args(a: &Args) -> Result<Self, String> {
-        Ok(Self {
-            name: a.required("name")?,
-        })
+    fn read(r: &mut Reader) -> Self {
+        Self {
+            name: r.string(
+                Field::positional("name", Type::Text, "Template name, as `templates` lists it")
+                    .required(),
+            ),
+        }
     }
 }
 
@@ -511,22 +587,19 @@ pub struct ResolveRequest {
 }
 
 impl Request for ResolveRequest {
-    fn fields() -> Vec<Field> {
-        vec![
-            Field::words("name", "Entry name, alias, path or [[link]]"),
-            Field::new(
-                "type",
-                Type::Choice(Kind::names().collect()),
-                "Limit to one entry type",
-            )
-            .value_name("KIND"),
-        ]
-    }
-    fn from_args(a: &Args) -> Result<Self, String> {
-        Ok(Self {
-            name: a.words("name"),
-            kind: a.named("type", Kind::from_name)?,
-        })
+    fn read(r: &mut Reader) -> Self {
+        Self {
+            name: r.words(Field::words("name", "Entry name, alias, path or [[link]]")),
+            kind: r.named(
+                Field::new(
+                    "type",
+                    Type::Choice(Kind::names().collect()),
+                    "Limit to one entry type",
+                )
+                .value_name("KIND"),
+                Kind::from_name,
+            ),
+        }
     }
 }
 
@@ -538,24 +611,18 @@ pub struct ShowRequest {
 }
 
 impl Request for ShowRequest {
-    fn fields() -> Vec<Field> {
-        vec![
-            Field::words(
+    fn read(r: &mut Reader) -> Self {
+        Self {
+            name: r.words(Field::words(
                 "name",
                 "Entry name, alias, path, [[link]] or kb:<project>:<path>",
-            ),
-            Field::new(
+            )),
+            section: r.text(Field::new(
                 "section",
                 Type::Text,
                 "Print only this section (a heading at any level)",
-            ),
-        ]
-    }
-    fn from_args(a: &Args) -> Result<Self, String> {
-        Ok(Self {
-            name: a.words("name"),
-            section: a.text("section")?,
-        })
+            )),
+        }
     }
 }
 
@@ -571,24 +638,16 @@ pub struct LinksRequest {
 }
 
 impl Request for LinksRequest {
-    fn fields() -> Vec<Field> {
-        vec![
-            Field::words(
+    fn read(r: &mut Reader) -> Self {
+        Self {
+            name: r.words(Field::words(
                 "name",
-                "Entry name, alias, path or [[link]] (not needed with --orphans)",
-            ),
-            Field::switch("in", "Only links pointing at the entry"),
-            Field::switch("out", "Only links going out of the entry"),
-            Field::switch("orphans", "List entries nothing links to"),
-        ]
-    }
-    fn from_args(a: &Args) -> Result<Self, String> {
-        Ok(Self {
-            name: a.words("name"),
-            inbound: a.flag("in"),
-            outbound: a.flag("out"),
-            orphans: a.flag("orphans"),
-        })
+                "Entry name, alias, path or [[link]] (not needed with orphans)",
+            )),
+            inbound: r.flag(Field::switch("in", "Only links pointing at the entry")),
+            outbound: r.flag(Field::switch("out", "Only links going out of the entry")),
+            orphans: r.flag(Field::switch("orphans", "List entries nothing links to")),
+        }
     }
 }
 
@@ -618,30 +677,31 @@ impl Default for ContextRequest {
 }
 
 impl Request for ContextRequest {
-    fn fields() -> Vec<Field> {
-        vec![
-            Field::switch("voice", "Add soul/VOICE.md"),
-            Field::switch("look", "Add soul/LOOK.md"),
-            Field::new("with", Type::Text, "Add a resolvable entry (repeatable)").many(),
-            Field::new("notes", Type::Int, "Recent project notes to include")
-                .default(Self::default().notes),
-            Field::new(
-                "format",
-                Type::Choice(vec!["paths", "text"]),
-                "text: file contents concatenated; paths: the list",
-            )
-            .default("text"),
-        ]
-    }
-    fn from_args(a: &Args) -> Result<Self, String> {
+    fn read(r: &mut Reader) -> Self {
         let d = Self::default();
-        Ok(Self {
-            voice: a.flag("voice"),
-            look: a.flag("look"),
-            with: a.strings("with"),
-            notes: a.int("notes")?.unwrap_or(d.notes),
-            paths: a.text("format")?.as_deref() == Some("paths"),
-        })
+        Self {
+            voice: r.flag(Field::switch("voice", "Add soul/VOICE.md")),
+            look: r.flag(Field::switch("look", "Add soul/LOOK.md")),
+            with: r
+                .list(Field::new("with", Type::Text, "Add a resolvable entry (repeatable)").many()),
+            notes: r
+                .int(
+                    Field::new("notes", Type::Int, "Recent project notes to include")
+                        .default(d.notes),
+                )
+                .unwrap_or(d.notes),
+            paths: r
+                .text(
+                    Field::new(
+                        "format",
+                        Type::Choice(vec!["paths", "text"]),
+                        "text: file contents concatenated; paths: the list",
+                    )
+                    .default("text"),
+                )
+                .as_deref()
+                == Some("paths"),
+        }
     }
 }
 
@@ -659,15 +719,17 @@ impl Default for StateRequest {
 }
 
 impl Request for StateRequest {
-    fn fields() -> Vec<Field> {
-        vec![Field::new("days", Type::Int, "Window for recent events")
-            .default(Self::default().days)
-            .range(0, MAX_DAYS)]
-    }
-    fn from_args(a: &Args) -> Result<Self, String> {
-        Ok(Self {
-            days: a.int("days")?.unwrap_or(Self::default().days),
-        })
+    fn read(r: &mut Reader) -> Self {
+        let d = Self::default();
+        Self {
+            days: r
+                .int(
+                    Field::new("days", Type::Int, "Window for recent events")
+                        .default(d.days)
+                        .range(0, MAX_DAYS),
+                )
+                .unwrap_or(d.days),
+        }
     }
 }
 
@@ -701,38 +763,38 @@ impl Default for SearchRequest {
 }
 
 impl Request for SearchRequest {
-    fn fields() -> Vec<Field> {
-        vec![
-            Field::words("query", "Search words"),
-            Field::new(
-                "scope",
-                Type::Choice(Scope::ALL.map(Scope::name).to_vec()),
-                "Limit to soul, life or work",
+    fn read(r: &mut Reader) -> Self {
+        let d = Self::default();
+        Self {
+            query: r.words(Field::words("query", "Search words")),
+            scope: r.named(
+                Field::new(
+                    "scope",
+                    Type::Choice(Scope::ALL.map(Scope::name).to_vec()),
+                    "Limit to soul, life or work",
+                ),
+                Scope::from_name,
             ),
-            Field::new(
-                "type",
-                Type::Choice(Kind::names().collect()),
-                "Limit to entry types (repeatable)",
-            )
-            .many()
-            .value_name("TYPES"),
-            Field::new(
+            types: r.all_named(
+                Field::new(
+                    "type",
+                    Type::Choice(Kind::names().collect()),
+                    "Limit to entry types (repeatable)",
+                )
+                .many()
+                .value_name("TYPES"),
+                Kind::from_name,
+            ),
+            project: None,
+            since: r.day(Field::new(
                 "since",
                 Type::Day,
                 "Only entries dated (or updated) on or after YYYY-MM-DD",
-            ),
-            Field::new("limit", Type::Int, "Most hits to print").default(Self::default().limit),
-        ]
-    }
-    fn from_args(a: &Args) -> Result<Self, String> {
-        Ok(Self {
-            query: a.words("query"),
-            scope: a.named("scope", Scope::from_name)?,
-            types: a.all_named("type", Kind::from_name),
-            project: None,
-            since: a.day("since")?,
-            limit: a.int("limit")?.unwrap_or(Self::default().limit),
-        })
+            )),
+            limit: r
+                .int(Field::new("limit", Type::Int, "Most hits to print").default(d.limit))
+                .unwrap_or(d.limit),
+        }
     }
 }
 
@@ -743,17 +805,14 @@ pub struct ReviewDoneRequest {
 }
 
 impl Request for ReviewDoneRequest {
-    fn fields() -> Vec<Field> {
-        vec![Field::new(
-            "through",
-            Type::Day,
-            "Last story day covered (default: newest log, event or journal date)",
-        )]
-    }
-    fn from_args(a: &Args) -> Result<Self, String> {
-        Ok(Self {
-            through: a.day("through")?,
-        })
+    fn read(r: &mut Reader) -> Self {
+        Self {
+            through: r.day(Field::new(
+                "through",
+                Type::Day,
+                "Last story day covered (default: newest log, event or journal date)",
+            )),
+        }
     }
 }
 
@@ -767,24 +826,22 @@ pub struct SoulNoteRequest {
 }
 
 impl Request for SoulNoteRequest {
-    fn fields() -> Vec<Field> {
-        vec![
-            Field::positional("file", Type::Text, "Soul file, for example SOUL.md").required(),
-            Field::new("change", Type::Text, "What changed, in one line").required(),
-            Field::new(
-                "evidence",
-                Type::Text,
-                "Evidence entry name or [[link]] (repeatable)",
-            )
-            .many(),
-        ]
-    }
-    fn from_args(a: &Args) -> Result<Self, String> {
-        Ok(Self {
-            file: a.required("file")?,
-            change: a.required("change")?,
-            evidence: a.strings("evidence"),
-        })
+    fn read(r: &mut Reader) -> Self {
+        Self {
+            file: r.string(
+                Field::positional("file", Type::Text, "Soul file, for example SOUL.md").required(),
+            ),
+            change: r
+                .string(Field::new("change", Type::Text, "What changed, in one line").required()),
+            evidence: r.list(
+                Field::new(
+                    "evidence",
+                    Type::Text,
+                    "Evidence entry name or [[link]] (repeatable)",
+                )
+                .many(),
+            ),
+        }
     }
 }
 
@@ -795,46 +852,40 @@ pub struct SoulHistoryRequest {
 }
 
 impl Request for SoulHistoryRequest {
-    fn fields() -> Vec<Field> {
-        vec![Field::positional(
-            "file",
-            Type::Text,
-            "Soul file, for example SOUL.md (default: every file)",
-        )]
-    }
-    fn from_args(a: &Args) -> Result<Self, String> {
-        Ok(Self {
-            file: a.text("file")?,
-        })
+    fn read(r: &mut Reader) -> Self {
+        Self {
+            file: r.text(Field::positional(
+                "file",
+                Type::Text,
+                "Soul file, for example SOUL.md (default: every file)",
+            )),
+        }
     }
 }
 
 /// Which changes `changes` lists: all by default.
 #[derive(Debug, Clone, Default)]
 pub struct ChangesRequest {
-    /// A day, or what `git log --since` takes.
+    /// A day, or what `git log --since` takes. It wins over `days`, which its field rules
+    /// forbid with it.
     pub since: Option<String>,
-    /// Only the last N days, from 0 to `MAX_DAYS`; not with `since`.
+    /// Only the last N days, from 0 to `MAX_DAYS`.
     pub days: Option<i64>,
 }
 
 impl Request for ChangesRequest {
-    fn fields() -> Vec<Field> {
-        vec![
-            Field::new(
-                "since",
-                Type::Text,
-                "YYYY-MM-DD or anything `git log --since` accepts",
-            )
-            .conflicts("days"),
-            Field::new("days", Type::Int, "Only the last N days").range(0, MAX_DAYS),
-        ]
-    }
-    fn from_args(a: &Args) -> Result<Self, String> {
-        Ok(Self {
-            since: a.text("since")?,
-            days: a.int("days")?,
-        })
+    fn read(r: &mut Reader) -> Self {
+        Self {
+            since: r.text(
+                Field::new(
+                    "since",
+                    Type::Text,
+                    "YYYY-MM-DD or anything `git log --since` accepts",
+                )
+                .conflicts("days"),
+            ),
+            days: r.int(Field::new("days", Type::Int, "Only the last N days").range(0, MAX_DAYS)),
+        }
     }
 }
 
@@ -849,7 +900,7 @@ pub struct CardRequest {
     pub scenario: Option<String>,
     /// Writes the card to this file when set.
     pub out: Option<PathBuf>,
-    /// Embeds the card in this PNG avatar; needs `out`.
+    /// Embeds the card in this PNG avatar; only with `out`, as its field rules say.
     pub png: Option<PathBuf>,
 }
 
@@ -867,38 +918,44 @@ impl Default for CardRequest {
 }
 
 impl Request for CardRequest {
-    fn fields() -> Vec<Field> {
-        vec![
+    fn read(r: &mut Reader) -> Self {
+        let d = Self::default();
+        let png = r.path(
             Field::new(
                 "png",
                 Type::Path,
-                "Embed the card in this PNG avatar (needs --out)",
+                "Embed the card in this PNG avatar (needs out)",
             )
             .requires("out"),
-            Field::new(
-                "scenario",
-                Type::Text,
-                "Event or location whose summary becomes the scenario",
-            ),
-            Field::new(
-                "spec",
-                Type::Choice(Spec::ALL.map(Spec::name).to_vec()),
-                "Card spec version",
+        );
+        let scenario = r.text(Field::new(
+            "scenario",
+            Type::Text,
+            "Event or location whose summary becomes the scenario",
+        ));
+        let spec = r
+            .named(
+                Field::new(
+                    "spec",
+                    Type::Choice(Spec::ALL.map(Spec::name).to_vec()),
+                    "Card spec version",
+                )
+                .default(d.spec.name()),
+                Spec::from_name,
             )
-            .default(Self::default().spec.name()),
-            Field::new("out", Type::Path, "Write to a file instead of stdout"),
-        ]
-    }
-    fn from_args(a: &Args) -> Result<Self, String> {
-        Ok(Self {
-            spec: a
-                .named("spec", Spec::from_name)?
-                .unwrap_or(Self::default().spec),
+            .unwrap_or(d.spec);
+        let out = r.path(Field::new(
+            "out",
+            Type::Path,
+            "Write to a file instead of stdout",
+        ));
+        Self {
+            spec,
             project: None,
-            scenario: a.text("scenario")?,
-            out: a.path("out")?,
-            png: a.path("png")?,
-        })
+            scenario,
+            out,
+            png,
+        }
     }
 }
 
@@ -910,13 +967,12 @@ pub struct SkillRequest {
 }
 
 impl Request for SkillRequest {
-    fn fields() -> Vec<Field> {
-        vec![Field::new("out", Type::Path, "Folder to write SKILL.md into").required()]
-    }
-    fn from_args(a: &Args) -> Result<Self, String> {
-        Ok(Self {
-            out: a.required("out")?.into(),
-        })
+    fn read(r: &mut Reader) -> Self {
+        Self {
+            out: r
+                .string(Field::new("out", Type::Path, "Folder to write SKILL.md into").required())
+                .into(),
+        }
     }
 }
 
@@ -927,13 +983,12 @@ pub struct SoulspecRequest {
 }
 
 impl Request for SoulspecRequest {
-    fn fields() -> Vec<Field> {
-        vec![Field::new("out", Type::Path, "Package folder to write").required()]
-    }
-    fn from_args(a: &Args) -> Result<Self, String> {
-        Ok(Self {
-            out: a.required("out")?.into(),
-        })
+    fn read(r: &mut Reader) -> Self {
+        Self {
+            out: r
+                .string(Field::new("out", Type::Path, "Package folder to write").required())
+                .into(),
+        }
     }
 }
 
@@ -957,17 +1012,14 @@ impl Default for SyncOptions {
 }
 
 impl Request for SyncOptions {
-    fn fields() -> Vec<Field> {
-        vec![
-            Field::switch("now", "Take any new turns now (session end)"),
-            Field::new("every", Type::Int, "New user turns per run").default(Self::default().every),
-        ]
-    }
-    fn from_args(a: &Args) -> Result<Self, String> {
-        Ok(Self {
-            now: a.flag("now"),
-            every: a.int("every")?.unwrap_or(Self::default().every),
-        })
+    fn read(r: &mut Reader) -> Self {
+        let d = Self::default();
+        Self {
+            now: r.flag(Field::switch("now", "Take any new turns now (session end)")),
+            every: r
+                .int(Field::new("every", Type::Int, "New user turns per run").default(d.every))
+                .unwrap_or(d.every),
+        }
     }
 }
 
@@ -989,34 +1041,32 @@ pub struct SyncStartRequest {
 }
 
 impl Request for SyncStartRequest {
-    fn fields() -> Vec<Field> {
-        let mut fields = vec![
-            session_field(SESSION_HELP),
-            Field::new(
-                "transcript",
-                Type::Path,
-                "Transcript file the host keeps for this session",
-            )
-            .required(),
-            Field::new(
-                "format",
-                Type::Choice(SyncFormat::ALL.map(SyncFormat::name).to_vec()),
-                "Transcript format; jsonl lines are {\"role\": ..., \"text\": ...} with an optional turn \"id\"",
-            )
-            .default(SyncFormat::default().name()),
-        ];
-        fields.extend(SyncOptions::fields());
-        fields
-    }
-    fn from_args(a: &Args) -> Result<Self, String> {
-        Ok(Self {
-            session: a.required("session")?,
-            transcript: a.required("transcript")?.into(),
-            format: a
-                .named("format", SyncFormat::from_name)?
+    fn read(r: &mut Reader) -> Self {
+        Self {
+            session: r.string(session_field(SESSION_HELP)),
+            transcript: r
+                .string(
+                    Field::new(
+                        "transcript",
+                        Type::Path,
+                        "Transcript file the host keeps for this session",
+                    )
+                    .required(),
+                )
+                .into(),
+            format: r
+                .named(
+                    Field::new(
+                        "format",
+                        Type::Choice(SyncFormat::ALL.map(SyncFormat::name).to_vec()),
+                        "Transcript format; jsonl lines are {\"role\": ..., \"text\": ...} with an optional turn \"id\"",
+                    )
+                    .default(SyncFormat::default().name()),
+                    SyncFormat::from_name,
+                )
                 .unwrap_or_default(),
-            options: SyncOptions::from_args(a)?,
-        })
+            options: SyncOptions::read(r),
+        }
     }
 }
 
@@ -1030,25 +1080,19 @@ pub struct SyncPushRequest {
 }
 
 impl Request for SyncPushRequest {
-    fn fields() -> Vec<Field> {
-        let mut fields = vec![
-            session_field(SESSION_HELP),
-            Field::new(
-                "turns",
-                Type::Json,
-                "JSON array of {\"id\", \"role\", \"text\"}; id is the turn id, the host's id for that message, and a stored turn id is skipped (default: stdin)",
-            )
-            .hyphen(),
-        ];
-        fields.extend(SyncOptions::fields());
-        fields
-    }
-    fn from_args(a: &Args) -> Result<Self, String> {
-        Ok(Self {
-            session: a.required("session")?,
-            turns: a.text("turns")?,
-            options: SyncOptions::from_args(a)?,
-        })
+    fn read(r: &mut Reader) -> Self {
+        Self {
+            session: r.string(session_field(SESSION_HELP)),
+            turns: r.text(
+                Field::new(
+                    "turns",
+                    Type::Json,
+                    "JSON array of {\"id\", \"role\", \"text\"}; id is the turn id, the host's id for that message, and a stored turn id is skipped (default: the caller's input)",
+                )
+                .hyphen(),
+            ),
+            options: SyncOptions::read(r),
+        }
     }
 }
 
@@ -1060,22 +1104,20 @@ pub struct SyncDoneRequest {
 }
 
 impl Request for SyncDoneRequest {
-    fn fields() -> Vec<Field> {
-        vec![
-            session_field("Session id given to sync start or sync push"),
-            Field::new(
-                "until",
-                Type::Int,
-                "Message index the ingest run reached (the until from sync start)",
-            )
-            .required(),
-        ]
-    }
-    fn from_args(a: &Args) -> Result<Self, String> {
-        Ok(Self {
-            session: a.required("session")?,
-            until: a.int("until")?.unwrap_or_default(),
-        })
+    fn read(r: &mut Reader) -> Self {
+        Self {
+            session: r.string(session_field("Session id given to sync start or sync push")),
+            until: r
+                .int(
+                    Field::new(
+                        "until",
+                        Type::Int,
+                        "Message index the ingest run reached (the until from sync start)",
+                    )
+                    .required(),
+                )
+                .unwrap_or_default(),
+        }
     }
 }
 
@@ -1088,16 +1130,16 @@ pub struct MigrateRequest {
 }
 
 impl Request for MigrateRequest {
-    fn fields() -> Vec<Field> {
-        vec![
-            Field::positional("path", Type::Path, "The v1 identity folder").required(),
-            Field::new("out", Type::Path, "New identity folder, <root>/<slug>").required(),
-        ]
-    }
-    fn from_args(a: &Args) -> Result<Self, String> {
-        Ok(Self {
-            path: a.required("path")?.into(),
-            out: a.required("out")?.into(),
-        })
+    fn read(r: &mut Reader) -> Self {
+        Self {
+            path: r
+                .string(Field::positional("path", Type::Path, "The v1 identity folder").required())
+                .into(),
+            out: r
+                .string(
+                    Field::new("out", Type::Path, "New identity folder, <root>/<slug>").required(),
+                )
+                .into(),
+        }
     }
 }

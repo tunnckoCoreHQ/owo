@@ -30,7 +30,8 @@ pub struct Output {
     pub text: String,
     /// Warnings for stderr: config warnings, plus the envelope's text warnings without `--json`.
     pub warnings: Vec<String>,
-    /// The error for stderr without `--json`. A `clap::Error` is a usage error.
+    /// The error for stderr without `--json`. With the code `exit::USAGE` it is a usage error,
+    /// which `main` words as clap words its own.
     pub error: Option<anyhow::Error>,
     pub code: i32,
 }
@@ -40,18 +41,19 @@ impl Output {
     pub fn warning_lines(&self) -> String {
         self.warnings
             .iter()
-            .map(|w| format!("owo: warning: {w}\n"))
+            .map(|w| owo_core::warning_line(w))
             .collect()
     }
 
-    /// The stdout text and the stderr text. Stderr holds the warnings, then a usage error as
-    /// clap words it or the error line `owo: <error>`; stdout holds the JSON envelope when
-    /// `json` is set, else the text.
+    /// The usage error, when the command failed with one.
+    pub fn usage(&self) -> Option<&anyhow::Error> {
+        self.error.as_ref().filter(|_| self.code == exit::USAGE)
+    }
+
+    /// The stdout text and the stderr text. Stderr holds the warnings, then the error line
+    /// `owo: <error>`; stdout holds the JSON envelope when `json` is set, else the text.
     pub fn render(&self, json: bool) -> (String, String) {
         let mut stderr = self.warning_lines();
-        if let Some(usage) = self.error.as_ref().and_then(|e| e.downcast_ref()) {
-            return usage_text(usage, stderr);
-        }
         let stdout = if json {
             let text = serde_json::to_string_pretty(&self.envelope).expect("envelope serializes");
             format!("{text}\n")
@@ -65,39 +67,24 @@ impl Output {
     }
 }
 
-/// The stdout and stderr text of a clap error, as clap prints it: help and version on stdout,
-/// errors on stderr after `stderr`.
-fn usage_text(usage: &clap::Error, mut stderr: String) -> (String, String) {
-    let text = usage.render().to_string();
-    if usage.use_stderr() {
-        stderr.push_str(&text);
-        (String::new(), stderr)
-    } else {
-        (text, stderr)
-    }
-}
-
 impl From<anyhow::Error> for Output {
     /// A failed command: a fail envelope, and the exit code for the error kind. A library error
-    /// takes its text with the command to run next; a library usage error becomes a clap
-    /// error, so it is worded as clap words its own.
+    /// takes the CLI's words for its fault, with the command to run next.
     fn from(e: anyhow::Error) -> Self {
         let (e, code) = match e.downcast_ref::<owo_core::Error>() {
             Some(err) => {
-                let text = hinted(err);
-                match err.kind {
-                    ErrorKind::Usage => (
-                        crate::cli::command(&owo_core::operations())
-                            .error(clap::error::ErrorKind::MissingRequiredArgument, text)
-                            .into(),
-                        exit::USAGE,
-                    ),
-                    ErrorKind::Config => (anyhow::anyhow!(text), exit::CONFIG),
-                    ErrorKind::Io => (anyhow::anyhow!(text), exit::IO),
-                    ErrorKind::Failed => (anyhow::anyhow!(text), exit::PROBLEMS),
-                }
+                let code = match err.kind {
+                    ErrorKind::Usage => exit::USAGE,
+                    ErrorKind::Config => exit::CONFIG,
+                    ErrorKind::Io => exit::IO,
+                    ErrorKind::Failed => exit::PROBLEMS,
+                };
+                let text = match &err.fault {
+                    Some(fault) => says(fault),
+                    None => err.to_string(),
+                };
+                (anyhow::anyhow!(text), code)
             }
-            None if e.downcast_ref::<clap::Error>().is_some() => (e, exit::USAGE),
             None if e.downcast_ref::<std::io::Error>().is_some() => (e, exit::IO),
             None => (e, exit::PROBLEMS),
         };
@@ -112,14 +99,35 @@ impl From<anyhow::Error> for Output {
     }
 }
 
-/// The text of a library error with what to run next, worded with `owo` commands, such as
-/// "run `owo add project`". The core's text names no command.
-fn hinted(e: &owo_core::Error) -> String {
-    let Some(fault) = &e.fault else {
-        return e.to_string();
-    };
-    let hinted = match fault {
+/// The text of a fault in the CLI's words: fields as flags, and what to run next as `owo`
+/// commands, such as "run `owo add project`". A fault's own text starts with the field it is
+/// about, so `--{fault}` names the flag.
+fn says(fault: &Fault) -> String {
+    match fault {
+        Fault::NoRoot => format!("{fault}: pass --root or set OWO_ROOT"),
+        Fault::NoIdentity(_) => format!("{fault}: pass -i <slug> or set OWO_IDENTITY"),
         Fault::NeedsTitle(kind) => format!("`owo add {}` needs a title", kind.name()),
+        Fault::KindNeeds { kind, field } => {
+            let value = if *field == "parent" {
+                "location"
+            } else {
+                field
+            };
+            format!("{} needs --{field} <{value}>", kind.name())
+        }
+        Fault::TemplateLacks {
+            template,
+            line,
+            field,
+        } => format!("the {template} template has no `{line}` line for --{field}"),
+        Fault::NoText(_) => format!("{fault}; pass --content or pipe the full file on stdin"),
+        Fault::SinceNotDay(e) => format!("outside Git, --since takes a day: {e}"),
+        Fault::OnlyFor { .. }
+        | Fault::Empty(_)
+        | Fault::Field { .. }
+        | Fault::OutNoSlug
+        | Fault::BehindBookmark { .. }
+        | Fault::InjectNeedsIdentity => format!("--{fault}"),
         Fault::UnknownTemplate(_) => format!("{fault}; run `owo templates` for the list"),
         Fault::NoIdentityFolder(_) => {
             format!("{fault}; `owo list` shows the identities in this root")
@@ -133,14 +141,12 @@ fn hinted(e: &owo_core::Error) -> String {
         ),
         Fault::PushedSession(_) => format!("{fault}; use `owo sync push`"),
         Fault::TranscriptSession { .. } => format!("{fault}; use `owo sync start`"),
+        Fault::NoMessages { .. } => format!("{fault}; check --format"),
         Fault::NoBookmark(_) => format!("{fault}; run `owo sync start` first"),
         Fault::PastMessages { until, seen } => {
             format!("--until {until} is past the {seen} messages the last `sync start` read")
         }
         // Clap refuses these before the call, with its own text.
         Fault::OutOfRange { .. } | Fault::Conflict(..) | Fault::Needs(..) => fault.to_string(),
-        Fault::InjectNeedsIdentity => "--inject needs an identity in the root".into(),
-    };
-    // The text may carry a context before the fault; keep it.
-    e.to_string().replace(&fault.to_string(), &hinted)
+    }
 }

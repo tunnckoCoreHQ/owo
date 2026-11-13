@@ -1,9 +1,9 @@
 //! Root, identity and project resolution.
 //!
-//! Root order: `--root`, `OWO_ROOT`, `root` in the nearest `.owo.toml`, `root` in the
+//! Root order: the picked root (`Select`), `OWO_ROOT`, `root` in the nearest `.owo.toml`, `root` in the
 //! user config, then `$XDG_DATA_HOME/owo`. Identity and project follow the same chain.
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result};
 use serde::Deserialize;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -42,9 +42,8 @@ pub struct Resolved {
 /// Inputs to resolution, so tests can run without touching the real environment.
 #[derive(Debug, Default)]
 pub struct Inputs {
-    pub root_flag: Option<PathBuf>,
-    pub identity_flag: Option<String>,
-    pub project_flag: Option<String>,
+    /// The root, identity and project the caller picks.
+    pub select: crate::Select,
     pub env_root: Option<String>,
     pub env_identity: Option<String>,
     pub env_project: Option<String>,
@@ -58,9 +57,7 @@ impl Inputs {
     /// The picks from `select` and the environment values from `env`.
     pub fn new(select: &crate::Select, env: &crate::Env) -> Self {
         Self {
-            root_flag: select.root.clone(),
-            identity_flag: select.identity.clone(),
-            project_flag: select.project.clone(),
+            select: select.clone(),
             env_root: env.owo_root.clone(),
             env_identity: env.owo_identity.clone(),
             env_project: env.owo_project.clone(),
@@ -133,9 +130,9 @@ pub fn resolve(inputs: &Inputs) -> Result<Resolved> {
         None => None,
     };
 
-    let (root, root_source) = if let Some(flag) = &inputs.root_flag {
+    let (root, root_source) = if let Some(picked) = &inputs.select.root {
         (
-            inputs.expand(&flag.to_string_lossy(), &inputs.cwd),
+            inputs.expand(&picked.to_string_lossy(), &inputs.cwd),
             Source::Flag,
         )
     } else if let Some(value) = &inputs.env_root {
@@ -159,11 +156,11 @@ pub fn resolve(inputs: &Inputs) -> Result<Resolved> {
     } else if let Some(root) = inputs.default_root() {
         (root, Source::Default)
     } else {
-        bail!("cannot resolve a root: pass --root or set OWO_ROOT");
+        return Err(crate::Fault::NoRoot.into());
     };
 
-    let (identity, identity_source) = if let Some(flag) = &inputs.identity_flag {
-        (Some(flag.clone()), Some(Source::Flag))
+    let (identity, identity_source) = if let Some(picked) = &inputs.select.identity {
+        (Some(picked.clone()), Some(Source::Flag))
     } else if let Some(value) = &inputs.env_identity {
         (Some(value.clone()), Some(Source::Env))
     } else if let Some((path, value)) = project_cfg
@@ -184,7 +181,8 @@ pub fn resolve(inputs: &Inputs) -> Result<Resolved> {
     };
 
     let project = inputs
-        .project_flag
+        .select
+        .project
         .clone()
         .or_else(|| inputs.env_project.clone())
         .or_else(|| project_cfg.as_ref().and_then(|(_, c)| c.project.clone()));
@@ -235,12 +233,10 @@ impl std::error::Error for ConfigError {}
 
 /// The selected identity slug, checked to be a slug with a folder in the root.
 pub fn need_identity(r: &Resolved) -> Result<String> {
-    let slug = r.identity.clone().ok_or_else(|| {
-        ConfigError(format!(
-            "no identity selected in {}: pass -i <slug> or set OWO_IDENTITY",
-            r.root.display()
-        ))
-    })?;
+    let slug = r
+        .identity
+        .clone()
+        .ok_or_else(|| crate::Fault::NoIdentity(r.root.clone()))?;
     if !crate::slug::is_slug(&slug) {
         return Err(ConfigError(format!(
             "invalid identity {slug:?}: use lowercase letters, digits and single hyphens"
@@ -328,8 +324,8 @@ mod tests {
         assert_eq!(r.root, PathBuf::from("/env/root"));
         assert_eq!(r.identity.as_deref(), Some("env-id"));
 
-        i.root_flag = Some(PathBuf::from("/flag/root"));
-        i.identity_flag = Some("flag-id".into());
+        i.select.root = Some(PathBuf::from("/flag/root"));
+        i.select.identity = Some("flag-id".into());
         let r = resolve(&i).unwrap();
         assert_eq!(r.root, PathBuf::from("/flag/root"));
         assert_eq!(r.identity.as_deref(), Some("flag-id"));
@@ -341,7 +337,7 @@ mod tests {
         fs::create_dir_all(tmp.path().join("thea")).unwrap();
         fs::write(tmp.path().join("thea/identity.json"), "{}").unwrap();
         let mut i = inputs(tmp.path());
-        i.root_flag = Some(tmp.path().to_path_buf());
+        i.select.root = Some(tmp.path().to_path_buf());
         let r = resolve(&i).unwrap();
         assert_eq!(r.identity.as_deref(), Some("thea"));
     }

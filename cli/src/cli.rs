@@ -55,7 +55,7 @@ pub fn command(ops: &[Operation]) -> Command {
     for op in ops {
         let cmd = Command::new(op.path[op.path.len() - 1])
             .about(op.about)
-            .args(op.fields.iter().map(arg));
+            .args(op.fields.iter().map(|f| arg(op, f)));
         root = match op.path {
             [_] => root.subcommand(cmd),
             [group, _] if root.find_subcommand(group).is_some() => {
@@ -152,9 +152,24 @@ fn acp() -> Command {
         )
 }
 
-/// The flag or positional argument of one field.
-fn arg(f: &Field) -> Arg {
-    let mut a = Arg::new(f.name).help(f.help);
+/// The help of a field in the CLI's words, where they differ from the core's: flags, stdin and
+/// exit codes.
+fn help(op: &Operation, f: &Field) -> &'static str {
+    match (op.path, f.name) {
+        (["stamp"], "check") => "Report drift and exit 1 instead of writing",
+        (["index"], "check") => "Report stale generated files and exit 1 instead of writing",
+        (["write"], "content") => "The file text; read from stdin when left out",
+        (["templates", "show"], "name") => "Template name from `owo templates list`",
+        (["links"], "name") => "Entry name, alias, path or [[link]] (not needed with --orphans)",
+        (["export", "card"], "png") => "Embed the card in this PNG avatar (needs --out)",
+        (["sync", "push"], "turns") => "JSON array of {\"id\", \"role\", \"text\"}; id is the turn id, the host's id for that message, and a stored turn id is skipped (default: stdin)",
+        _ => f.help,
+    }
+}
+
+/// The flag or positional argument of one field of `op`.
+fn arg(op: &Operation, f: &Field) -> Arg {
+    let mut a = Arg::new(f.name).help(help(op, f));
     if !f.positional {
         a = a.long(f.name);
     }

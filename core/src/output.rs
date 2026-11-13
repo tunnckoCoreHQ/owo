@@ -38,3 +38,8 @@ impl Diagnostic {
         self
     }
 }
+
+/// One warning as the line owo writes it: `owo: warning: <text>`.
+pub fn warning_line(text: &str) -> String {
+    format!("owo: warning: {text}\n")
+}

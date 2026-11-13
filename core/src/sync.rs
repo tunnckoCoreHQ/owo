@@ -387,11 +387,11 @@ fn run(req: &StartRequest, transcript: &Path, format: Format) -> Result<Start> {
         .with_context(|| format!("reading {}", transcript.display()))?;
     let messages = parse(&raw, format)?;
     if messages.is_empty() && !raw.trim().is_empty() {
-        bail!(
-            "no user or assistant messages in {} as {}; check --format",
-            transcript.display(),
-            format.name()
-        );
+        return Err(Fault::NoMessages {
+            transcript: transcript.to_path_buf(),
+            format: format.name(),
+        }
+        .into());
     }
     let mut doc = read_bookmark(req.root, req.session)?;
     let done = doc["until"].as_u64().unwrap_or(0) as usize;
@@ -490,7 +490,11 @@ pub fn done(root: &Path, session: &str, until: usize) -> Result<Bookmark> {
     }
     let prev = doc["until"].as_u64().unwrap_or(0) as usize;
     if until < prev {
-        bail!("--until {until} is behind the bookmark ({prev})");
+        return Err(Fault::BehindBookmark {
+            until,
+            bookmark: prev,
+        }
+        .into());
     }
     if let Some(seen) = doc["messages"].as_u64().filter(|n| until as u64 > *n) {
         return Err(Fault::PastMessages { until, seen }.into());

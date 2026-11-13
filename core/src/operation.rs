@@ -12,14 +12,14 @@ use std::io::Read;
 
 /// What one operation call reads beside its request: the root it opens, the caller's input,
 /// and the warnings found on the way.
-struct Session<'a> {
+struct Call<'a> {
     select: &'a Select,
     env: &'a Env,
     input: &'a mut dyn Read,
     warnings: Vec<String>,
 }
 
-impl Session<'_> {
+impl Call<'_> {
     /// The selected root; its config warnings join the warnings.
     fn root(&mut self) -> Result<Root> {
         let root = Root::open(self.select, self.env)?;
@@ -37,7 +37,7 @@ impl Session<'_> {
     }
 }
 
-type Run = dyn Fn(&Args, &mut Session) -> Result<Result<Outcome>, String> + Send + Sync;
+type Run = dyn Fn(&Args, &mut Call) -> Result<Result<Outcome>> + Send + Sync;
 
 /// One operation: its name, its help line, the fields of its request type, and its call.
 pub struct Operation {
@@ -63,7 +63,7 @@ impl Operation {
 
     /// Runs the operation with `args`, checked with `Args::new`. `select` and `env` pick the
     /// root, and `input` gives the text that `write` and `sync push` read when the request has
-    /// none, only after the root resolves. An argument of the wrong type is the error text,
+    /// none, only after the root resolves. An argument of the wrong type is a usage error,
     /// before any call.
     pub fn run(
         &self,
@@ -71,8 +71,8 @@ impl Operation {
         select: &Select,
         env: &Env,
         input: &mut dyn Read,
-    ) -> Result<Ran, String> {
-        let mut s = Session {
+    ) -> Result<Ran> {
+        let mut s = Call {
             select,
             env,
             input,
@@ -90,7 +90,7 @@ impl Operation {
 fn op<R: Request + 'static>(
     path: &'static [&'static str],
     about: &'static str,
-    call: fn(R, &mut Session) -> Result<Outcome>,
+    call: fn(R, &mut Call) -> Result<Outcome>,
 ) -> Operation {
     let fields = R::fields();
     Operation {
@@ -102,6 +102,11 @@ fn op<R: Request + 'static>(
             Ok(call(req, s))
         }),
     }
+}
+
+/// The call of `templates` and `templates list`.
+fn templates(_: (), s: &mut Call) -> Result<Outcome> {
+    Ok(Outcome::Templates(s.root()?.templates()))
 }
 
 /// Every operation, in the order the CLI lists them.
@@ -179,12 +184,12 @@ pub fn operations() -> Vec<Operation> {
         op::<()>(
             &["templates"],
             "List templates, or show one (built in, or overridden in <root>/.templates/)",
-            |_, s| Ok(Outcome::Templates(s.root()?.templates())),
+            templates,
         ),
         op::<()>(
             &["templates", "list"],
             "List template names and where each comes from",
-            |_, s| Ok(Outcome::Templates(s.root()?.templates())),
+            templates,
         ),
         op::<TemplateRequest>(
             &["templates", "show"],
@@ -457,6 +462,14 @@ impl Envelope {
     pub fn with_warnings(mut self, items: impl IntoIterator<Item = impl Into<Value>>) -> Self {
         self.warnings.extend(items.into_iter().map(Into::into));
         self
+    }
+
+    /// The warnings that are text, for a caller that prints them as lines.
+    pub fn text_warnings(&self) -> impl Iterator<Item = String> + '_ {
+        self.warnings
+            .iter()
+            .filter_map(Value::as_str)
+            .map(str::to_string)
     }
 
     pub fn with_errors(mut self, items: impl IntoIterator<Item = impl Into<Value>>) -> Self {

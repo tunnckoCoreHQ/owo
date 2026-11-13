@@ -19,7 +19,8 @@ use std::process::{ExitCode, Stdio};
 
 fn main() -> ExitCode {
     let ops = operations();
-    let matches = cli::command(&ops).get_matches();
+    let mut command = cli::command(&ops);
+    let matches = command.get_matches_mut();
     let global = Global::of(&matches);
     let (name, sub) = matches.subcommand().expect("a command is required");
     // Exit quietly when stdout closes early (`owo search x | head`). `owo mcp` and `owo acp` keep
@@ -51,15 +52,13 @@ fn main() -> ExitCode {
         }
         _ => run(&ops, &matches, &global, &env),
     };
-    match out
-        .error
-        .as_ref()
-        .and_then(|e| e.downcast_ref::<clap::Error>())
-    {
-        // clap prints its own error, so it keeps its colour on a terminal.
+    match out.usage() {
+        // A usage error is worded as clap words its own, so it keeps its colour on a terminal.
         Some(e) => {
             eprint!("{}", out.warning_lines());
-            let _ = e.print();
+            let _ = command
+                .error(clap::error::ErrorKind::MissingRequiredArgument, e)
+                .print();
         }
         None => {
             let (stdout, stderr) = out.render(global.json);
@@ -71,7 +70,8 @@ fn main() -> ExitCode {
 }
 
 /// Runs the operation of the parsed command. The process stdin gives the text `owo write` and
-/// `owo sync push` read when they take no `--content` or `--turns`.
+/// `owo sync push` read when they take no `--content` or `--turns`. Clap checked the arguments
+/// against the fields and their rules.
 fn run(ops: &[Operation], matches: &ArgMatches, global: &Global, env: &owo_core::Env) -> Output {
     let mut path = vec![];
     let mut m = matches;
@@ -83,14 +83,10 @@ fn run(ops: &[Operation], matches: &ArgMatches, global: &Global, env: &owo_core:
         .iter()
         .find(|op| op.path == path.as_slice())
         .expect("every command is an operation");
-    let ran = Args::new(&op.name(), &op.fields, cli::args(op, m))
-        .and_then(|args| op.run(&args, &global.select, env, &mut std::io::stdin()));
-    match ran {
+    let args = Args::checked(cli::args(op, m));
+    match op.run(&args, &global.select, env, &mut std::io::stdin()) {
         Ok(ran) => render::output(ran, global.json, global.quiet),
-        // Clap checked the arguments, so this is a usage error it missed.
-        Err(e) => Output::from(anyhow::Error::from(
-            cli::command(ops).error(clap::error::ErrorKind::ValueValidation, e),
-        )),
+        Err(e) => Output::from(anyhow::Error::from(e)),
     }
 }
 
@@ -176,7 +172,7 @@ fn acp(global: &Global, env: &owo_core::Env, agent: &[String], inject: bool) -> 
     let proxy = owo_core::acp::Proxy::new(
         &global.select,
         env,
-        owo_core::acp::Options { inject },
+        owo_core::acp::Options { inject, mcp_server },
         std::io::stderr(),
     )?;
     let mut child = std::process::Command::new(&agent[0])
@@ -197,4 +193,14 @@ fn acp(global: &Global, env: &owo_core::Env, agent: &[String], inject: bool) -> 
     let status = child.wait()?;
     copied?;
     Ok(status.code().unwrap_or(1) as u8)
+}
+
+/// The command line of the owo MCP server the ACP proxy adds: this binary's `mcp`, with the
+/// identity the proxy resolved at start.
+fn mcp_server(identity: Option<&str>) -> (String, Vec<String>) {
+    let mut args = vec!["mcp".to_string()];
+    if let Some(id) = identity {
+        args.extend(["-i".to_string(), id.to_string()]);
+    }
+    ("owo".to_string(), args)
 }

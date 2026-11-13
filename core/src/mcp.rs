@@ -5,7 +5,7 @@
 //! text. Messages are JSON-RPC 2.0: one per line with `serve`, or one per POST to `/mcp` with
 //! `serve_http`. `reply` answers one message.
 
-use crate::request::{Args, Field, Type};
+use crate::request::{scalar, Args, Field, Type};
 use crate::{operations, Env, Envelope, Operation, Outcome, Ran, Select};
 use anyhow::Context;
 use serde_json::{json, Map, Value};
@@ -74,16 +74,6 @@ fn schema(op: &Operation) -> Value {
         .collect();
     json!({ "type": "object", "properties": props, "required": required, "additionalProperties": false })
 }
-
-fn scalar(v: &Value) -> Option<String> {
-    match v {
-        Value::String(s) => Some(s.clone()),
-        Value::Number(n) => Some(n.to_string()),
-        Value::Bool(b) => Some(b.to_string()),
-        _ => None,
-    }
-}
-
 fn result(text: String, error: bool) -> Value {
     json!({ "content": [{ "type": "text", "text": text }], "isError": error })
 }
@@ -141,7 +131,7 @@ fn run_tool(op: &Operation, params: &Value, select: &Select, env: &Env) -> Value
         .and_then(|args| op.run(&args, &select, env, &mut std::io::empty()));
     match ran {
         Ok(ran) => reply_of(op, ran),
-        Err(e) => result(e, true),
+        Err(e) => result(e.to_string(), true),
     }
 }
 
@@ -165,21 +155,12 @@ fn reply_of(op: &Operation, ran: Ran) -> Value {
         return result(format!("{text}\n"), !ok);
     }
     let lines = |warnings: &[String]| -> String {
-        warnings
-            .iter()
-            .map(|w| format!("owo: warning: {w}\n"))
-            .collect()
+        warnings.iter().map(|w| crate::warning_line(w)).collect()
     };
     let (stdout, stderr, error) = match &outcome {
         Ok(o) => {
             let envelope = o.envelope();
-            warnings.extend(
-                envelope
-                    .warnings
-                    .iter()
-                    .filter_map(Value::as_str)
-                    .map(str::to_string),
-            );
+            warnings.extend(envelope.text_warnings());
             (text(o), lines(&warnings), !envelope.ok)
         }
         Err(e) => (
@@ -251,8 +232,8 @@ pub fn reply(message: &[u8], select: &Select, env: &Env) -> Option<Value> {
     }
 }
 
-/// Serves MCP on `input` and `output`, one message per line, until `input` ends. `select` gives
-/// the default `--root`, `-i` and `--project` of each tool call.
+/// Serves MCP on `input` and `output`, one message per line, until `input` ends. `select` picks
+/// the default root, identity and project of each tool call.
 pub fn serve(
     mut input: impl BufRead,
     mut output: impl Write,

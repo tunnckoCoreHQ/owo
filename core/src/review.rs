@@ -255,7 +255,7 @@ pub fn soul_note(id: &Identity, file: &str, change: &str, evidence: &[String]) -
         );
     }
     if change.trim().is_empty() {
-        bail!("--change is empty");
+        return Err(crate::Fault::Empty("change").into());
     }
     let mut links = vec![];
     let mut seen = std::collections::BTreeSet::new();

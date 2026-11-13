@@ -1,5 +1,6 @@
 //! Why a library call failed: the kind of failure, its text, and for the failures a caller may
-//! word in its own terms, a typed `Fault`.
+//! word in its own terms, a typed `Fault`. A fault's text names fields and operations, never a
+//! flag or a command of a caller.
 
 use crate::identity::Kind;
 use std::path::PathBuf;
@@ -20,8 +21,37 @@ pub enum ErrorKind {
 /// A failure with its facts, so a caller can say what to do in its own terms.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Fault {
+    /// No root given, in the environment, or in a config file, and no default.
+    NoRoot,
+    /// No identity selected in this root.
+    NoIdentity(PathBuf),
     /// `add` with no title, for an entry type that needs one.
     NeedsTitle(Kind),
+    /// `add` with a field that only the entry type `kind` takes; `given` has no `noun`.
+    OnlyFor {
+        field: &'static str,
+        noun: &'static str,
+        kind: Kind,
+        given: Kind,
+    },
+    /// `add` of an entry type that needs a field, such as `location-detail` without `parent`.
+    KindNeeds { kind: Kind, field: &'static str },
+    /// A template with no `line` to put the field in.
+    TemplateLacks {
+        template: String,
+        line: &'static str,
+        field: &'static str,
+    },
+    /// `write` with no text for the file.
+    NoText(String),
+    /// A field given as empty text.
+    Empty(&'static str),
+    /// A field whose value does not name what the field needs.
+    Field { name: &'static str, error: String },
+    /// `migrate_v1` with an `out` that does not end in a slug.
+    OutNoSlug,
+    /// `changes` outside Git with a `since` that is not a day.
+    SinceNotDay(String),
     /// A template name that no template has.
     UnknownTemplate(String),
     /// The selected identity has no folder at this path.
@@ -38,8 +68,15 @@ pub enum Fault {
     PushedSession(String),
     /// A session that reads a host transcript, given to `SessionSync::push`.
     TranscriptSession { session: String, transcript: String },
+    /// A transcript with text but no user or assistant message in its format.
+    NoMessages {
+        transcript: PathBuf,
+        format: &'static str,
+    },
     /// `Root::sync_done` for a session that no sync step started.
     NoBookmark(String),
+    /// `Root::sync_done` before the bookmark.
+    BehindBookmark { until: usize, bookmark: usize },
     /// `Root::sync_done` past the messages the last sync step read.
     PastMessages { until: usize, seen: u64 },
     /// A number outside the range of its field, such as `days` outside 0 to `MAX_DAYS`.
@@ -65,23 +102,58 @@ impl Fault {
             | Fault::Conflict(..)
             | Fault::Needs(..)
             | Fault::InjectNeedsIdentity => ErrorKind::Usage,
-            Fault::NoIdentityFolder(_) | Fault::NoProject(_) => ErrorKind::Config,
+            Fault::NoRoot
+            | Fault::NoIdentity(_)
+            | Fault::NoIdentityFolder(_)
+            | Fault::NoProject(_) => ErrorKind::Config,
             _ => ErrorKind::Failed,
         }
+    }
+}
+
+/// `a` or `an` for the word.
+fn article(word: &str) -> &'static str {
+    if word.starts_with(['a', 'e', 'i', 'o', 'u']) {
+        "an"
+    } else {
+        "a"
     }
 }
 
 impl std::fmt::Display for Fault {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Fault::NoRoot => f.write_str("cannot resolve a root"),
+            Fault::NoIdentity(root) => write!(f, "no identity selected in {}", root.display()),
             Fault::NeedsTitle(kind) => {
-                let article = if kind.name().starts_with(['a', 'e', 'i', 'o', 'u']) {
-                    "an"
-                } else {
-                    "a"
-                };
-                write!(f, "{article} {} entry needs a title", kind.name())
+                let name = kind.name();
+                write!(f, "{} {name} entry needs a title", article(name))
             }
+            Fault::OnlyFor {
+                field,
+                noun,
+                kind,
+                given,
+            } => write!(
+                f,
+                "{field} is for {}; a {} has no {noun}",
+                kind.name(),
+                given.name()
+            ),
+            Fault::KindNeeds { kind, field } => write!(f, "{} needs {field}", kind.name()),
+            Fault::TemplateLacks {
+                template,
+                line,
+                field,
+            } => write!(
+                f,
+                "the {template} template has no `{line}` line for {field}"
+            ),
+            Fault::NoText(path) => write!(f, "no text for {path}"),
+            Fault::Empty(field) => write!(f, "{field} is empty"),
+            Fault::Field { name, error } => write!(f, "{name}: {error}"),
+            Fault::OutNoSlug => f.write_str("out must end in the identity slug"),
+            Fault::SinceNotDay(e) => write!(f, "outside Git, since takes a day: {e}"),
             Fault::UnknownTemplate(name) => write!(f, "unknown template {name:?}"),
             Fault::NoIdentityFolder(dir) => {
                 write!(f, "identity folder not found: {}", dir.display())
@@ -99,7 +171,15 @@ impl std::fmt::Display for Fault {
                 session,
                 transcript,
             } => write!(f, "session {session:?} syncs the transcript {transcript}"),
+            Fault::NoMessages { transcript, format } => write!(
+                f,
+                "no user or assistant messages in {} as {format}",
+                transcript.display()
+            ),
             Fault::NoBookmark(s) => write!(f, "no sync bookmark for session {s:?}"),
+            Fault::BehindBookmark { until, bookmark } => {
+                write!(f, "until {until} is behind the bookmark ({bookmark})")
+            }
             Fault::PastMessages { until, seen } => write!(
                 f,
                 "until {until} is past the {seen} messages the last sync step read"
@@ -123,7 +203,8 @@ impl std::error::Error for Fault {}
 #[derive(Debug)]
 pub struct Error {
     pub kind: ErrorKind,
-    /// The failure with its facts, when it is one a caller may word itself.
+    /// The failure with its facts, when it is one a caller may word itself. The error text is
+    /// then the fault's text.
     pub fault: Option<Fault>,
     message: String,
 }
@@ -158,13 +239,8 @@ impl From<Fault> for Error {
 
 impl From<anyhow::Error> for Error {
     fn from(e: anyhow::Error) -> Self {
-        let message = format!("{e:#}");
         if let Some(fault) = e.downcast_ref::<Fault>() {
-            return Self {
-                kind: fault.kind(),
-                fault: Some(fault.clone()),
-                message,
-            };
+            return fault.clone().into();
         }
         let kind = if e.downcast_ref::<crate::config::ConfigError>().is_some() {
             ErrorKind::Config
@@ -173,7 +249,7 @@ impl From<anyhow::Error> for Error {
         } else {
             ErrorKind::Failed
         };
-        Self::new(kind, message)
+        Self::new(kind, format!("{e:#}"))
     }
 }
 
