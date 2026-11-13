@@ -268,6 +268,10 @@ fn run_tool(tool: &Tool, params: &Value, cli: &owo::Cli) -> Value {
         Ok(a) => a,
         Err(e) => return result(e, true),
     };
+    // No command line can hold a NUL, so a tool argument cannot either.
+    if argv.iter().any(|a| a.contains('\0')) {
+        return result("an argument holds a NUL character".into(), true);
+    }
     let ((stdout, stderr), code) = match crate::run_argv(argv, stdin) {
         Ok((parsed, out)) => (crate::render(&parsed, &out), out.code),
         Err(e) => (crate::usage_text(&e, String::new()), e.exit_code()),
