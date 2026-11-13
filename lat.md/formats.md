@@ -36,7 +36,7 @@ Soul Markdown files are plain Markdown with no frontmatter; their stamps live in
 
 One slug function turns a name into a path segment: transliterate to ASCII, lowercase, drop apostrophes, collapse every other run of non-alphanumeric characters to one hyphen, trim hyphens.
 
-`Jay's Penthouse` becomes `jays-penthouse`. On a collision, add a short disambiguator to the slug and keep the short name as an alias. Logs are `YYYY-MM-DD.md`; journal, writing and project notes are `YYYY-MM-DD_<slug>.md`. A name gives a slug and a slug gives a path, so agents can predict a path and fall back to `owo resolve`.
+`Jay's Penthouse` becomes `jays-penthouse`. On a collision, add a short disambiguator to the slug and keep the short name as an alias. Logs are `YYYY-MM-DD.md`; journal, writing and project notes are `YYYY-MM-DD_<slug>.md`. Entry file names and project folder names must be slugs (the `schema` rule). A name gives a slug and a slug gives a path, so agents can predict a path and fall back to `owo resolve`.
 
 ## Links
 
@@ -115,4 +115,4 @@ Identity resolves from `-i`, `OWO_IDENTITY`, `.owo.toml`, user config, then the 
 
 Templates are embedded in the binary. `<root>/.templates/<name>` overrides one, where `<name>` is the identity-relative path for identity files (`soul/IDENTITY.md`, `work/README.md`) and `<type>.md` for entries (`character.md`).
 
-Placeholders are `{{name}}`, `{{slug}}`, `{{title}}`, `{{today}}`, `{{date}}`, `{{parent}}`, `{{project}}`. A `{{key_yaml}}` form escapes double quotes for YAML strings, and a `{{key_json}}` form escapes for JSON strings. An era's `start` and `end` are empty until the author sets them.
+Placeholders are `{{name}}`, `{{slug}}`, `{{title}}`, `{{today}}`, `{{date}}`, `{{parent}}`, `{{project}}`. A `{{key_yaml}}` form escapes double quotes for YAML strings, and a `{{key_json}}` form escapes for JSON strings. Filling is one pass, so `{{key}}` text inside a value stays as written. An era's `start` and `end` are empty until the author sets them.

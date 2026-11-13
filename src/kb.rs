@@ -113,7 +113,8 @@ pub fn link(id: &Identity, target: &str) -> Option<Result<Link, String>> {
     let Some(kb) = root(id, project) else {
         return Some(Ok(out));
     };
-    let base = if kb.is_file() {
+    // A folder named like a file (`lat.md/`) is a folder.
+    let base = if !kb.is_dir() && kb.extension().is_some_and(|x| x == "md") {
         kb.parent().map(Path::to_path_buf).unwrap_or(kb.clone())
     } else {
         kb.clone()

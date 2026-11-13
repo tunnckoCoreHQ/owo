@@ -1,8 +1,10 @@
 //! Built-in templates, embedded in the binary. `<root>/.templates/<file>` overrides one.
 
+use regex::{Captures, Regex};
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::OnceLock;
 
 /// Templates used by `owo new`, keyed by their identity-relative output path.
 pub const IDENTITY_FILES: &[(&str, &str)] = &[
@@ -90,27 +92,31 @@ pub fn get(root: &Path, name: &str, builtin: &str) -> String {
         .unwrap_or_else(|| builtin.to_string())
 }
 
-/// Replaces `{{key}}` placeholders. Keys ending in `_yaml` get double-quote YAML escaping, keys
-/// ending in `_json` JSON string escaping.
-/// One pass over the template, so a value that holds `{{key}}` text stays as written.
+fn placeholder_re() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| Regex::new(r"\{\{(\w+)\}\}").expect("valid regex"))
+}
+
+/// Replaces `{{key}}` placeholders in one pass, so a value that holds `{{key}}` text stays as
+/// written. Keys ending in `_yaml` get double-quote YAML escaping, keys ending in `_json` JSON
+/// string escaping.
 pub fn fill(template: &str, values: &BTreeMap<&str, String>) -> String {
-    static RE: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
-    let re = RE.get_or_init(|| regex::Regex::new(r"\{\{(\w+)\}\}").expect("valid regex"));
-    re.replace_all(template, |cap: &regex::Captures| {
-        let key = &cap[1];
-        if let Some(value) = values.get(key) {
-            return value.clone();
-        }
-        if let Some(value) = key.strip_suffix("_yaml").and_then(|k| values.get(k)) {
-            return yaml_escape(value);
-        }
-        if let Some(value) = key.strip_suffix("_json").and_then(|k| values.get(k)) {
-            let json = serde_json::to_string(value).expect("a string serializes");
-            return json[1..json.len() - 1].to_string();
-        }
-        cap[0].to_string()
-    })
-    .into_owned()
+    placeholder_re()
+        .replace_all(template, |cap: &Captures| {
+            let key = &cap[1];
+            if let Some(value) = values.get(key) {
+                return value.clone();
+            }
+            if let Some(value) = key.strip_suffix("_yaml").and_then(|k| values.get(k)) {
+                return yaml_escape(value);
+            }
+            if let Some(value) = key.strip_suffix("_json").and_then(|k| values.get(k)) {
+                let json = serde_json::to_string(value).expect("a string serializes");
+                return json[1..json.len() - 1].to_string();
+            }
+            cap[0].to_string()
+        })
+        .into_owned()
 }
 
 /// Escapes a value for a double-quoted YAML string.
