@@ -589,12 +589,7 @@ impl Request for WriteRequest {
                 b.path,
             ),
             content: r.text(
-                Field::new(
-                    "content",
-                    Type::Text,
-                    "The file text; the caller's input when left out",
-                )
-                .hyphen(),
+                Field::new("content", Type::Text, "The file text").hyphen(),
                 b.content,
             ),
         }
@@ -1325,7 +1320,7 @@ impl Request for SyncPushRequest {
                 Field::new(
                     "turns",
                     Type::Json,
-                    "JSON array of {\"id\", \"role\", \"text\"}; id is the turn id, the host's id for that message, and a stored turn id is skipped (default: the caller's input)",
+                    "JSON array of {\"id\", \"role\", \"text\"}; id is the turn id, the host's id for that message, and a stored turn id is skipped",
                 )
                 .hyphen(),
                 b.turns,
