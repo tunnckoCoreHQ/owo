@@ -40,7 +40,6 @@ impl Inject {
 
 /// A client request that waits for the agent's response.
 enum Pending {
-    Initialize,
     New,
     Load(String),
     Prompt(String),
@@ -63,8 +62,6 @@ struct Turn {
 
 #[derive(Default)]
 struct State {
-    /// The agent advertised `sessionCapabilities.systemPrompt`.
-    system_prompt: bool,
     /// Keyed by the JSON text of the request id.
     pending: HashMap<String, Pending>,
     /// Sessions from `session/new` whose first prompt still gets the identity block.
@@ -205,10 +202,6 @@ fn from_client(line: &[u8], state: &Mutex<State>, inject: &Inject) -> Option<Vec
         .and_then(|p| p["sessionId"].as_str())
         .map(String::from);
     match method.as_str() {
-        "initialize" => {
-            st.pending.insert(id, Pending::Initialize);
-            return None;
-        }
         "session/new" | "session/load" | "session/resume" => {
             match (method.as_str(), &session) {
                 ("session/new", _) => {
@@ -224,42 +217,12 @@ fn from_client(line: &[u8], state: &Mutex<State>, inject: &Inject) -> Option<Vec
                 }
                 _ => {}
             }
-            let params = params?;
-            let mut changed = false;
-            if let Some(text) = st.system_prompt.then(|| inject.text()).flatten() {
-                let block = json!({ "type": "text", "text": text });
-                match params.get_mut("systemPrompt").filter(|s| !s.is_null()) {
-                    None => {
-                        params["systemPrompt"] = json!({ "mode": "append", "content": [block] });
-                        changed = true;
-                    }
-                    // The client's own prompt keeps its mode. One with no content list is
-                    // not valid, so it passes as it is.
-                    Some(own) => {
-                        if let Some(content) = own.get_mut("content").and_then(Value::as_array_mut)
-                        {
-                            content.push(block);
-                            changed = true;
-                        }
-                    }
-                }
-            }
-            if let Some(server) = &inject.server {
-                match params.get_mut("mcpServers").and_then(Value::as_array_mut) {
-                    // A server the client already named `owo` stays the only one.
-                    Some(servers) if servers.iter().any(|s| s["name"] == "owo") => {}
-                    Some(servers) => {
-                        servers.push(server.clone());
-                        changed = true;
-                    }
-                    None => {
-                        params["mcpServers"] = json!([server]);
-                        changed = true;
-                    }
-                }
-            }
-            if !changed {
-                return None;
+            let (params, server) = (params?, inject.server.as_ref()?);
+            match params.get_mut("mcpServers").and_then(Value::as_array_mut) {
+                // A server the client already named `owo` stays the only one.
+                Some(servers) if servers.iter().any(|s| s["name"] == "owo") => return None,
+                Some(servers) => servers.push(server.clone()),
+                None => params["mcpServers"] = json!([server]),
             }
         }
         "session/prompt" => {
@@ -340,15 +303,8 @@ fn from_agent_line(line: &[u8], state: &Mutex<State>) -> Option<(String, Vec<Val
     let result = &msg["result"];
     let request = msg.get("id")?.to_string();
     match st.pending.remove(&request)? {
-        Pending::Initialize => {
-            st.system_prompt =
-                result["agentCapabilities"]["sessionCapabilities"]["systemPrompt"].is_object();
-            None
-        }
         Pending::New => {
-            if !st.system_prompt {
-                st.intro.insert(result["sessionId"].as_str()?.to_string());
-            }
+            st.intro.insert(result["sessionId"].as_str()?.to_string());
             None
         }
         Pending::Load(session) | Pending::Prompt(session) => {

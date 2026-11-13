@@ -615,7 +615,7 @@ fn help_into_a_closed_pipe_exits_zero() {
     assert_eq!(status.code(), Some(0));
 }
 
-/// A proxy on `root` with a new session `s1`, for an agent with no `systemPrompt` capability.
+/// A proxy on `root` with a new session `s1`.
 fn acp_session(root: &Path, flags: &[&str]) -> Proxy {
     let mut p = start(root, flags, 0);
     p.send(&init(), &[init_reply(json!({}))]);

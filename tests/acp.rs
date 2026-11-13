@@ -77,7 +77,7 @@ fn passes_lines_through_and_stores_turns_once() {
     assert_eq!(got.len(), sent.len());
     for (i, (got, sent)) in got.iter().zip(&sent).enumerate() {
         if i == 5 {
-            // Without the systemPrompt capability, the first prompt gets the identity block first.
+            // The first prompt of a new session gets the identity block first.
             let mut got = parse(got);
             let block = got["params"]["prompt"].as_array_mut().unwrap().remove(0);
             assert_eq!(block["type"], "text");
@@ -106,7 +106,7 @@ fn passes_lines_through_and_stores_turns_once() {
 }
 
 #[test]
-fn appends_the_system_prompt_and_the_mcp_server() {
+fn adds_the_mcp_server_to_each_session_request() {
     let tmp = copy_example("nicole");
     let mut p = start(tmp.path(), &[], 0);
     let fs_server = json!({ "name": "fs", "command": "/bin/fs", "args": [], "env": [] });
@@ -130,6 +130,7 @@ fn appends_the_system_prompt_and_the_mcp_server() {
         prompt(4, "s2", &["hi"]),
     ];
     let replies = [
+        // The proxy does not use the `systemPrompt` capability, also when the agent has it.
         vec![init_reply(json!({ "systemPrompt": {} }))],
         vec![response(1, json!({ "sessionId": "s2" }))],
         vec![response(2, json!({}))],
@@ -142,27 +143,21 @@ fn appends_the_system_prompt_and_the_mcp_server() {
     let (code, got) = p.finish();
     assert_eq!(code, 0);
     assert_eq!(got[0], sent[0]);
-    assert_eq!(got[4], sent[4], "a prompt passes unchanged");
-    let text = parse(&got[1])["params"]["systemPrompt"]["content"][0]["text"]
-        .as_str()
-        .unwrap()
-        .to_string();
+    for (i, servers) in [
+        (1, json!([fs_server, owo_server()])),
+        (2, json!([owo_server()])),
+        (3, json!([owo_server()])),
+    ] {
+        let mut want = parse(&sent[i]);
+        want["params"]["mcpServers"] = servers;
+        assert_eq!(parse(&got[i]), want, "only the server list changes");
+    }
+    // The first prompt of the new session tells the agent to load the identity.
+    let mut first = parse(&got[4]);
+    let block = first["params"]["prompt"].as_array_mut().unwrap().remove(0);
+    let text = block["text"].as_str().unwrap();
     assert!(text.contains("\"nicole\"") && text.contains("`context`"));
-    let block = json!({ "type": "text", "text": text });
-    let owo_server = owo_server();
-    let mut new = parse(&sent[1]);
-    new["params"]["systemPrompt"] = json!({ "mode": "append", "content": [block] });
-    new["params"]["mcpServers"] = json!([fs_server, owo_server]);
-    assert_eq!(parse(&got[1]), new);
-    let mut load = parse(&sent[2]);
-    load["params"]["systemPrompt"]["content"] =
-        json!([{ "type": "text", "text": "Be brief." }, block]);
-    load["params"]["mcpServers"] = json!([owo_server]);
-    assert_eq!(parse(&got[2]), load);
-    let mut resume = parse(&sent[3]);
-    resume["params"]["systemPrompt"] = json!({ "mode": "append", "content": [block] });
-    resume["params"]["mcpServers"] = json!([owo_server]);
-    assert_eq!(parse(&got[3]), resume);
+    assert_eq!(first, parse(&sent[4]));
     assert_eq!(
         stored(tmp.path(), "s2"),
         [turn("m1.user", "user", "hi"), turn("m1", "assistant", "yo")]
@@ -213,7 +208,7 @@ fn mcp_does_not_list_acp() {
 }
 
 #[test]
-fn inject_puts_the_identity_context_in_the_prompt() {
+fn inject_puts_the_identity_context_in_the_first_prompt() {
     let tmp = copy_example("nicole");
     let context = owo(tmp.path())
         .args(["-i", "nicole", "context"])
@@ -222,34 +217,25 @@ fn inject_puts_the_identity_context_in_the_prompt() {
     let context = String::from_utf8(context.stdout).unwrap();
     assert!(!context.trim().is_empty());
     let new = request(1, "session/new", json!({ "cwd": "/w", "mcpServers": [] }));
-
-    // With the systemPrompt capability, the context is the system prompt.
     let mut p = start(tmp.path(), &["--inject"], 0);
     p.send(&init(), &[init_reply(json!({ "systemPrompt": {} }))]);
-    p.send(&new, &[response(1, json!({ "sessionId": "s1" }))]);
-    let (_, got) = p.finish();
-    let mut want = parse(&new);
-    want["params"]["systemPrompt"] =
-        json!({ "mode": "append", "content": [{ "type": "text", "text": context }] });
-    assert_eq!(parse(&got[1]), want, "the context, and no owo MCP server");
-
-    // Without it, the context is the first block of the first prompt, and it is not stored.
-    let mut p = start(tmp.path(), &["--inject"], 0);
-    p.send(&init(), &[init_reply(json!({}))]);
     p.send(&new, &[response(1, json!({ "sessionId": "s2" }))]);
     p.send(
         &prompt(2, "s2", &["hi"]),
         &[chunk("s2", Some("m1"), "yo"), end(2)],
     );
+    p.send(&prompt(3, "s2", &["more"]), &[end(3)]);
     let (_, got) = p.finish();
-    assert_eq!(got[1], new, "the session request passes unchanged");
+    assert_eq!(got[1], new, "no owo MCP server and no other change");
     let blocks = parse(&got[2])["params"]["prompt"].clone();
     assert_eq!(
         blocks,
         json!([{ "type": "text", "text": context }, { "type": "text", "text": "hi" }])
     );
+    assert_eq!(got[3], prompt(3, "s2", &["more"]), "only the first prompt");
     assert_eq!(
-        stored(tmp.path(), "s2"),
-        [turn("m1.user", "user", "hi"), turn("m1", "assistant", "yo")]
+        stored(tmp.path(), "s2")[..2],
+        [turn("m1.user", "user", "hi"), turn("m1", "assistant", "yo")],
+        "the context is not stored"
     );
 }
