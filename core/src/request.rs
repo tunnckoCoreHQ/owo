@@ -8,6 +8,7 @@
 use crate::{Error, ErrorKind, Fault, Kind, Result, Rule, Scope, Spec, SyncFormat};
 use chrono::NaiveDate;
 use serde_json::{Map, Value};
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 /// The largest number of days `state` and `changes` take.
@@ -133,10 +134,12 @@ impl Field {
     }
 }
 
-/// The arguments of one call, by field name: a JSON value each.
+/// The arguments of one call, by field name: a JSON value each, and the raw value of a path
+/// field that came as a path, not as text.
 #[derive(Debug, Clone, Default)]
 pub struct Args {
     map: Map<String, Value>,
+    paths: BTreeMap<String, PathBuf>,
 }
 
 /// The text of a string, number or boolean.
@@ -161,7 +164,10 @@ impl Args {
         if let Some(k) = map.keys().find(|k| !fields.iter().any(|f| f.name == *k)) {
             return Err(usage(format!("unknown argument {k:?} for {name}")));
         }
-        let args = Args { map };
+        let args = Args {
+            map,
+            paths: BTreeMap::new(),
+        };
         for f in fields {
             if f.required && args.get(f.name).is_none() {
                 return Err(usage(format!("missing argument {:?}", f.name)));
@@ -177,6 +183,13 @@ impl Args {
             }
         }
         Ok(args)
+    }
+
+    /// The arguments with the raw value of the path field `name`, which the request takes
+    /// over its text. A command line path need not be UTF-8.
+    pub fn with_path(mut self, name: &str, path: PathBuf) -> Self {
+        self.paths.insert(name.to_string(), path);
+        self
     }
 
     /// The rules of `f`: a required path is there and not empty, and when `f` is given, its
@@ -372,16 +385,24 @@ impl<'a> Reader<'a> {
         }
     }
 
+    /// The value of a single-value path argument: its raw path, else its text.
+    fn one_path(&mut self, name: &str, args: &Args) -> Option<PathBuf> {
+        match args.paths.get(name) {
+            Some(p) => Some(p.clone()),
+            None => self.one(name, args).map(PathBuf::from),
+        }
+    }
+
     pub fn path(&mut self, f: Field, base: Option<PathBuf>) -> Option<PathBuf> {
         match self.declare(f, given(base.is_some())) {
-            Some((name, a)) => self.one(name, a).map(PathBuf::from).or(base),
+            Some((name, a)) => self.one_path(name, a).or(base),
             None => base,
         }
     }
 
     pub fn required_path(&mut self, f: Field, base: PathBuf) -> PathBuf {
         match self.declare(f, given(!base.as_os_str().is_empty())) {
-            Some((name, a)) => self.one(name, a).map_or(base, PathBuf::from),
+            Some((name, a)) => self.one_path(name, a).unwrap_or(base),
             None => base,
         }
     }
@@ -505,7 +526,10 @@ pub trait Request: Default + Clone {
         if let Some(e) = r.error {
             return Err(e);
         }
-        let values = Args { map: r.values };
+        let values = Args {
+            map: r.values,
+            paths: BTreeMap::new(),
+        };
         r.fields.iter().try_for_each(|f| values.check_rules(f))
     }
 }

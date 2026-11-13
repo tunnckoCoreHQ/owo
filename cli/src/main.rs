@@ -83,6 +83,7 @@ fn run(ops: &[Operation], matches: &ArgMatches, global: &Global, env: &owo_core:
         .find(|op| op.path == path.as_slice())
         .expect("every command is an operation");
     let ran = Args::new(&op.name(), &op.fields, cli::args(op, m))
+        .map(|args| cli::with_paths(op, m, args))
         .and_then(|args| op.run(&args, &global.select, env, &mut std::io::stdin()));
     match ran {
         Ok(ran) => render::output(ran, global.json, global.quiet),

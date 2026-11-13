@@ -5,7 +5,7 @@
 
 use clap::builder::PossibleValuesParser;
 use clap::{value_parser, Arg, ArgAction, ArgMatches, Command};
-use owo_core::{Field, Operation, Select, Type};
+use owo_core::{Args, Field, Operation, Select, Type};
 use serde_json::{Map, Value};
 use std::path::PathBuf;
 
@@ -234,4 +234,14 @@ pub fn args(op: &Operation, m: &ArgMatches) -> Map<String, Value> {
         map.insert(f.name.into(), value);
     }
     map
+}
+
+/// `args` with the raw value of each path field given, so a path keeps bytes that are not UTF-8.
+pub fn with_paths(op: &Operation, m: &ArgMatches, mut args: Args) -> Args {
+    for f in op.fields.iter().filter(|f| f.ty == Type::Path) {
+        if let Some(p) = m.get_one::<PathBuf>(f.name) {
+            args = args.with_path(f.name, p.clone());
+        }
+    }
+    args
 }
