@@ -97,6 +97,8 @@ struct Turn {
     agent: Vec<(Option<String>, String)>,
     /// The prompt carried the identity block.
     intro: bool,
+    /// The identity of the session when the turn started; the turn is stored for it.
+    identity: Option<String>,
     /// Another update, such as a tool call, came after the last message chunk.
     split: bool,
 }
@@ -107,6 +109,8 @@ struct Session {
     identity: Option<String>,
     /// The agent's last config option list.
     options: Vec<Value>,
+    /// False when the agent gave only the older `modes` field: the proxy then shows no picker.
+    picker: bool,
     /// The agent's last command list.
     commands: Vec<Value>,
 }
@@ -134,6 +138,7 @@ impl State {
             identity: start.clone(),
             options: vec![],
             commands: vec![],
+            picker: true,
         })
     }
 
@@ -167,14 +172,14 @@ impl State {
         }
         true
     }
+}
 
-    /// The store of finished turns, under the session's current identity. None when the
-    /// session has no identity or there are no turns.
-    fn job(&mut self, session: &str, turns: Vec<Value>) -> Option<Job> {
-        let id = self.session(session).identity.clone()?;
-        let name = format!("{session}.{id}");
-        (!turns.is_empty()).then_some((id, name, turns))
-    }
+/// The store of the turns of one finished turn, for the identity it started with. None when
+/// it had no identity or there is nothing to store.
+fn job(identity: Option<String>, session: &str, turns: Vec<Value>) -> Option<Job> {
+    let id = identity?;
+    let name = format!("{session}.{id}");
+    (!turns.is_empty()).then_some((id, name, turns))
 }
 
 /// What the proxy does beside the injection.
@@ -372,9 +377,10 @@ impl Proxy {
         let mut st = state.lock().unwrap();
         let open: Vec<_> = st.turns.drain().collect();
         for (session, open) in open {
-            let left: Vec<Value> = open.into_iter().flat_map(turns).collect();
-            if let Some(job) = st.job(&session, left) {
-                let _ = store.send(job);
+            for turn in open {
+                if let Some(job) = job(turn.identity.clone(), &session, turns(turn)) {
+                    let _ = store.send(job);
+                }
             }
         }
         drop((st, store));
@@ -451,11 +457,11 @@ fn from_client(msg: &mut Value, state: &Mutex<State>, setup: &Setup) -> Option<R
                     st.pending.insert(key, Pending::New);
                 }
                 ("session/load", Some(s)) => {
-                    st.turns.entry(s.clone()).or_default().push_back(turn(
-                        &key,
-                        true,
-                        String::new(),
-                    ));
+                    let identity = st.session(s).identity.clone();
+                    st.turns.entry(s.clone()).or_default().push_back(Turn {
+                        identity,
+                        ..turn(&key, true, String::new())
+                    });
                     st.pending.insert(key, Pending::Load(s.clone()));
                 }
                 ("session/resume", Some(s)) => {
@@ -507,7 +513,7 @@ fn from_client(msg: &mut Value, state: &Mutex<State>, setup: &Setup) -> Option<R
             let text = st
                 .intro
                 .remove(&session)
-                .then(|| identity.and_then(|i| setup.text(&i)))
+                .then(|| identity.as_deref().and_then(|i| setup.text(i)))
                 .flatten();
             let intro = text.is_some();
             st.turns
@@ -515,6 +521,7 @@ fn from_client(msg: &mut Value, state: &Mutex<State>, setup: &Setup) -> Option<R
                 .or_default()
                 .push_back(Turn {
                     intro,
+                    identity,
                     ..turn(&key, false, user)
                 });
             st.pending.insert(key, Pending::Prompt(session.clone()));
@@ -529,10 +536,8 @@ fn from_client(msg: &mut Value, state: &Mutex<State>, setup: &Setup) -> Option<R
 /// The argument of a `/owo` command in the first text block of a prompt.
 fn command(prompt: &[Value]) -> Option<&str> {
     let text = prompt.iter().find(|b| b["type"] == "text")?["text"].as_str()?;
-    if text == "/owo" {
-        return Some("");
-    }
-    text.strip_prefix("/owo ").map(str::trim)
+    let (name, arg) = text.split_once(char::is_whitespace).unwrap_or((text, ""));
+    (name == "/owo").then_some(arg.trim())
 }
 
 /// Runs `/owo <arg>` and returns the lines that answer the prompt: a message, a config
@@ -570,7 +575,7 @@ fn run_command(st: &mut State, setup: &Setup, session: &str, id: &Value, arg: &s
         session,
         json!({ "sessionUpdate": "agent_message_chunk", "content": { "type": "text", "text": text } }),
     )];
-    if changed {
+    if changed && st.session(session).picker {
         let options = st.options(setup, session);
         out.push(update(
             session,
@@ -593,6 +598,7 @@ fn turn(request: &str, replay: bool, user: String) -> Turn {
         agent: vec![],
         split: false,
         intro: false,
+        identity: None,
     }
 }
 
@@ -673,8 +679,14 @@ fn from_agent_line(line: &[u8], state: &Mutex<State>, setup: &Setup) -> Option<A
         st.intro.insert(session.clone());
     }
     let agent = msg["result"]["configOptions"].as_array().cloned();
+    // A client that gets `configOptions` hides the older `modes` field, so an agent with
+    // only `modes` gets no picker. The `owo` command still switches the identity.
+    let picker = agent.is_some() || msg["result"].get("modes").is_none();
+    st.session(&session).picker = picker;
     st.session(&session).options = agent.unwrap_or_default();
-    msg["result"]["configOptions"] = st.options(setup, &session);
+    if picker {
+        msg["result"]["configOptions"] = st.options(setup, &session);
+    }
     let commands = st.commands(&session);
     out.after = Some(update(
         &session,
@@ -716,7 +728,7 @@ fn finish(st: &mut State, session: &str, request: &str, error: bool) -> Option<J
     if turn.intro && error {
         st.intro.insert(session.into());
     }
-    st.job(session, turns(turn))
+    job(turn.identity.clone(), session, turns(turn))
 }
 
 /// The `{id, role, text}` turns of a finished turn. The user turn's id is the first agent

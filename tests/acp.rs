@@ -520,3 +520,70 @@ fn with_no_identity_at_start_a_pick_starts_the_session() {
         [turn("m2.user", "user", "b"), turn("m2", "assistant", "y")]
     );
 }
+
+#[test]
+fn a_turn_stays_with_the_identity_it_started_with() {
+    let tmp = both();
+    let mut p = start(tmp.path(), &["-i", "nicole"], 0);
+    p.send(&init(), &[init_reply(json!({}))]);
+    p.open(
+        &request(1, "session/new", json!({ "cwd": "/w", "mcpServers": [] })),
+        &[response(1, json!({ "sessionId": "s" }))],
+        "s",
+        json!([picker("nicole", &["nicole", "reviewer"])]),
+    );
+    // The prompt is still open when the identity changes.
+    p.send(
+        &prompt(2, "s", &["question for nicole"]),
+        &[chunk("s", Some("m1"), "answer as nicole")],
+    );
+    p.ask(
+        &request(
+            3,
+            "session/set_config_option",
+            json!({ "sessionId": "s", "configId": "identity", "value": "reviewer" }),
+        ),
+        1,
+    );
+    let cancel =
+        json!({ "jsonrpc": "2.0", "method": "session/cancel", "params": { "sessionId": "s" } });
+    p.send(&s(cancel), &[end(2)]);
+    p.finish();
+    assert_eq!(
+        stored(tmp.path(), "s.nicole"),
+        [
+            turn("m1.user", "user", "question for nicole"),
+            turn("m1", "assistant", "answer as nicole"),
+        ]
+    );
+    assert!(!tmp
+        .path()
+        .join(".owo/sessions/s.reviewer.turns.jsonl")
+        .exists());
+}
+
+#[test]
+fn an_agent_with_only_modes_gets_no_picker() {
+    let tmp = both();
+    let mut p = start(tmp.path(), &["-i", "nicole"], 0);
+    p.send(&init(), &[init_reply(json!({}))]);
+    let modes =
+        json!({ "currentModeId": "ask", "availableModes": [{ "id": "ask", "name": "Ask" }] });
+    let reply = response(1, json!({ "sessionId": "s", "modes": modes }));
+    let got = p.call(
+        &request(1, "session/new", json!({ "cwd": "/w", "mcpServers": [] })),
+        std::slice::from_ref(&reply),
+        2,
+    );
+    assert_eq!(
+        parse(&got[0]),
+        parse(&reply),
+        "a client would hide `modes` when it gets `configOptions`"
+    );
+    assert_eq!(parse(&got[1]), commands("s", &[]));
+    // The command still switches, with no config update. A tab ends the command name too.
+    let got = p.ask(&prompt(2, "s", &["/owo\treviewer"]), 2);
+    assert!(got[0].contains("now records into"), "{}", got[0]);
+    assert_eq!(parse(&got[1]), parse(&end(2)));
+    p.finish();
+}
