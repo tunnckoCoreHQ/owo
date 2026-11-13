@@ -150,25 +150,27 @@ pub fn serve(cli: &owo::Cli, agent: &[String], mcp: bool) -> Result<u8> {
 }
 
 /// The identity the library resolves from the flags, `OWO_IDENTITY` and the config. An
-/// identity with no folder is a config error here, before the agent starts.
+/// identity with no folder, or a project that is not found, is a config error here, before the
+/// agent starts.
 fn identity(globals: &[String]) -> Result<Option<String>> {
     let run = |command: &str| -> Result<owo::Output> {
         let mut argv = globals.to_vec();
         argv.extend(["--json".into(), command.into()]);
-        let (_, out) = crate::run_argv(argv, String::new())?;
-        match out.error {
-            Some(e) => Err(e),
-            None => Ok(out),
-        }
+        Ok(crate::run_argv(argv, String::new())?.1)
     };
     let config = run("config")?;
     eprint!("{}", crate::warnings(&config));
-    let id = config.envelope["data"]["identity"].as_str();
-    if id.is_some() {
-        // `state` loads the identity, so it checks the folder.
-        run("state")?;
+    if let Some(e) = config.error {
+        return Err(e);
     }
-    Ok(id.map(String::from))
+    let Some(id) = config.envelope["data"]["identity"].as_str() else {
+        return Ok(None);
+    };
+    // `state` loads the identity, so it checks the identity folder and the project.
+    match run("state")?.error {
+        Some(e) => Err(e),
+        None => Ok(Some(id.into())),
+    }
 }
 
 /// Tracks a client line and returns its new bytes when the proxy changes it.
