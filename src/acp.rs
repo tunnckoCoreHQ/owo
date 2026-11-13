@@ -5,7 +5,7 @@
 
 use anyhow::{Context, Result};
 use serde_json::{json, Value};
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::io::{BufRead, BufReader, Write};
 use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -27,9 +27,11 @@ enum Pending {
     Prompt(String),
 }
 
-/// The turn being captured for one session.
+/// One open turn of a session: a `session/prompt` or a `session/load` that waits for its response.
 struct Turn {
-    /// True between a `session/load` request and its response.
+    /// The JSON text of the request id.
+    request: String,
+    /// True for a `session/load`, whose updates are a replay.
     replay: bool,
     user: String,
     /// Agent messages in order: the `messageId`, when there is one, and the joined text.
@@ -44,7 +46,8 @@ struct State {
     pending: HashMap<String, Pending>,
     /// Sessions from `session/new` whose first prompt still gets the identity block.
     intro: HashSet<String>,
-    turns: HashMap<String, Turn>,
+    /// The open turns of each session, oldest first. An update belongs to the oldest one.
+    turns: HashMap<String, VecDeque<Turn>>,
 }
 
 /// Runs the agent behind the proxy until it exits, and returns its exit code.
@@ -179,8 +182,12 @@ fn from_client(line: &[u8], state: &Mutex<State>, inject: &Inject) -> Option<Vec
                     st.pending.insert(id, Pending::New);
                 }
                 ("session/load", Some(s)) => {
+                    st.turns.entry(s.clone()).or_default().push_back(turn(
+                        &id,
+                        true,
+                        String::new(),
+                    ));
                     st.pending.insert(id, Pending::Load(s.clone()));
-                    st.turns.insert(s.clone(), turn(true, String::new()));
                 }
                 _ => {}
             }
@@ -231,8 +238,11 @@ fn from_client(line: &[u8], state: &Mutex<State>, inject: &Inject) -> Option<Vec
                 .filter_map(|b| b["text"].as_str())
                 .collect();
             let user = user.join("\n");
+            st.turns
+                .entry(session.clone())
+                .or_default()
+                .push_back(turn(&id, false, user));
             st.pending.insert(id, Pending::Prompt(session.clone()));
-            st.turns.insert(session.clone(), turn(false, user));
             if !st.intro.remove(&session) {
                 return None;
             }
@@ -247,8 +257,9 @@ fn from_client(line: &[u8], state: &Mutex<State>, inject: &Inject) -> Option<Vec
     Some(bytes)
 }
 
-fn turn(replay: bool, user: String) -> Turn {
+fn turn(request: &str, replay: bool, user: String) -> Turn {
     Turn {
+        request: request.into(),
         replay,
         user,
         agent: vec![],
@@ -262,7 +273,10 @@ fn from_agent_line(line: &[u8], state: &Mutex<State>) -> Option<(String, Vec<Val
     if msg["method"] == "session/update" {
         let (params, update) = (&msg["params"], &msg["params"]["update"]);
         if update["sessionUpdate"] == "agent_message_chunk" && update["content"]["type"] == "text" {
-            let turn = st.turns.get_mut(params["sessionId"].as_str()?)?;
+            let turn = st
+                .turns
+                .get_mut(params["sessionId"].as_str()?)?
+                .front_mut()?;
             let text = update["content"]["text"].as_str()?;
             let id = update["messageId"].as_str().map(String::from);
             // Chunks with one `messageId` are one message; chunks with none join while adjacent.
@@ -281,7 +295,8 @@ fn from_agent_line(line: &[u8], state: &Mutex<State>) -> Option<(String, Vec<Val
         return None;
     }
     let result = &msg["result"];
-    match st.pending.remove(&msg.get("id")?.to_string())? {
+    let request = msg.get("id")?.to_string();
+    match st.pending.remove(&request)? {
         Pending::Initialize => {
             st.system_prompt =
                 result["agentCapabilities"]["sessionCapabilities"]["systemPrompt"].is_object();
@@ -294,7 +309,8 @@ fn from_agent_line(line: &[u8], state: &Mutex<State>) -> Option<(String, Vec<Val
             None
         }
         Pending::Load(session) | Pending::Prompt(session) => {
-            let turn = st.turns.remove(&session)?;
+            let open = st.turns.get_mut(&session)?;
+            let turn = open.remove(open.iter().position(|t| t.request == request)?)?;
             let turns = turns(turn);
             (!turns.is_empty()).then_some((session, turns))
         }
