@@ -16,9 +16,9 @@ fn main() -> ExitCode {
         libc::signal(libc::SIGPIPE, libc::SIG_DFL);
     }
     let cli = Cli::parse();
-    // `owo acp` ignores the signal, so an agent that closes its stdin early does not kill the proxy.
+    // `owo mcp` and `owo acp` ignore the signal: a closed pipe is a write error there, not a kill.
     #[cfg(unix)]
-    if matches!(cli.command, Command::Acp { .. }) {
+    if matches!(cli.command, Command::Mcp { .. } | Command::Acp { .. }) {
         unsafe {
             libc::signal(libc::SIGPIPE, libc::SIG_IGN);
         }
