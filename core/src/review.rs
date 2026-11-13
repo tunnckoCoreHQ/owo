@@ -228,11 +228,36 @@ pub struct SoulChange {
     pub other: Map<String, Value>,
 }
 
-/// The soul history records, oldest first; a record that does not parse is left out.
+impl SoulChange {
+    /// A history record as written. A field of the wrong type stays in `other`, so the record
+    /// serializes as it was; a record that is not an object has no fields.
+    fn of(record: &Value) -> Self {
+        let mut other = record.as_object().cloned().unwrap_or_default();
+        let mut take = |key: &str, is: fn(&Value) -> bool| match other.get(key) {
+            Some(v) if is(v) => other.remove(key),
+            _ => None,
+        };
+        let text = |v: Option<Value>| v.and_then(|v| v.as_str().map(str::to_string));
+        let at = text(take("at", Value::is_string));
+        let file = text(take("file", Value::is_string));
+        let change = text(take("change", Value::is_string));
+        let evidence = take("evidence", |v| {
+            v.as_array().is_some_and(|a| a.iter().all(Value::is_string))
+        })
+        .and_then(|v| serde_json::from_value(v).ok());
+        Self {
+            at,
+            file,
+            change,
+            evidence,
+            other,
+        }
+    }
+}
+
+/// The soul history records, oldest first.
 fn soul_changes(id: &Identity) -> impl Iterator<Item = SoulChange> + '_ {
-    crate::state::history(id)
-        .iter()
-        .filter_map(|r| SoulChange::deserialize(r).ok())
+    crate::state::history(id).iter().map(SoulChange::of)
 }
 
 /// The newest soul history record.
