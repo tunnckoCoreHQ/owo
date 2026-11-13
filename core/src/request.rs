@@ -179,9 +179,13 @@ impl Args {
         Ok(args)
     }
 
-    /// The range, conflicts and requires rules of `f`, when it is given.
+    /// The rules of `f`: a required path is there and not empty, and when `f` is given, its
+    /// range, conflicts and requires rules.
     fn check_rules(&self, f: &Field) -> Result<()> {
         if !self.given(f.name) {
+            if f.required && f.ty == Type::Path {
+                return Err(usage(format!("missing argument {:?}", f.name)));
+            }
             return Ok(());
         }
         if let Some((min, max)) = f.range {
