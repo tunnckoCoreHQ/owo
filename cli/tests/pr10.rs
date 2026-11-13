@@ -239,7 +239,8 @@ fn pr10_multi_value_array_names_the_field_type() {
     assert!(text.contains("paths, text"), "{text}");
 }
 
-#[cfg(unix)]
+// macOS file systems refuse a name that is not UTF-8, so the bytes cannot reach owo there.
+#[cfg(all(unix, not(target_os = "macos")))]
 #[test]
 fn pr10_cli_keeps_raw_path_bytes() {
     use std::ffi::OsStr;
