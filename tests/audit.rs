@@ -562,13 +562,14 @@ fn mcp_refuses_a_nul_in_an_argument() {
     assert!(!tmp.path().join("thea/life/characters/nul.md").exists());
 }
 
-#[test]
-fn write_reports_a_config_error_before_it_reads_stdin() {
+/// The exit code of `owo <args>` on an empty root while the test keeps stdin open; None when
+/// owo is still running after two seconds.
+fn code_with_open_stdin(args: &[&str]) -> Option<i32> {
     let tmp = TempDir::new().unwrap();
     let mut child = std::process::Command::new(assert_cmd::cargo::cargo_bin("owo"))
         .arg("--root")
         .arg(tmp.path())
-        .args(["-i", "nope", "write", "life/x.md"])
+        .args(args)
         .stdin(std::process::Stdio::piped())
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
@@ -577,7 +578,7 @@ fn write_reports_a_config_error_before_it_reads_stdin() {
     // The test keeps stdin open, so a read of it never ends.
     let _open = child.stdin.take();
     let stop = std::time::Instant::now() + std::time::Duration::from_secs(2);
-    let code = loop {
+    loop {
         if let Some(status) = child.try_wait().unwrap() {
             break status.code();
         }
@@ -587,7 +588,18 @@ fn write_reports_a_config_error_before_it_reads_stdin() {
             break None;
         }
         std::thread::sleep(std::time::Duration::from_millis(20));
-    };
+    }
+}
+
+#[test]
+fn write_reports_a_config_error_before_it_reads_stdin() {
+    let code = code_with_open_stdin(&["-i", "nope", "write", "life/x.md"]);
+    assert_eq!(code, Some(3), "owo waited for stdin");
+}
+
+#[test]
+fn sync_push_reports_a_config_error_before_it_reads_stdin() {
+    let code = code_with_open_stdin(&["-i", "nope", "sync", "push", "--session", "s"]);
     assert_eq!(code, Some(3), "owo waited for stdin");
 }
 
