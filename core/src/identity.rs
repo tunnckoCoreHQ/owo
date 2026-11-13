@@ -255,6 +255,8 @@ pub struct Identity {
     pub project: Option<String>,
     /// The home folder for `~/` in a project KB path; the caller sets it.
     pub home: Option<PathBuf>,
+    /// The caller's folder, which relative export paths join onto; the caller sets it.
+    pub cwd: PathBuf,
 }
 
 pub fn classify(rel: &str) -> Kind {
@@ -400,6 +402,7 @@ impl Identity {
             state,
             keys: Self::link_keys(&entries),
             home: None,
+            cwd: PathBuf::new(),
             project: None,
             entries,
         })

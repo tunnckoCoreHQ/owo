@@ -304,8 +304,9 @@ fn migrate_locations(
     Ok(())
 }
 
-pub fn v1(src: &Path, out: &Path) -> Result<Report> {
-    let refs = src.join("references");
+/// Migrates `src` into `out`; relative paths join onto `cwd`. The report names `out` as given.
+pub fn v1(cwd: &Path, src: &Path, out: &Path) -> Result<Report> {
+    let refs = cwd.join(src).join("references");
     if !refs.is_dir() {
         bail!(
             "{} has no references/ folder; expected a v1 identity",
@@ -317,10 +318,12 @@ pub fn v1(src: &Path, out: &Path) -> Result<Report> {
         .and_then(|s| s.to_str())
         .ok_or(crate::Fault::OutNoSlug)?
         .to_string();
-    let root = out
+    let shown = out
         .parent()
         .filter(|p| !p.as_os_str().is_empty())
         .unwrap_or(Path::new("."));
+    let root = &cwd.join(shown);
+    let src = &cwd.join(src);
     let manifest: Value = fs::read_to_string(refs.join("manifest.json"))
         .ok()
         .and_then(|t| serde_json::from_str(&t).ok())
@@ -333,12 +336,14 @@ pub fn v1(src: &Path, out: &Path) -> Result<Report> {
     let sources = root.join("sources").join(&slug);
     let had_sources = sources.exists();
     crate::create::new_identity(root, &name, &slug)?;
-    fill(src, &refs, root, &slug, &manifest).inspect_err(|_| {
+    let mut report = fill(src, &refs, root, &slug, &manifest).inspect_err(|_| {
         let _ = fs::remove_dir_all(root.join(&slug));
         if !had_sources {
             let _ = fs::remove_dir_all(&sources);
         }
-    })
+    })?;
+    report.dir = shown.join(&slug).display().to_string();
+    Ok(report)
 }
 
 /// Fills a just-created identity from a v1 folder. The caller removes the folder on error.

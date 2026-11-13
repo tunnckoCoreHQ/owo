@@ -355,7 +355,7 @@ pub fn soulspec(id: &Identity, dir: &Path) -> Result<Report> {
 }
 
 /// A `SKILL.md` wrapper for hosts that load identities as skills.
-pub fn skill(id: &Identity, dir: &Path) -> Result<String> {
+pub fn skill(id: &Identity, dir: &Path) -> Result<()> {
     let name = id.name().to_string();
     let soul = id.read_json("soul/soul.json").unwrap_or(Value::Null);
     let about = soul["description"]
@@ -414,9 +414,8 @@ Add `--look` when visuals matter.
         )),
     );
     fs::create_dir_all(dir)?;
-    let path = dir.join("SKILL.md");
-    fs::write(&path, text)?;
-    Ok(path.display().to_string())
+    fs::write(dir.join("SKILL.md"), text)?;
+    Ok(())
 }
 
 fn crc32(bytes: &[u8]) -> u32 {

@@ -115,10 +115,11 @@ pub fn entry_types() -> impl Iterator<Item = &'static str> {
     templates::ENTRY_TEMPLATES.iter().map(|(n, _)| *n)
 }
 
-/// Moves a v1 identity folder into a new identity folder (`<root>/<slug>`).
-pub fn migrate_v1(req: &MigrateRequest) -> Result<MigrateReport> {
+/// Moves a v1 identity folder into a new identity folder (`<root>/<slug>`). Relative paths
+/// join onto `cwd`, the caller's folder.
+pub fn migrate_v1(req: &MigrateRequest, cwd: &Path) -> Result<MigrateReport> {
     req.check()?;
-    Ok(migrate::v1(&req.path, &req.out)?)
+    Ok(migrate::v1(cwd, &req.path, &req.out)?)
 }
 
 /// One template: its name and its override file in `<root>/.templates/`, when there is one.
@@ -151,6 +152,8 @@ pub struct Root {
     pub config: Resolved,
     pub warnings: Vec<String>,
     home: Option<PathBuf>,
+    /// `Env.cwd`, which relative request paths join onto.
+    cwd: PathBuf,
 }
 
 impl Root {
@@ -176,6 +179,7 @@ impl Root {
             config,
             warnings,
             home: env.home.clone(),
+            cwd: env.cwd.clone(),
         })
     }
 
@@ -187,6 +191,7 @@ impl Root {
     pub fn identity(&self) -> Result<Identity> {
         let mut id = Identity::load(&self.config.root, &need_identity(&self.config)?)?;
         id.home = self.home.clone();
+        id.cwd = self.cwd.clone();
         id.project = self.config.project.clone();
         Ok(id)
     }
@@ -243,6 +248,7 @@ impl Root {
         .map(str::to_string);
         Ok(SessionSync {
             root: &self.config.root,
+            cwd: &self.cwd,
             slug,
             project,
         })
@@ -258,6 +264,8 @@ impl Root {
 /// Session sync for one identity: stores turns and slices them into `sources/` for ingest.
 pub struct SessionSync<'a> {
     root: &'a Path,
+    /// `Env.cwd`, which a relative transcript path joins onto.
+    cwd: &'a Path,
     slug: String,
     project: Option<String>,
 }
@@ -266,6 +274,7 @@ impl SessionSync<'_> {
     fn request<'a>(&'a self, session: &'a str, opts: &SyncOptions) -> sync::StartRequest<'a> {
         sync::StartRequest {
             root: self.root,
+            cwd: self.cwd,
             slug: &self.slug,
             session,
             now: opts.now,
@@ -486,20 +495,29 @@ impl Identity {
         let card = export::card(self, req.spec, project, scenario)?;
         let warnings = export::warnings(&card);
         if let Some(out) = &req.out {
-            export::write_card(self, &card, project, scenario, out, req.png.as_deref())?;
+            let png = req.png.as_ref().map(|p| self.cwd.join(p));
+            export::write_card(
+                self,
+                &card,
+                project,
+                scenario,
+                &self.cwd.join(out),
+                png.as_deref(),
+            )?;
         }
         Ok(Card { card, warnings })
     }
 
-    /// Writes a SKILL.md wrapper into `req.out` and returns its path.
+    /// Writes a SKILL.md wrapper into `req.out` and returns its path, as `req.out` gives it.
     pub fn export_skill(&self, req: &SkillRequest) -> Result<String> {
         req.check()?;
-        Ok(export::skill(self, &req.out)?)
+        export::skill(self, &self.cwd.join(&req.out))?;
+        Ok(req.out.join("SKILL.md").display().to_string())
     }
 
     /// Writes a SoulSpec package into `req.out`.
     pub fn export_soulspec(&self, req: &SoulspecRequest) -> Result<Soulspec> {
         req.check()?;
-        Ok(export::soulspec(self, &req.out)?)
+        Ok(export::soulspec(self, &self.cwd.join(&req.out))?)
     }
 }

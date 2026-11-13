@@ -342,7 +342,7 @@ pub fn operations() -> Vec<Operation> {
         op::<MigrateRequest>(
             &["migrate", "v1"],
             "v1 identity folder (with references/) into <out> = <root>/<slug>",
-            |r, _| Ok(Outcome::Migrate(migrate_v1(&r)?)),
+            |r, s| Ok(Outcome::Migrate(migrate_v1(&r, &s.env.cwd)?)),
         ),
         op::<()>(
             &["config"],

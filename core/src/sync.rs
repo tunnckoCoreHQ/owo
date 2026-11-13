@@ -180,6 +180,8 @@ pub struct Start {
 
 pub struct StartRequest<'a> {
     pub root: &'a Path,
+    /// The caller's folder, which a relative transcript path joins onto.
+    pub cwd: &'a Path,
     pub slug: &'a str,
     pub session: &'a str,
     pub now: bool,
@@ -383,7 +385,7 @@ pub fn push(req: &StartRequest, turns: &[Turn]) -> Result<Start> {
 /// Reads the transcript, decides whether a run is due and writes the slice and prompt.
 /// The caller holds the session lock.
 fn run(req: &StartRequest, transcript: &Path, format: Format) -> Result<Start> {
-    let raw = fs::read_to_string(transcript)
+    let raw = fs::read_to_string(req.cwd.join(transcript))
         .with_context(|| format!("reading {}", transcript.display()))?;
     let messages = parse(&raw, format)?;
     if messages.is_empty() && !raw.trim().is_empty() {
