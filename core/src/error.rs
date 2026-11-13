@@ -74,7 +74,14 @@ impl Fault {
 impl std::fmt::Display for Fault {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Fault::NeedsTitle(kind) => write!(f, "a {} entry needs a title", kind.name()),
+            Fault::NeedsTitle(kind) => {
+                let article = if kind.name().starts_with(['a', 'e', 'i', 'o', 'u']) {
+                    "an"
+                } else {
+                    "a"
+                };
+                write!(f, "{article} {} entry needs a title", kind.name())
+            }
             Fault::UnknownTemplate(name) => write!(f, "unknown template {name:?}"),
             Fault::NoIdentityFolder(dir) => {
                 write!(f, "identity folder not found: {}", dir.display())
