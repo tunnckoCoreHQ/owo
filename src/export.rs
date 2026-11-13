@@ -98,9 +98,10 @@ fn lore(e: &Entry, n: usize) -> Value {
     let mut keys = vec![title.clone()];
     keys.extend(e.aliases.iter().cloned());
     let summary = e.field_str("summary").unwrap_or_default();
-    // Summary plus `## Key facts` (design 10.3); entries without that section give their body.
-    let facts =
-        markdown::section_text(e.body(), "Key facts").map(|(_, text)| text.trim().to_string());
+    // Summary plus `## Key facts`; an entry whose key facts are missing or empty gives its body.
+    let facts = markdown::section_text(e.body(), "Key facts")
+        .map(|(_, text)| text.trim().to_string())
+        .filter(|t| !t.is_empty());
     let body = facts.unwrap_or_else(|| body_without(&e.text, &["Identifiers", "Sources"]));
     let content = [summary, body]
         .into_iter()
