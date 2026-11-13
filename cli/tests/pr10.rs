@@ -314,7 +314,7 @@ fn pr10_export_write_error_names_the_path_as_given() {
         tmp.path(),
         &["-i", "nicole", "export", "card", "--out", "ro/x.json"],
     );
-    assert!(err.starts_with("owo: writing ro/x.json.tmp: "), "{err}");
+    assert!(err.starts_with("owo: writing ro/x.json: "), "{err}");
 }
 
 #[test]
@@ -382,7 +382,7 @@ fn pr10_soulspec_write_error_names_the_path_as_given() {
         tmp.path(),
         &["-i", "nicole", "export", "soulspec", "--out", "pkg"],
     );
-    assert!(err.contains("owo: writing pkg/soul.json.tmp: "), "{err}");
+    assert!(err.contains("owo: writing pkg/soul.json: "), "{err}");
 }
 
 #[test]
