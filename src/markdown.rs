@@ -138,6 +138,9 @@ pub struct Link {
     pub line: usize,
 }
 
+/// Characters a wiki-link target cannot hold: they end the target or the link.
+pub const LINK_BREAKERS: &[char] = &['#', '|', '[', ']'];
+
 fn link_re() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
     RE.get_or_init(|| {

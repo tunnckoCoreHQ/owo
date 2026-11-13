@@ -208,6 +208,14 @@ fn check_entry_schema(e: &Entry, out: &mut Vec<Diagnostic>) {
     if e.field_str("title").is_none_or(|t| t.trim().is_empty()) {
         out.push(err(rel, "title is missing"));
     }
+    for name in e.title.iter().chain(&e.aliases) {
+        if name.contains(crate::markdown::LINK_BREAKERS) {
+            out.push(err(
+                rel,
+                format!("{name:?} holds # | [ or ], which break a [[link]] to it"),
+            ));
+        }
+    }
     match e.field_str("status") {
         Some(s) if STATUSES.contains(&s.as_str()) => {}
         Some(s) => out.push(err(

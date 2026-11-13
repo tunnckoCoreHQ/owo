@@ -40,6 +40,11 @@ pub fn add(id: &Identity, req: &Request) -> Result<(String, bool)> {
         "" if req.kind == Kind::Log => date.as_str(),
         t => t,
     };
+    for name in std::iter::once(title).chain(req.aliases.iter().map(String::as_str)) {
+        if name.contains(crate::markdown::LINK_BREAKERS) {
+            bail!("{name:?} holds # | [ or ], which break a [[link]] to it");
+        }
+    }
     let slug = slugify(title);
     if slug.is_empty() {
         bail!("title {title:?} has no slug characters; pass a title");
