@@ -477,11 +477,14 @@ fn dispatch(cli: &Cli, env: &mut Env, out: &mut Out) -> Result<Output> {
                     every,
                 },
         } => {
-            let turns = match turns {
-                Some(t) => t.clone(),
-                None => stdin(env)?,
-            };
+            // The reader runs inside the step, after the config resolves.
+            let reader = env.stdin.take();
             sync_cmd(cli, env, out, session, *now, *every, |req| {
+                let turns = match (turns, reader) {
+                    (Some(t), _) => t.clone(),
+                    (None, Some(read)) => read()?,
+                    (None, None) => String::new(),
+                };
                 sync::push(req, &turns)
             })
         }
