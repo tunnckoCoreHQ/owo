@@ -13,10 +13,29 @@ use std::sync::{mpsc, Arc, Mutex};
 
 /// What the proxy adds to the session requests.
 struct Inject {
-    /// The text that tells the agent to load the identity.
-    text: String,
-    /// The owo MCP server entry, with `--mcp`.
+    /// The text that tells the agent to load the identity with the owo MCP `context` tool.
+    /// None with `--inject`: the text is then the identity context, read at each session start.
+    instruction: Option<String>,
+    /// The owo MCP server entry. None with `--inject`.
     server: Option<Value>,
+    /// The global flags of the `owo context` call.
+    globals: Vec<String>,
+}
+
+impl Inject {
+    /// The text block for a session start. With `--inject` it is the output of `owo context`;
+    /// when that fails, one warning line goes to stderr and nothing is injected.
+    fn text(&self) -> Option<String> {
+        if let Some(text) = &self.instruction {
+            return Some(text.clone());
+        }
+        let mut argv = self.globals.clone();
+        argv.push("context".into());
+        run(argv)
+            .map(|out| out.text)
+            .map_err(|e| eprintln!("owo: warning: {e}"))
+            .ok()
+    }
 }
 
 /// A client request that waits for the agent's response.
@@ -55,20 +74,21 @@ struct State {
 }
 
 /// Runs the agent behind the proxy until it exits, and returns its exit code.
-pub fn serve(cli: &owo::Cli, agent: &[String], mcp: bool) -> Result<u8> {
+pub fn serve(cli: &owo::Cli, agent: &[String], context: bool) -> Result<u8> {
     let globals = crate::global_args(cli, cli.identity.clone(), cli.project.clone());
     let inject = match identity(&globals)? {
         Some(id) => Some(Inject {
-            text: format!("Your identity is the owo identity \"{id}\". Before you answer, load it with the `context` tool of the owo MCP server, and keep to it."),
-            server: mcp.then(
+            instruction: (!context).then(|| format!("Your identity is the owo identity \"{id}\". Before you answer, load it with the `context` tool of the owo MCP server, and keep to it.")),
+            server: (!context).then(
                 || json!({ "name": "owo", "command": "owo", "args": ["mcp", "-i", id], "env": [] }),
             ),
+            globals: globals.clone(),
         }),
-        None if mcp => {
+        None if context => {
             return Err(<owo::Cli as clap::CommandFactory>::command()
                 .error(
                     clap::error::ErrorKind::MissingRequiredArgument,
-                    "--mcp needs an identity: pass -i, set OWO_IDENTITY, or set one in the config",
+                    "--inject needs an identity: pass -i, set OWO_IDENTITY, or set one in the config",
                 )
                 .into())
         }
@@ -206,8 +226,8 @@ fn from_client(line: &[u8], state: &Mutex<State>, inject: &Inject) -> Option<Vec
             }
             let params = params?;
             let mut changed = false;
-            if st.system_prompt {
-                let block = json!({ "type": "text", "text": inject.text });
+            if let Some(text) = st.system_prompt.then(|| inject.text()).flatten() {
+                let block = json!({ "type": "text", "text": text });
                 match params.get_mut("systemPrompt").filter(|s| !s.is_null()) {
                     None => {
                         params["systemPrompt"] = json!({ "mode": "append", "content": [block] });
@@ -251,7 +271,8 @@ fn from_client(line: &[u8], state: &Mutex<State>, inject: &Inject) -> Option<Vec
                 .filter_map(|b| b["text"].as_str())
                 .collect();
             let user = user.join("\n");
-            let intro = st.intro.remove(&session);
+            let text = st.intro.remove(&session).then(|| inject.text()).flatten();
+            let intro = text.is_some();
             st.turns
                 .entry(session.clone())
                 .or_default()
@@ -260,10 +281,8 @@ fn from_client(line: &[u8], state: &Mutex<State>, inject: &Inject) -> Option<Vec
                     ..turn(&id, false, user)
                 });
             st.pending.insert(id, Pending::Prompt(session.clone()));
-            if !intro {
-                return None;
-            }
-            prompt.insert(0, json!({ "type": "text", "text": inject.text }));
+            let text = text?;
+            prompt.insert(0, json!({ "type": "text", "text": text }));
         }
         _ => return None,
     }
@@ -389,11 +408,18 @@ fn push(globals: &[String], session: &str, turns: Vec<Value>) {
         format!("--every={}", usize::MAX),
         format!("--turns={}", Value::from(turns)),
     ]);
-    let error = match crate::run_argv(argv, String::new()) {
-        Ok((_, out)) => out.error.map(|e| format!("{e:#}")),
-        Err(e) => Some(e.to_string().lines().next().unwrap_or_default().to_string()),
-    };
-    if let Some(e) = error {
+    if let Err(e) = run(argv) {
         eprintln!("owo: warning: {e}");
+    }
+}
+
+/// Runs one owo command line in process. The error is one line of text.
+fn run(argv: Vec<String>) -> Result<owo::Output, String> {
+    match crate::run_argv(argv, String::new()) {
+        Ok((_, out)) => match out.error {
+            Some(e) => Err(format!("{e:#}")),
+            None => Ok(out),
+        },
+        Err(e) => Err(e.to_string().lines().next().unwrap_or_default().to_string()),
     }
 }

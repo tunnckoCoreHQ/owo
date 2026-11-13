@@ -7,6 +7,10 @@ use common::{copy_example, examples, owo};
 use serde_json::json;
 use tempfile::TempDir;
 
+fn owo_server() -> serde_json::Value {
+    json!({ "name": "owo", "command": "owo", "args": ["mcp", "-i", "nicole"], "env": [] })
+}
+
 #[test]
 fn passes_lines_through_and_stores_turns_once() {
     let tmp = copy_example("nicole");
@@ -79,6 +83,11 @@ fn passes_lines_through_and_stores_turns_once() {
             assert_eq!(block["type"], "text");
             assert!(block["text"].as_str().unwrap().contains("\"nicole\""));
             assert_eq!(got, parse(sent));
+        } else if i == 1 || i == 7 {
+            // A session request gets the owo MCP server.
+            let mut want = parse(sent);
+            want["params"]["mcpServers"] = json!([owo_server()]);
+            assert_eq!(parse(got), want);
         } else {
             assert_eq!(got, sent, "line {i} passes byte for byte");
         }
@@ -99,7 +108,7 @@ fn passes_lines_through_and_stores_turns_once() {
 #[test]
 fn appends_the_system_prompt_and_the_mcp_server() {
     let tmp = copy_example("nicole");
-    let mut p = start(tmp.path(), &["--mcp"], 0);
+    let mut p = start(tmp.path(), &[], 0);
     let fs_server = json!({ "name": "fs", "command": "/bin/fs", "args": [], "env": [] });
     let sent = [
         init(),
@@ -140,8 +149,7 @@ fn appends_the_system_prompt_and_the_mcp_server() {
         .to_string();
     assert!(text.contains("\"nicole\"") && text.contains("`context`"));
     let block = json!({ "type": "text", "text": text });
-    let owo_server =
-        json!({ "name": "owo", "command": "owo", "args": ["mcp", "-i", "nicole"], "env": [] });
+    let owo_server = owo_server();
     let mut new = parse(&sent[1]);
     new["params"]["systemPrompt"] = json!({ "mode": "append", "content": [block] });
     new["params"]["mcpServers"] = json!([fs_server, owo_server]);
@@ -183,7 +191,7 @@ fn without_an_identity_it_only_passes_lines_through() {
     assert_eq!(got, sent);
     assert!(!tmp.path().join(".owo").exists(), "nothing is stored");
     owo(tmp.path())
-        .args(["acp", "--mcp", "--", "true"])
+        .args(["acp", "--inject", "--", "true"])
         .assert()
         .code(2);
 }
@@ -202,4 +210,46 @@ fn mcp_does_not_list_acp() {
     let tools = reply["result"]["tools"].as_array().unwrap();
     assert!(tools.iter().any(|t| t["name"] == "sync_push"));
     assert!(!tools.iter().any(|t| t["name"] == "acp"));
+}
+
+#[test]
+fn inject_puts_the_identity_context_in_the_prompt() {
+    let tmp = copy_example("nicole");
+    let context = owo(tmp.path())
+        .args(["-i", "nicole", "context"])
+        .output()
+        .unwrap();
+    let context = String::from_utf8(context.stdout).unwrap();
+    assert!(!context.trim().is_empty());
+    let new = request(1, "session/new", json!({ "cwd": "/w", "mcpServers": [] }));
+
+    // With the systemPrompt capability, the context is the system prompt.
+    let mut p = start(tmp.path(), &["--inject"], 0);
+    p.send(&init(), &[init_reply(json!({ "systemPrompt": {} }))]);
+    p.send(&new, &[response(1, json!({ "sessionId": "s1" }))]);
+    let (_, got) = p.finish();
+    let mut want = parse(&new);
+    want["params"]["systemPrompt"] =
+        json!({ "mode": "append", "content": [{ "type": "text", "text": context }] });
+    assert_eq!(parse(&got[1]), want, "the context, and no owo MCP server");
+
+    // Without it, the context is the first block of the first prompt, and it is not stored.
+    let mut p = start(tmp.path(), &["--inject"], 0);
+    p.send(&init(), &[init_reply(json!({}))]);
+    p.send(&new, &[response(1, json!({ "sessionId": "s2" }))]);
+    p.send(
+        &prompt(2, "s2", &["hi"]),
+        &[chunk("s2", Some("m1"), "yo"), end(2)],
+    );
+    let (_, got) = p.finish();
+    assert_eq!(got[1], new, "the session request passes unchanged");
+    let blocks = parse(&got[2])["params"]["prompt"].clone();
+    assert_eq!(
+        blocks,
+        json!([{ "type": "text", "text": context }, { "type": "text", "text": "hi" }])
+    );
+    assert_eq!(
+        stored(tmp.path(), "s2"),
+        [turn("m1.user", "user", "hi"), turn("m1", "assistant", "yo")]
+    );
 }

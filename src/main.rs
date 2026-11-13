@@ -30,7 +30,7 @@ fn main() -> ExitCode {
                 Err(e) => Output::from(e),
             }
         }
-        Command::Acp { mcp, agent } => match acp::serve(&cli, agent, *mcp) {
+        Command::Acp { inject, agent } => match acp::serve(&cli, agent, *inject) {
             Ok(code) => return ExitCode::from(code),
             Err(e) => Output::from(e),
         },

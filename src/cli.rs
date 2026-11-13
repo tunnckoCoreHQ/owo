@@ -222,9 +222,9 @@ pub enum Command {
     },
     /// Run an ACP agent behind a pass-through proxy that stores turns and injects the identity
     Acp {
-        /// Add the owo MCP server to each session (needs an identity)
+        /// Put the identity context in the system prompt, and add no owo MCP server (needs an identity)
         #[arg(long)]
-        mcp: bool,
+        inject: bool,
         /// The agent command and its arguments, after --
         #[arg(last = true, required = true, value_name = "AGENT")]
         agent: Vec<String>,

@@ -725,7 +725,7 @@ fn acp_refuses_an_identity_with_no_folder() {
 #[test]
 fn acp_mcp_keeps_one_owo_server() {
     let tmp = copy_example("nicole");
-    let mut p = start(tmp.path(), &["--mcp"], 0);
+    let mut p = start(tmp.path(), &[], 0);
     p.send(&init(), &[init_reply(json!({}))]);
     let own = json!({ "name": "owo", "command": "/usr/bin/owo", "args": ["mcp"], "env": [] });
     p.send(
