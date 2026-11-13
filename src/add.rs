@@ -30,7 +30,7 @@ pub fn add(id: &Identity, req: &Request) -> Result<(String, bool)> {
         bail!("--kb is for project; a {name} has no KB");
     }
     // The local day, so `owo add log` names the day the user is living.
-    let today = chrono::Local::now().format("%Y-%m-%d").to_string();
+    let today = crate::state::local_today();
     let date = req
         .date
         .map(|d| d.to_string())

@@ -68,6 +68,8 @@ pub fn run(id: &Identity, check: bool) -> Result<Report> {
     let mut report = Report::default();
     let mut soul_changed = false;
     let mut seen: Vec<(String, String)> = vec![];
+    // Frontmatter edits wait until soul.json is read, so a failed stamp changes no file.
+    let mut touched: Vec<(String, String)> = vec![];
 
     for e in state::tracked(id) {
         let Some((scope, rel)) = scope_of(&e.rel) else {
@@ -100,8 +102,7 @@ pub fn run(id: &Identity, check: bool) -> Result<Report> {
         let mut text = e.text.clone();
         if recorded.is_some() && e.kind.has_frontmatter() {
             if let Some(new_text) = touch_updated(&text, today) {
-                fs::write(id.dir.join(&e.rel), &new_text)
-                    .with_context(|| format!("writing {}", e.rel))?;
+                touched.push((e.rel.clone(), new_text.clone()));
                 text = new_text;
             }
         }
@@ -130,6 +131,9 @@ pub fn run(id: &Identity, check: bool) -> Result<Report> {
     }
     // Read soul.json before any write, so a broken one fails the stamp with nothing recorded.
     let soul = if soul_changed { bumped_soul(id)? } else { None };
+    for (rel, text) in touched {
+        fs::write(id.dir.join(&rel), text).with_context(|| format!("writing {rel}"))?;
+    }
     for (scope, doc) in docs {
         write_json(&id.dir.join(format!("{scope}/state.json")), &doc)?;
     }
