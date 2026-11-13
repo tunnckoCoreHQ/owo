@@ -406,8 +406,8 @@ pub fn push(req: &StartRequest, turns: &[Turn]) -> Result<Start> {
     Ok(out)
 }
 
-/// Parses `raw`, the text of `transcript`, decides whether a run is due and writes the slice
-/// and prompt. The caller holds the session lock.
+/// Parses `raw`, the text of `transcript`, decides whether a run is due, and returns the writes
+/// of the slice, the prompt and the bookmark for the caller to commit. The caller holds the lock.
 fn run(
     req: &StartRequest,
     transcript: &Path,
