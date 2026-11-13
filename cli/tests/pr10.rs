@@ -399,3 +399,14 @@ fn pr10_soul_history_text_keeps_string_evidence_of_a_mixed_array() {
     let text = String::from_utf8_lossy(&out.stdout);
     assert!(text.contains("    evidence: [[a]], [[b]]\n"), "{text}");
 }
+
+#[cfg(unix)]
+#[test]
+fn pr10_new_leaves_a_broken_symlink_at_the_identity_path() {
+    let tmp = setup();
+    let link = tmp.path().join("ids/lumen");
+    std::os::unix::fs::symlink(tmp.path().join("missing"), &link).unwrap();
+    let err = cli_error(tmp.path(), &["new", "Lumen"]);
+    assert!(err.starts_with("owo: already exists: "), "{err}");
+    assert!(fs::symlink_metadata(&link).unwrap().is_symlink());
+}

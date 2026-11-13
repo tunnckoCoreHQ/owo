@@ -14,7 +14,7 @@ Exit codes: 0 success, 1 problems found (lint errors, exists, unknown template, 
 
 Each command with its flags and exit behavior.
 
-- `owo new <name> [--slug]` creates an identity from templates, writes indexes and state files. Exits 1 when the folder exists. When a write fails, it removes the folder it created.
+- `owo new <name> [--slug]` creates an identity from templates, writes indexes and state files. Exits 1 when anything, even a broken symlink, is at the identity path, and leaves it alone. When a later write fails, it removes the folder it created and nothing else.
 - `owo add <type> <title> [--date] [--parent] [--alias]... [--kb]` creates one entry at its deterministic path; `--date` and the `created` and `updated` fields default to the local day. Uses `--project` for notes; `--parent` is only for location-detail and `--kb` only for project. A second `add log` for the same day succeeds and prints `exists <path>`; for other types an existing path exits 1 with an `exists` error.
 - `owo write <path> [--content <text>]` replaces the full text of one authored file under soul/, life/ or work/, from `--content` or stdin; it refuses empty text, generated files (after it drops `.` parts of the path) and paths outside the identity.
 - `owo lint [--rule <code>]...` runs [[lint]] rules. Exits 1 when any error is found.

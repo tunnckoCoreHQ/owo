@@ -2,9 +2,10 @@
 
 use crate::identity::{Identity, LIFE_CATEGORIES};
 use crate::{index, state, templates};
-use anyhow::{bail, Result};
+use anyhow::{bail, Context, Result};
 use std::collections::BTreeMap;
 use std::fs;
+use std::io::ErrorKind;
 use std::path::Path;
 
 pub struct Created {
@@ -14,17 +15,22 @@ pub struct Created {
 }
 
 /// Creates `<root>/<slug>`; error text names the folder under `shown`, the root as the request
-/// gave it. On error after the folder check, the folder is removed.
+/// gave it. A path already there, even a broken symlink, is an error and is left alone. On a
+/// later error, the folder this call created is removed.
 pub fn new_identity(root: &Path, shown: &Path, name: &str, slug: &str) -> Result<Created> {
     if !crate::slug::is_slug(slug) {
         bail!("invalid slug {slug:?}: use lowercase letters, digits and single hyphens");
     }
     let dir = root.join(slug);
-    let shown = shown.join(slug);
-    if dir.exists() {
-        bail!("already exists: {}", shown.display());
+    let shown_dir = shown.join(slug);
+    fs::create_dir_all(root).with_context(|| format!("creating {}", shown.display()))?;
+    match fs::create_dir(&dir) {
+        Err(e) if e.kind() == ErrorKind::AlreadyExists => {
+            bail!("already exists: {}", shown_dir.display())
+        }
+        other => other.with_context(|| format!("creating {}", shown_dir.display()))?,
     }
-    let files = fill(root, &shown, name, slug).inspect_err(|_| {
+    let files = fill(root, &shown_dir, name, slug).inspect_err(|_| {
         let _ = fs::remove_dir_all(&dir);
     })?;
     Ok(Created {
