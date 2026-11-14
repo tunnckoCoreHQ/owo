@@ -1,10 +1,10 @@
 # Architecture
 
-owo is a Cargo workspace of two crates: `owo-core` (`core/`), the library, and `owo-cli` (`cli/`), which builds the `owo` binary. Each operation loads an identity folder into memory, works on files only, and returns a typed result; the binary turns it into text or a JSON envelope. Only the binary depends on clap. See [ADR-0005](../docs/adr/0005-typed-library-api.md).
+owo is a Cargo workspace of two crates: `owo-core` (`crates/core/`), the library, and `owo-cli` (`crates/cli/`), which builds the `owo` binary. Each operation loads an identity folder into memory, works on files only, and returns a typed result; the binary turns it into text or a JSON envelope. Only the binary depends on clap. See [ADR-0005](../docs/adr/0005-typed-library-api.md).
 
 ## Modules
 
-Each module owns one job. The core (`core/src/lib.rs` and the modules beside it) is the typed API, the request types and the operation list, with the MCP server (`owo_core::mcp`) and the ACP proxy (`owo_core::acp`) as consumers of that API. The binary (`cli/src/`) is the CLI. The tests that run the binary are in `cli/tests/`; `core/tests/lib.rs` tests the library and the ACP proxy, and `core/tests/mcp.rs` the MCP server, with no binary.
+Each module owns one job. The core (`crates/core/src/lib.rs` and the modules beside it) is the typed API, the request types and the operation list, with the MCP server (`owo_core::mcp`) and the ACP proxy (`owo_core::acp`) as consumers of that API. The binary (`crates/cli/src/`) is the CLI. The tests that run the binary are in `crates/cli/tests/`; `crates/core/tests/lib.rs` tests the library and the ACP proxy, and `crates/core/tests/mcp.rs` the MCP server, with no binary.
 
 ### Library
 

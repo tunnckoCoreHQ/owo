@@ -28,7 +28,7 @@ pub fn json(cmd: &mut Command) -> Value {
 }
 
 pub fn examples() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../examples")
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../examples")
 }
 
 pub fn copy_tree(from: &Path, to: &Path) {
