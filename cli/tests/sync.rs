@@ -390,3 +390,32 @@ fn sync_push_survives_a_cut_store_and_guards_the_session() {
     fs::write(sessions.join("b1.json"), "[]").unwrap();
     push("b1", r#"[{"id":1,"role":"user","text":"hi"}]"#).code(1);
 }
+
+#[test]
+fn sync_every_from_config_and_sync_due() {
+    let tmp = copy_example("nicole");
+    fs::write(tmp.path().join(".owo.toml"), "sync_every = 2\n").unwrap();
+    let run = |args: &[&str]| {
+        json(
+            owo(tmp.path())
+                .current_dir(tmp.path())
+                .env("XDG_CONFIG_HOME", tmp.path())
+                .args(["-i", "nicole", "sync"])
+                .args(args),
+        )
+    };
+    let turns = r#"[{"id":1,"role":"user","text":"a"},{"id":2,"role":"user","text":"b"}]"#;
+    let v = run(&["push", "--session", "g1", "--turns", turns]);
+    assert_eq!(v["data"]["every"], 2, "sync_every from .owo.toml");
+    assert_eq!(v["data"]["due"], true);
+    let v = run(&["push", "--session", "g2", "--every", "5", "--turns", turns]);
+    assert_eq!(v["data"]["every"], 5, "--every wins over sync_every");
+    assert_eq!(v["data"]["due"], false);
+    let v = run(&["due"]);
+    assert_eq!(
+        v["data"]["due"],
+        serde_json::json!([{ "session": "g1", "prompt": ".owo/sessions/g1.prompt.md", "from": 0, "until": 2 }])
+    );
+    run(&["done", "--session", "g1", "--until", "2"]);
+    assert_eq!(run(&["due"])["data"]["due"], serde_json::json!([]));
+}

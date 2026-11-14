@@ -197,11 +197,14 @@ fn acp(global: &Global, env: &owo_core::Env, agent: &[String], inject: bool) -> 
 }
 
 /// The command line of the owo MCP server the ACP proxy adds: this binary's `mcp`, with the
-/// identity the proxy resolved at start.
+/// identity the proxy resolved at start. The command is this binary's path, so the agent starts
+/// the proxy's own owo, not the one on its `PATH`; `owo` only when the path is unknown.
 fn mcp_server(identity: Option<&str>) -> (String, Vec<String>) {
     let mut args = vec!["mcp".to_string()];
     if let Some(id) = identity {
         args.extend(["-i".to_string(), id.to_string()]);
     }
-    ("owo".to_string(), args)
+    let command = std::env::current_exe()
+        .map_or_else(|_| "owo".to_string(), |p| p.to_string_lossy().into_owned());
+    (command, args)
 }

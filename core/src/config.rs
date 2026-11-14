@@ -16,6 +16,8 @@ pub struct FileConfig {
     pub root: Option<String>,
     pub identity: Option<String>,
     pub project: Option<String>,
+    /// New user turns per sync run.
+    pub sync_every: Option<usize>,
 }
 
 /// Where a resolved value came from, reported by `owo config`.
@@ -37,6 +39,8 @@ pub struct Resolved {
     pub identity: Option<String>,
     pub identity_source: Option<Source>,
     pub project: Option<String>,
+    /// `sync_every` from `.owo.toml`, else from the user config.
+    pub sync_every: Option<usize>,
 }
 
 /// Inputs to resolution, so tests can run without touching the real environment.
@@ -186,6 +190,9 @@ pub fn resolve(inputs: &Inputs) -> Result<Resolved> {
         .clone()
         .or_else(|| inputs.env_project.clone())
         .or_else(|| project_cfg.as_ref().and_then(|(_, c)| c.project.clone()));
+    let sync_every = [&project_cfg, &user_cfg]
+        .into_iter()
+        .find_map(|cfg| cfg.as_ref().and_then(|(_, c)| c.sync_every));
 
     Ok(Resolved {
         root,
@@ -193,6 +200,7 @@ pub fn resolve(inputs: &Inputs) -> Result<Resolved> {
         identity,
         identity_source,
         project,
+        sync_every,
     })
 }
 

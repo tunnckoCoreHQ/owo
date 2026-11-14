@@ -12,8 +12,13 @@ fn nicole_only(current: &str) -> serde_json::Value {
     json!([picker(current, &["nicole"])])
 }
 
+/// The path of the owo binary, which `owo acp` gives as the MCP server command.
+fn owo_bin() -> String {
+    assert_cmd::cargo::cargo_bin("owo").display().to_string()
+}
+
 fn owo_server() -> serde_json::Value {
-    json!({ "name": "owo", "command": "owo", "args": ["mcp", "-i", "nicole"], "env": [] })
+    json!({ "name": "owo", "command": owo_bin(), "args": ["mcp", "-i", "nicole"], "env": [] })
 }
 
 #[test]
@@ -510,7 +515,7 @@ fn with_no_identity_at_start_a_pick_starts_the_session() {
     let (_, got) = p.finish();
     let mut want = parse(&new);
     want["params"]["mcpServers"] =
-        json!([{ "name": "owo", "command": "owo", "args": ["mcp"], "env": [] }]);
+        json!([{ "name": "owo", "command": owo_bin(), "args": ["mcp"], "env": [] }]);
     assert_eq!(parse(&got[1]), want, "the server has no identity flag");
     assert_eq!(got[2], prompt(2, "s", &["a"]), "nothing is injected");
     let (text, _) = block(&got[3]);

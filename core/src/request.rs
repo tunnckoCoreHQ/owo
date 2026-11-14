@@ -298,6 +298,15 @@ impl Number for i64 {
     }
 }
 
+impl Number for Option<usize> {
+    fn parse(text: &str) -> Option<Self> {
+        text.parse().ok().map(Some)
+    }
+    fn value(&self) -> Value {
+        self.map_or(Value::Null, Value::from)
+    }
+}
+
 impl Number for Option<i64> {
     fn parse(text: &str) -> Option<Self> {
         text.parse().ok().map(Some)
@@ -1224,34 +1233,27 @@ impl Request for SoulspecRequest {
 }
 
 /// When a sync step writes a slice for ingest.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 pub struct SyncOptions {
     /// Take any new turns now (session end).
     pub now: bool,
-    /// New user turns per run.
-    pub every: usize,
-}
-
-impl Default for SyncOptions {
-    /// A run every six new user turns.
-    fn default() -> Self {
-        Self {
-            now: false,
-            every: 6,
-        }
-    }
+    /// New user turns per run; when None, `sync_every` in the config, else 6.
+    pub every: Option<usize>,
 }
 
 impl Request for SyncOptions {
     fn read(r: &mut Reader, b: Self) -> Self {
-        let d = Self::default();
         Self {
             now: r.flag(
                 Field::switch("now", "Take any new turns now (session end)"),
                 b.now,
             ),
             every: r.int(
-                Field::new("every", Type::Int, "New user turns per run").default(d.every),
+                Field::new(
+                    "every",
+                    Type::Int,
+                    "New user turns per run (default: sync_every in the config, else 6)",
+                ),
                 b.every,
             ),
         }
