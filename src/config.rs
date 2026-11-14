@@ -5,7 +5,6 @@
 
 use anyhow::{bail, Context, Result};
 use serde::Deserialize;
-use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -56,23 +55,22 @@ pub struct Inputs {
 }
 
 impl Inputs {
-    pub fn from_env(
-        root_flag: Option<PathBuf>,
-        identity_flag: Option<String>,
-        project_flag: Option<String>,
-    ) -> Self {
-        let non_empty = |key: &str| env::var(key).ok().filter(|v| !v.is_empty());
+    /// The flags from `cli` and the environment values from `env`.
+    pub fn new(cli: &crate::Cli, env: &crate::Env) -> Self {
         Self {
-            root_flag,
-            identity_flag,
-            project_flag,
-            env_root: non_empty("OWO_ROOT"),
-            env_identity: non_empty("OWO_IDENTITY"),
-            env_project: non_empty("OWO_PROJECT"),
-            cwd: env::current_dir().unwrap_or_else(|_| PathBuf::from(".")),
-            home: non_empty("HOME").map(PathBuf::from),
-            xdg_config: non_empty("XDG_CONFIG_HOME").map(PathBuf::from),
-            xdg_data: non_empty("XDG_DATA_HOME").map(PathBuf::from),
+            root_flag: cli.root.clone(),
+            identity_flag: cli.identity.clone(),
+            project_flag: cli.project.clone(),
+            env_root: env.owo_root.clone(),
+            env_identity: env.owo_identity.clone(),
+            env_project: env.owo_project.clone(),
+            cwd: env.cwd.clone(),
+            home: env
+                .home
+                .clone()
+                .filter(|h| h.to_str().is_some_and(|s| !s.is_empty())),
+            xdg_config: env.xdg_config_home.clone(),
+            xdg_data: env.xdg_data_home.clone(),
         }
     }
 

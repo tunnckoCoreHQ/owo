@@ -2,7 +2,7 @@
 
 mod common;
 
-use common::{examples, owo};
+use common::{copy_example, examples, owo};
 use serde_json::{json, Value};
 use std::path::Path;
 
@@ -233,4 +233,86 @@ fn mcp_remote_serves_http() {
             "HTTP/1.1 200 OK",
         ]
     );
+}
+
+/// The CLI's output joined as a tool result: stdout, or stderr when stdout is blank, or both.
+fn cli_result(root: &Path, args: &[&str], stdin: &str) -> (String, bool) {
+    let out = owo(root)
+        .args(["-i", "nicole"])
+        .args(args)
+        .write_stdin(stdin)
+        .output()
+        .unwrap();
+    let stdout = String::from_utf8(out.stdout).unwrap();
+    let stderr = String::from_utf8(out.stderr).unwrap();
+    let text = match (stdout.trim().is_empty(), stderr.trim().is_empty()) {
+        (true, _) => stderr,
+        (false, true) => stdout,
+        (false, false) => format!("{stdout}\n{stderr}"),
+    };
+    (text, !out.status.success())
+}
+
+#[test]
+fn mcp_tool_results_equal_the_cli_output() {
+    let turns = json!([{ "id": 1, "role": "user", "text": "hello" }]);
+    let cases: Vec<(&str, Value, Vec<&str>, String)> = vec![
+        ("context", json!({}), vec!["context"], String::new()),
+        (
+            "show",
+            json!({ "name": "First Firing", "section": "Lines" }),
+            vec!["show", "--section=Lines", "--", "First Firing"],
+            String::new(),
+        ),
+        ("lint", json!({}), vec!["--json", "lint"], String::new()),
+        (
+            "search",
+            json!({ "query": "kiln", "limit": 2 }),
+            vec!["--json", "search", "--limit=2", "--", "kiln"],
+            String::new(),
+        ),
+        (
+            "resolve",
+            json!({ "name": "First Firing" }),
+            vec!["--json", "resolve", "--", "First Firing"],
+            String::new(),
+        ),
+        (
+            "resolve",
+            json!({ "name": "no such entry" }),
+            vec!["--json", "resolve", "--", "no such entry"],
+            String::new(),
+        ),
+        (
+            "search",
+            json!({ "query": "kiln", "limit": "many" }),
+            vec!["--json", "search", "--limit=many", "--", "kiln"],
+            String::new(),
+        ),
+        (
+            "sync_push",
+            json!({ "session": "m1", "turns": turns, "now": true }),
+            vec!["--json", "sync", "push", "--session=m1", "--now"],
+            turns.to_string(),
+        ),
+    ];
+    let (mcp_root, cli_root) = (copy_example("nicole"), copy_example("nicole"));
+    let calls: Vec<Value> = cases
+        .iter()
+        .enumerate()
+        .map(|(n, (tool, args, _, _))| call(n as u64, tool, args.clone()))
+        .collect();
+    let replies = raw_session(mcp_root.path(), "nicole", lines(&calls));
+    let mut errors = 0;
+    for ((tool, _, args, stdin), reply) in cases.iter().zip(&replies) {
+        let (want, failed) = cli_result(cli_root.path(), args, stdin);
+        let want = want.replace(
+            &cli_root.path().display().to_string(),
+            &mcp_root.path().display().to_string(),
+        );
+        assert_eq!(text(reply), want, "{tool}");
+        assert_eq!(reply["result"]["isError"], failed, "{tool}");
+        errors += failed as usize;
+    }
+    assert_eq!(errors, 2, "the failing call and the usage error");
 }

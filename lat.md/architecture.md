@@ -1,14 +1,17 @@
 # Architecture
 
-owo is one Rust binary crate. Each command loads an identity folder into memory, works on files only, and prints text or a JSON envelope.
+owo is one Rust crate with a library and the `owo` binary. Each command loads an identity folder into memory, works on files only, and returns text or a JSON envelope; see [ADR-0004](../docs/adr/0004-library-core-thin-adapters.md).
 
 ## Modules
 
-Each module owns one job; `main.rs` parses arguments, dispatches each command, and prints its result through one `Out::emit` path.
+Each module owns one job. The library (`lib.rs`) holds every module, also the MCP server and the ACP proxy, and its public interface is small: `owo::run`, `Env`, `Output` with `render` and `warning_lines`, `Identity`, `Cli` with its commands, `owo::mcp` (`reply`, `serve`, `bind`, `serve_http`) and `owo::acp` (`Options`, `Proxy`). The binary (`main.rs`) is one consumer of it; see [ADR-0004](../docs/adr/0004-library-core-thin-adapters.md).
+
+- `lib.rs` has `owo::run(&cli, &env, stdin) -> Output`. It dispatches each command and collects its result through one `Out::emit` path. It prints nothing, reads no environment variables, takes no stream of the process and does not exit. Three things still come from the process: the time zone, which the local day uses, the working folder for a relative path in an argument such as `--out`, and the environment of the `git` child that `owo changes` and `lint --changed` run. The `Env.cwd` value is for the config only (a relative root and the `.owo.toml` search). The `Env` value holds plain values, the `OWO_ROOT`, `OWO_IDENTITY`, `OWO_PROJECT`, `HOME` and XDG values and the working folder; the caller builds it once, and `mcp` and `acp` reuse it for each command they run. The `stdin` reader gives the text that `owo write` and `owo sync push` read only when they need it, after the config resolves. The crate-private `global_args` and `run_argv` are the one way `mcp.rs` and `acp.rs` build a command line with the global flags and run it in process.
+- `main.rs` is the binary. It only connects the process to the library: it parses arguments, builds `Env` from the environment with `env`, and passes the process stdin to `owo::run`. It prints the two strings `Output::render` makes; clap itself prints a usage error from the library, so it keeps its colour on a terminal. Stderr gets the warnings as `owo: warning: <text>`, then a usage error as clap words it or the error line `owo: <error>`; stdout gets the JSON envelope with `--json`, else the text. For `owo mcp` it takes over stdin and stdout (`own_stdio`, `detach_stdio`) and passes the copies to `owo::mcp::serve`, or binds with `owo::mcp::bind`, prints the URL and calls `owo::mcp::serve_http`. For `owo acp` it builds `owo::acp::Proxy` with stderr as the warnings writer, starts the agent process, hands its pipes and the process stdin and stdout to `Proxy::run`, stops the agent when that fails, and exits with the agent's code. It keeps the SIGPIPE handling for every command but `owo mcp` and `owo acp`, which ignore the signal.
 
 - `cli.rs` holds the clap definitions: every command, flag and help line.
 
-- `config.rs` resolves root, identity, project and KB, and checks the selected identity and project (exit 3). See [[formats#Config resolution]].
+- `config.rs` resolves root, identity, project and KB from the flags and `Env`, and checks the selected identity and project (exit 3). See [[formats#Config resolution]].
 - `identity.rs` walks one identity folder and parses every Markdown file into an `Entry` with a `Kind` decided by its path. `Kind::name` is the one name of a kind in output and `--type` values, and `Entry::label` gives the title, else the stem key.
 - `markdown.rs` splits frontmatter and parses it with `serde-saphyr` into `serde_json` values, reads sections, extracts wiki-links outside code, counts words.
 - `slug.rs` holds the one slug function.
@@ -18,14 +21,15 @@ Each module owns one job; `main.rs` parses arguments, dispatches each command, a
 - `state.rs` and `stamp.rs` hash files and maintain the three `state.json` files; `state::parse_day` is the one strict `YYYY-MM-DD` parser. Readers go through `state::doc` for a whole file, and `state::updated`, `state::stamps`, `state::history` and `state::review` for its parts, over the copies `Identity::load` reads; writers read, change and write a fresh copy.
 - `lint.rs` runs the rules in [[lint]]; each rule appends findings and the runner names them after the rule.
 - `find.rs` resolves names, shows sections, and lists backlinks, outlinks and orphans. `find::show` picks a `kb:` link or an entry for `owo show`, and `find::section_text` writes the one "no section" error for both. `find::unresolved` writes the one "does not resolve" error for `owo resolve` and every `find::one` caller (`show`, `links`, `context --with`, soul-note evidence, `export --scenario`); lint words its own link errors.
-- `kb.rs` finds a project KB, builds the pointer `owo context` prints, and resolves `[[kb:...]]` links for `owo show` and lint.
+- `kb.rs` finds a project KB (`~/` is `Identity::home`, which `owo::run` sets from `Env`), builds the pointer `owo context` prints, and resolves `[[kb:...]]` links for `owo show` and lint.
 - `status.rs` derives current state and the Now block; `context.rs` builds the tiered load set.
 - `search.rs` is the BM25 ranker; `review.rs` builds the review packet, records finished reviews, and keeps the soul history.
 - `git.rs` wraps the `git` binary; `changes.rs` implements `owo changes` and the changed-file set for `lint --changed`.
 - `export.rs` writes character cards (JSON or PNG), SoulSpec packages and skill wrappers.
 - `sync.rs` parses transcripts and writes session slices; `migrate.rs` converts v1 identities.
-- `output.rs` defines diagnostics, the envelope, exit codes and `Out`, which prints the envelope or the text.
-- `mcp.rs` serves the MCP tools over stdio or HTTP, built from the clap definitions; see [[decisions#MCP runs the CLI]].
+- `output.rs` defines diagnostics, the envelope, exit codes, `Out`, which collects the envelope or the text, and `Output`: the envelope, the text, the warnings, the error and the exit code. `Output::render` turns it into the stdout text and the stderr text, and `Output::warning_lines` gives the warnings alone. A `clap::Error` in `Output` is a usage error (exit 2), which `render` words as clap does.
+- `mcp.rs` is `owo::mcp`, the MCP server. It builds the tools from the clap definitions. `reply` answers one JSON-RPC message, `serve` answers each line of a reader on a writer, and `serve_http` answers each POST on a listener that `bind` opens. Each tool call parses its argv with clap, calls `owo::run` in process with the caller's `Env` and `Output::render`, and turns a panic into an `isError` result; see [[decisions#MCP calls the library]].
+- `acp.rs` is `owo::acp`, the ACP proxy. `Proxy::new` resolves the identity and reads the identities of the root before the agent starts, with `Options` for the injection mode and a writer for warning lines. `Proxy::run` copies lines both ways on the four streams the caller gives it, changes only the lines that carry the injection, the identity picker and the `/owo` command, answers the picker and the command itself, and stores turns per session identity through `run_argv` with `sync push`; see [[decisions#ACP proxy passes lines through]].
 
 ## Loading an identity
 

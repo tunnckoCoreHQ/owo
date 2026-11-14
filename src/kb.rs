@@ -12,8 +12,7 @@ pub fn root(id: &Identity, project: &str) -> Option<PathBuf> {
         .project(project)
         .and_then(|e| e.field_str("kb"))
         .filter(|s| !s.is_empty())?;
-    let home = std::env::var_os("HOME").map(PathBuf::from);
-    let p = crate::config::expand_home(&raw, home.as_deref());
+    let p = crate::config::expand_home(&raw, id.home.as_deref());
     Some(if p.is_absolute() { p } else { id.dir.join(p) })
 }
 

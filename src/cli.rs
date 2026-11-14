@@ -220,6 +220,15 @@ pub enum Command {
         #[arg(long, requires = "remote")]
         port: Option<u16>,
     },
+    /// Run an ACP agent behind a pass-through proxy that stores turns and injects the identity
+    Acp {
+        /// Put the identity context in the prompt, and add no owo MCP server (needs an identity in the root)
+        #[arg(long)]
+        inject: bool,
+        /// The agent command and its arguments, after --
+        #[arg(last = true, required = true, value_name = "AGENT")]
+        agent: Vec<String>,
+    },
 }
 
 #[derive(Subcommand)]

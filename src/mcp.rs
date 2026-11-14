@@ -1,13 +1,12 @@
-//! `owo mcp`: a stdio MCP server. Each tool runs this same binary with the matching
-//! command line, so a tool call and a CLI call share one code path and one output.
-//! Messages are JSON-RPC 2.0: one per line on stdio, or one per POST to `/mcp` with `--remote`.
+//! The MCP server. Each tool parses the matching command line with clap and calls `run` in
+//! process, so a tool call and a CLI call share one code path and one output. Messages are
+//! JSON-RPC 2.0: one per line with `serve`, or one per POST to `/mcp` with `serve_http`.
+//! `reply` answers one message, for a caller with its own transport.
 
 use anyhow::{Context, Result};
 use serde_json::{json, Map, Value};
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{TcpListener, TcpStream};
-use std::path::PathBuf;
-use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
 const PROTOCOL: &str = "2025-06-18";
@@ -21,7 +20,7 @@ enum Arg {
     Flag(String),
     /// `--flag` when true.
     Switch(String),
-    /// A JSON value written to the child's stdin.
+    /// A JSON value passed as the command's stdin text.
     Stdin,
 }
 
@@ -47,12 +46,12 @@ struct Tool {
 }
 
 /// Every command as a tool, read from the clap definitions: `review done` becomes `review_done`.
-/// A command with optional subcommands (`review`) is a tool itself too. `mcp` is left out.
+/// A command with optional subcommands (`review`) is a tool itself too. `mcp` and `acp` are left out.
 fn tools() -> Vec<Tool> {
     fn walk(cmd: &clap::Command, path: &[&str], out: &mut Vec<Tool>) {
         for sub in cmd
             .get_subcommands()
-            .filter(|s| !matches!(s.get_name(), "mcp" | "help"))
+            .filter(|s| !matches!(s.get_name(), "mcp" | "acp" | "help"))
         {
             let mut path = path.to_vec();
             path.push(sub.get_name());
@@ -64,7 +63,7 @@ fn tools() -> Vec<Tool> {
     }
     let mut out = vec![];
     walk(
-        &<crate::cli::Cli as clap::CommandFactory>::command(),
+        &<crate::Cli as clap::CommandFactory>::command(),
         &[],
         &mut out,
     );
@@ -190,7 +189,7 @@ fn scalar(v: &Value) -> Option<String> {
 fn argv(
     tool: &Tool,
     args: &Map<String, Value>,
-    cli: &crate::cli::Cli,
+    cli: &crate::Cli,
 ) -> Result<(Vec<String>, String), String> {
     if let Some(k) = args
         .keys()
@@ -198,19 +197,14 @@ fn argv(
     {
         return Err(format!("unknown argument {k:?} for {}", tool.name));
     }
-    let mut out: Vec<String> = vec![];
-    if let Some(root) = &cli.root {
-        out.extend(["--root".into(), root.display().to_string()]);
-    }
     let pick = |key: &str, default: &Option<String>| {
         args.get(key).and_then(scalar).or_else(|| default.clone())
     };
-    if let Some(i) = pick("identity", &cli.identity) {
-        out.extend(["-i".into(), i]);
-    }
-    if let Some(p) = pick("project", &cli.project) {
-        out.extend(["--project".into(), p]);
-    }
+    let mut out = crate::global_args(
+        cli,
+        pick("identity", &cli.identity),
+        pick("project", &cli.project),
+    );
     if tool.json {
         out.push("--json".into());
     }
@@ -246,46 +240,58 @@ fn argv(
     Ok((out, stdin))
 }
 
-fn call(tool: &Tool, params: &Value, cli: &crate::cli::Cli) -> Value {
+fn result(text: String, error: bool) -> Value {
+    json!({ "content": [{ "type": "text", "text": text }], "isError": error })
+}
+
+/// Runs one tool call. A panic becomes an error result, so the server answers the next request.
+fn call(tool: &Tool, params: &Value, cli: &crate::Cli, env: &crate::Env) -> Value {
+    guarded(|| run_tool(tool, params, cli, env))
+}
+
+fn guarded(f: impl FnOnce() -> Value) -> Value {
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(f)).unwrap_or_else(|panic| {
+        let why = panic
+            .downcast_ref::<&str>()
+            .map(|s| s.to_string())
+            .or_else(|| panic.downcast_ref::<String>().cloned())
+            .unwrap_or_default();
+        result(format!("owo panicked: {why}"), true)
+    })
+}
+
+/// Parses the tool's argv with clap and calls `owo::run` in process. The text is the command's
+/// stdout, or its stderr when stdout is blank, or both joined with a newline.
+fn run_tool(tool: &Tool, params: &Value, cli: &crate::Cli, env: &crate::Env) -> Value {
     let empty = Map::new();
     let args = params["arguments"].as_object().unwrap_or(&empty);
-    let result = |text: String, error: bool| json!({ "content": [{ "type": "text", "text": text }], "isError": error });
     let (argv, stdin) = match argv(tool, args, cli) {
         Ok(a) => a,
         Err(e) => return result(e, true),
     };
-    let exe = std::env::current_exe().unwrap_or_else(|_| PathBuf::from("owo"));
-    let run = || {
-        let mut child = Command::new(exe)
-            .args(&argv)
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()?;
-        // A child that exits before reading (a usage error) closes the pipe; its output says why.
-        let _ = child
-            .stdin
-            .take()
-            .expect("piped")
-            .write_all(stdin.as_bytes());
-        child.wait_with_output()
-    };
-    match run() {
-        Ok(o) => {
-            let stdout = String::from_utf8_lossy(&o.stdout).into_owned();
-            let stderr = String::from_utf8_lossy(&o.stderr).into_owned();
-            let text = match (stdout.trim().is_empty(), stderr.trim().is_empty()) {
-                (true, _) => stderr,
-                (false, true) => stdout,
-                (false, false) => format!("{stdout}\n{stderr}"),
-            };
-            result(text, !o.status.success())
-        }
-        Err(e) => result(format!("could not run owo: {e}"), true),
+    // No command line can hold a NUL, so a tool argument cannot either.
+    if argv.iter().any(|a| a.contains('\0')) {
+        return result("an argument holds a NUL character".into(), true);
     }
+    let ((stdout, stderr), code) = match crate::run_argv(argv, env, &stdin) {
+        Ok((parsed, out)) => (out.render(parsed.json), out.code),
+        Err(e) => (crate::output::usage_text(&e, String::new()), e.exit_code()),
+    };
+    let text = match (stdout.trim().is_empty(), stderr.trim().is_empty()) {
+        (true, _) => stderr,
+        (false, true) => stdout,
+        (false, false) => format!("{stdout}\n{stderr}"),
+    };
+    result(text, code != 0)
 }
 
-fn respond(id: &Value, method: &str, params: &Value, cli: &crate::cli::Cli) -> Option<Value> {
+fn respond(
+    id: &Value,
+    method: &str,
+    params: &Value,
+    cli: &crate::Cli,
+    env: &crate::Env,
+) -> Option<Value> {
     let ok = |result: Value| Some(json!({ "jsonrpc": "2.0", "id": id, "result": result }));
     let error = |code: i64, message: String| {
         Some(json!({ "jsonrpc": "2.0", "id": id, "error": { "code": code, "message": message } }))
@@ -307,7 +313,7 @@ fn respond(id: &Value, method: &str, params: &Value, cli: &crate::cli::Cli) -> O
         "tools/call" => {
             let name = params["name"].as_str().unwrap_or_default();
             match tools().iter().find(|t| t.name == name) {
-                Some(tool) => ok(call(tool, params, cli)),
+                Some(tool) => ok(call(tool, params, cli, env)),
                 None => error(-32602, format!("unknown tool {name:?}")),
             }
         }
@@ -317,11 +323,11 @@ fn respond(id: &Value, method: &str, params: &Value, cli: &crate::cli::Cli) -> O
 
 /// The reply to one JSON-RPC message, or None for notifications and responses.
 /// Bytes that are not UTF-8 JSON get a parse error.
-fn handle(bytes: &[u8], cli: &crate::cli::Cli) -> Option<Value> {
-    match serde_json::from_slice::<Value>(bytes) {
+pub fn reply(message: &[u8], cli: &crate::Cli, env: &crate::Env) -> Option<Value> {
+    match serde_json::from_slice::<Value>(message) {
         Ok(msg) if msg.get("id").is_some() && msg.get("method").is_some() => {
             let method = msg["method"].as_str().unwrap_or_default();
-            respond(&msg["id"], method, &msg["params"], cli)
+            respond(&msg["id"], method, &msg["params"], cli, env)
         }
         Ok(_) => None,
         Err(e) => Some(json!({
@@ -332,16 +338,20 @@ fn handle(bytes: &[u8], cli: &crate::cli::Cli) -> Option<Value> {
     }
 }
 
-/// Serves MCP on stdin and stdout until stdin closes.
-pub fn serve(cli: &crate::cli::Cli) -> Result<()> {
-    let mut stdin = std::io::stdin().lock();
-    let mut stdout = std::io::stdout();
+/// Serves MCP on `input` and `output`, one message per line, until `input` ends. `cli` gives
+/// the default `--root`, `-i` and `--project` of each tool call.
+pub fn serve(
+    mut input: impl BufRead,
+    mut output: impl Write,
+    cli: &crate::Cli,
+    env: &crate::Env,
+) -> Result<()> {
     let mut line = vec![];
-    while stdin.read_until(b'\n', &mut line)? > 0 {
+    while input.read_until(b'\n', &mut line)? > 0 {
         if !line.trim_ascii().is_empty() {
-            if let Some(r) = handle(&line, cli) {
-                writeln!(stdout, "{r}")?;
-                stdout.flush()?;
+            if let Some(r) = reply(&line, cli, env) {
+                writeln!(output, "{r}")?;
+                output.flush()?;
             }
         }
         line.clear();
@@ -349,31 +359,32 @@ pub fn serve(cli: &crate::cli::Cli) -> Result<()> {
     Ok(())
 }
 
-pub const DEFAULT_PORT: u16 = 4224;
+const DEFAULT_PORT: u16 = 4224;
 /// Largest request body the HTTP mode reads; a tool call is a few kilobytes.
-pub const MAX_BODY: usize = 8 << 20;
+const MAX_BODY: usize = 8 << 20;
 /// Largest request line plus headers the HTTP mode reads.
 const MAX_HEAD: usize = 16 << 10;
 /// Time one HTTP request may take to arrive, and its reply to leave.
 const DEADLINE: Duration = Duration::from_secs(30);
 
-/// Serves MCP over HTTP at `http://<addr>:<port>/mcp` (Streamable HTTP with JSON replies).
-/// Without `port` it takes 4224, or the next free port up to 4323. Prints the URL, then
-/// handles one request at a time.
-pub fn serve_http(addr: &str, port: Option<u16>, cli: &crate::cli::Cli) -> Result<()> {
-    let listener = match port {
+/// The listener for the HTTP mode on `addr`. Without `port` it takes 4224, or the next free
+/// port up to 4323. The server URL is `http://<local_addr>/mcp`.
+pub fn bind(addr: &str, port: Option<u16>) -> Result<TcpListener> {
+    Ok(match port {
         Some(p) => TcpListener::bind((addr, p)).with_context(|| format!("binding {addr}:{p}"))?,
         None => (DEFAULT_PORT..DEFAULT_PORT + 100)
             .find_map(|p| TcpListener::bind((addr, p)).ok())
             .with_context(|| format!("no free port on {addr} from {DEFAULT_PORT}"))?,
-    };
-    let bound = listener.local_addr()?;
-    println!("http://{bound}/mcp");
-    std::io::stdout().flush()?;
+    })
+}
+
+/// Serves MCP over HTTP on `listener` at `/mcp` (Streamable HTTP with JSON replies), one
+/// request at a time.
+pub fn serve_http(listener: TcpListener, cli: &crate::Cli, env: &crate::Env) -> Result<()> {
     for stream in listener.incoming() {
         let Ok(stream) = stream else { continue };
         // A broken or slow client only ends its own request.
-        let _ = http_request(stream, cli);
+        let _ = http_request(stream, cli, env);
     }
     Ok(())
 }
@@ -396,7 +407,7 @@ impl Read for Timed {
     }
 }
 
-fn http_request(stream: TcpStream, cli: &crate::cli::Cli) -> std::io::Result<()> {
+fn http_request(stream: TcpStream, cli: &crate::Cli, env: &crate::Env) -> std::io::Result<()> {
     stream.set_write_timeout(Some(DEADLINE))?;
     let timed = Timed {
         stream: stream.try_clone()?,
@@ -451,7 +462,7 @@ fn http_request(stream: TcpStream, cli: &crate::cli::Cli) -> std::io::Result<()>
         ("POST", "/mcp") if !json_body => ("415 Unsupported Media Type", String::new()),
         ("POST", "/mcp") if length.is_none() => ("411 Length Required", String::new()),
         ("POST", "/mcp") if length > Some(MAX_BODY) => ("413 Payload Too Large", String::new()),
-        ("POST", "/mcp") => match handle(&body, cli) {
+        ("POST", "/mcp") => match reply(&body, cli, env) {
             Some(reply) => ("200 OK", reply.to_string()),
             None => ("202 Accepted", String::new()),
         },
@@ -477,4 +488,18 @@ fn http_request(stream: TcpStream, cli: &crate::cli::Cli) -> std::io::Result<()>
         while Instant::now() < stop && matches!(stream.read(&mut buf), Ok(n) if n > 0) {}
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_panic_is_an_error_result_and_the_next_call_runs() {
+        let failed = guarded(|| panic!("boom"));
+        assert_eq!(failed["isError"], true);
+        assert_eq!(failed["content"][0]["text"], "owo panicked: boom");
+        let next = guarded(|| result("ok".into(), false));
+        assert_eq!(next["isError"], false);
+    }
 }
