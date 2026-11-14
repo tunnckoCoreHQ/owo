@@ -545,8 +545,9 @@ pub fn due(root: &Path, slug: Option<&str>) -> Result<Vec<Due>> {
         };
         let bookmark = Bookmark::deserialize(&doc)
             .with_context(|| format!("{} does not parse; fix it by hand", path.display()))?;
-        let mine = |p: &PendingRun| prefix.as_ref().is_none_or(|pre| p.source.starts_with(pre));
-        if let Some(p) = bookmark.pending.filter(mine) {
+        let of_identity =
+            |p: &PendingRun| prefix.as_ref().is_none_or(|pre| p.source.starts_with(pre));
+        if let Some(p) = bookmark.pending.filter(of_identity) {
             out.push(Due {
                 session: bookmark.session,
                 prompt: p.prompt,
