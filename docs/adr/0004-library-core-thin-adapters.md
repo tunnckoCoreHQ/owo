@@ -1,3 +1,7 @@
+---
+status: superseded by ADR-0005
+---
+
 # Library core, thin adapters
 
 The `owo` library crate (`src/lib.rs`) holds every feature. It runs each command through one entry point, `owo::run(&cli, &env, stdin) -> Output`, and it also holds the MCP server (`owo::mcp`) and the ACP proxy (`owo::acp`). The `owo` binary is one consumer of the library.
