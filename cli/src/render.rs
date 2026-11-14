@@ -174,6 +174,11 @@ fn write(t: &mut Text, outcome: &Outcome) {
         Outcome::SyncDone { session, until, .. } => {
             t.say(format!("session {session} synced until {until}"))
         }
+        Outcome::SyncDue(list) => {
+            for d in list {
+                t.line(format!("{} {}-{} {}", d.session, d.from, d.until, d.prompt));
+            }
+        }
         Outcome::Migrate(r) => {
             for (a, b) in &r.moved {
                 t.say(format!("{a} -> {b}"));

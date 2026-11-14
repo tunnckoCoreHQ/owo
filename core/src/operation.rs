@@ -339,6 +339,11 @@ pub fn operations() -> Vec<Operation> {
                 })
             },
         ),
+        op::<()>(
+            &["sync", "due"],
+            "List the sessions in the root that have a pending run",
+            |_, s| Ok(Outcome::SyncDue(s.root()?.sync_due()?)),
+        ),
         op::<MigrateRequest>(
             &["migrate", "v1"],
             "v1 identity folder (with references/) into <out> = <root>/<slug>",
@@ -408,6 +413,7 @@ pub enum Outcome {
         until: usize,
         bookmark: Bookmark,
     },
+    SyncDue(Vec<SyncDue>),
     Migrate(MigrateReport),
     Review(Packet),
     ReviewDone(ReviewRecord),
@@ -550,6 +556,7 @@ impl Outcome {
             }
             Outcome::Synced(s) => Envelope::ok(value(s)),
             Outcome::SyncDone { bookmark, .. } => Envelope::ok(value(bookmark)),
+            Outcome::SyncDue(list) => Envelope::ok(json!({ "due": list })),
             Outcome::Migrate(r) => Envelope::ok(value(r)),
             Outcome::Review(p) => Envelope::ok(value(p)),
             Outcome::ReviewDone(r) => Envelope::ok(value(r)),

@@ -523,3 +523,32 @@ fn acp_inject_puts_the_context_in_the_first_prompt() {
     assert_eq!(p.read(), end(3));
     p.end();
 }
+
+#[test]
+fn acp_push_writes_the_run_when_due() {
+    let tmp = root(&["nicole"]);
+    let mut replies = vec![vec![new_reply()]];
+    replies.extend((2..=7).map(|i| vec![chunk(&format!("m{i}"), "ok"), end(i)]));
+    let mut p = start(
+        tmp.path(),
+        acp::Options {
+            inject: false,
+            mcp_server,
+        },
+        replies,
+    );
+    p.send(&new_session());
+    p.read();
+    p.read();
+    for i in 2..=7 {
+        p.send(&prompt(i, &format!("turn {i}")));
+        p.read();
+        p.read();
+    }
+    assert!(p.end().is_empty(), "no warnings");
+    let due = open(tmp.path(), Some("nicole")).sync_due().unwrap();
+    assert_eq!(due.len(), 1, "six user turns make a run due");
+    assert_eq!(due[0].session, "s1.nicole");
+    assert_eq!((due[0].from, due[0].until), (0, 12));
+    assert!(tmp.path().join(&due[0].prompt).is_file());
+}

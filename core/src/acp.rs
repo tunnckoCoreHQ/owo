@@ -212,17 +212,12 @@ impl Owo {
         Ok(id.context_text(&ctx))
     }
 
-    /// Stores `turns` for `identity` in `session`. The proxy only stores turns: with this run
-    /// size an ingest run is never due.
+    /// Stores `turns` for `identity` in `session`, with the default run size, so a due push
+    /// writes the slice and the prompt.
     fn push(&self, identity: &str, session: &str, turns: Vec<crate::Turn>) -> crate::Result<()> {
-        self.root(identity)?.sync()?.push(
-            session,
-            &turns,
-            &crate::SyncOptions {
-                now: false,
-                every: usize::MAX,
-            },
-        )?;
+        self.root(identity)?
+            .sync()?
+            .push(session, &turns, &crate::SyncOptions::default())?;
         Ok(())
     }
 

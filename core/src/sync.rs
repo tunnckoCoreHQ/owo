@@ -515,6 +515,47 @@ fn run(
     ))
 }
 
+/// A session with a pending run: its prompt and the messages the run covers.
+#[derive(Debug, Serialize)]
+pub struct Due {
+    pub session: String,
+    pub prompt: String,
+    pub from: usize,
+    pub until: usize,
+}
+
+/// The sessions in `<root>/.owo/sessions/` whose bookmark has a pending run, by session id.
+pub fn due(root: &Path) -> Result<Vec<Due>> {
+    let dir = root.join(".owo/sessions");
+    let entries = match fs::read_dir(&dir) {
+        Ok(e) => e,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(vec![]),
+        Err(e) => return Err(e).with_context(|| format!("reading {}", dir.display())),
+    };
+    let mut out = vec![];
+    for entry in entries {
+        let path = entry?.path();
+        if path.extension().is_none_or(|e| e != "json") {
+            continue;
+        }
+        let Some(doc) = read_object(&path)? else {
+            continue;
+        };
+        let bookmark = Bookmark::deserialize(&doc)
+            .with_context(|| format!("{} does not parse; fix it by hand", path.display()))?;
+        if let Some(p) = bookmark.pending {
+            out.push(Due {
+                session: bookmark.session,
+                prompt: p.prompt,
+                from: p.from,
+                until: p.until,
+            });
+        }
+    }
+    out.sort_by(|a, b| a.session.cmp(&b.session));
+    Ok(out)
+}
+
 pub fn done(root: &Path, session: &str, until: usize) -> Result<Bookmark> {
     check_session(session)?;
     let _lock = Lock::take(root, session)?;

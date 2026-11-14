@@ -67,7 +67,8 @@ pub use stamp::Report as StampReport;
 pub use state::parse_day;
 pub use status::{now_block, Link, ProjectState, Review, Row, State};
 pub use sync::{
-    parse_turns, Bookmark, Format as SyncFormat, PendingRun, Role, Start as SyncRun, Turn,
+    parse_turns, Bookmark, Due as SyncDue, Format as SyncFormat, PendingRun, Role,
+    Start as SyncRun, Turn,
 };
 
 use config::{need_identity, need_project};
@@ -259,6 +260,7 @@ impl Root {
             cwd: &self.cwd,
             slug,
             project,
+            every: self.config.sync_every,
         })
     }
 
@@ -266,6 +268,11 @@ impl Root {
     pub fn sync_done(&self, req: &SyncDoneRequest) -> Result<Bookmark> {
         req.check()?;
         Ok(sync::done(&self.config.root, &req.session, req.until)?)
+    }
+
+    /// The sessions in the root that have a pending run, by session id.
+    pub fn sync_due(&self) -> Result<Vec<SyncDue>> {
+        Ok(sync::due(&self.config.root)?)
     }
 }
 
@@ -276,6 +283,8 @@ pub struct SessionSync<'a> {
     cwd: &'a Path,
     slug: String,
     project: Option<String>,
+    /// `sync_every` from the config.
+    every: Option<usize>,
 }
 
 impl SessionSync<'_> {
@@ -286,7 +295,11 @@ impl SessionSync<'_> {
             slug: &self.slug,
             session,
             now: opts.now,
-            every: opts.every.max(1),
+            every: opts
+                .every
+                .or(self.every)
+                .unwrap_or(request::DEFAULT_SYNC_EVERY)
+                .max(1),
             project: self.project.as_deref(),
         }
     }
