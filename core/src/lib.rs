@@ -295,7 +295,11 @@ impl SessionSync<'_> {
             slug: &self.slug,
             session,
             now: opts.now,
-            every: opts.every.or(self.every).unwrap_or(6).max(1),
+            every: opts
+                .every
+                .or(self.every)
+                .unwrap_or(request::DEFAULT_SYNC_EVERY)
+                .max(1),
             project: self.project.as_deref(),
         }
     }

@@ -1232,6 +1232,9 @@ impl Request for SoulspecRequest {
     }
 }
 
+/// The run size when neither the request nor the config gives one.
+pub const DEFAULT_SYNC_EVERY: usize = 6;
+
 /// When a sync step writes a slice for ingest.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct SyncOptions {

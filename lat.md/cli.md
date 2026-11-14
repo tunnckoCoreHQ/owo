@@ -97,6 +97,6 @@ When due it writes the slice, with two earlier user turns as overlap, to `<root>
 
 Pushed turns are stored in push order, not conversation order, and the bookmark counts by position. A turn the host sends after later turns lands at the end; a turn the host never sends between two pushes is lost with no signal.
 
-`owo sync due` lists the sessions in the root that have a pending run: the session id, the prompt path, and the messages `from` to `until` the run covers. It reads every bookmark in `.owo/sessions/`, so it needs no identity. The MCP tool is `sync_due`.
+`owo sync due` lists the sessions in the root that have a pending run: the session id, the prompt path, and the messages `from` to `until` the run covers; the text prints one line per session, `<session_id> <from>-<until> <prompt>`. It reads every bookmark in `.owo/sessions/`, so it needs no identity. The MCP tool is `sync_due`.
 
 The readers keep each message's turn id (`id` in jsonl, `uuid` in claude-jsonl, `id` in opencode-json), and slice headings show it after the message number, for example `## 380 user (3533)`.
