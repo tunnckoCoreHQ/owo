@@ -36,7 +36,7 @@ The project KB is a pointer for the agent to follow. `owo context` prints it whe
 
 ## Examples are built with owo
 
-`examples/nicole` and `examples/reviewer` were scaffolded with `owo new` and `owo add`, filled by hand, then indexed, stamped and reviewed. `cli/tests/examples.rs` checks they stay lint clean and current.
+`examples/nicole` and `examples/reviewer` were scaffolded with `owo new` and `owo add`, filled by hand, then indexed, stamped and reviewed. `crates/cli/tests/examples.rs` checks they stay lint clean and current.
 
 ## Changes read Git, else stamps
 
@@ -86,9 +86,11 @@ The working project resolves from `--project`, `OWO_PROJECT`, then `.owo.toml`; 
 
 A filter hides results, so it comes from the command line and never from the environment. Inside a project checkout, `owo search` still finds life and soul entries, and `owo export card` still exports the whole identity.
 
+`sync due` follows the same rule for the identity: it lists the runs of one identity only with `-i` (or the MCP `identity`), and every run in the root otherwise. The filter reads the slice path of each pending run, `sources/<identity>/...`, so the bookmark needs no identity field.
+
 ## Options are declared once in the core
 
-Each request type in `core/src/request.rs` reads itself with `Request::read`, and each read declares one field with its name, type, help text, default, allowed values and rules, so a field name is written once. The CLI builds its flags from the fields and the MCP server its parameters, and both hand their arguments to the core as JSON values, so a new option is one new read. The rules (`range`, `conflicts`, `requires`) are declared once, on the fields. Each typed function checks its request against them with `Request::check`, which reads the request through the same declarations, so a program that builds a request by hand, the MCP server and the CLI all get the same check, and a broken rule is a usage error, never a crash. The CLI also gives the declarations to clap, which checks them again before the call, so a bad flag keeps clap's error and usage text. See [ADR-0005](../docs/adr/0005-typed-library-api.md).
+Each request type in `crates/core/src/request.rs` reads itself with `Request::read`, and each read declares one field with its name, type, help text, default, allowed values and rules, so a field name is written once. The CLI builds its flags from the fields and the MCP server its parameters, and both hand their arguments to the core as JSON values, so a new option is one new read. The rules (`range`, `conflicts`, `requires`) are declared once, on the fields. Each typed function checks its request against them with `Request::check`, which reads the request through the same declarations, so a program that builds a request by hand, the MCP server and the CLI all get the same check, and a broken rule is a usage error, never a crash. The CLI also gives the declarations to clap, which checks them again before the call, so a bad flag keeps clap's error and usage text. See [ADR-0005](../docs/adr/0005-typed-library-api.md).
 
 The core's error text and field help name fields, such as `until` or `out`, and no flag, environment variable, command or exit code. The CLI words a typed `Fault` in its own terms: the flag (`--until`), the `owo` command to run next, and the help lines that name stdin, exit codes or other flags.
 

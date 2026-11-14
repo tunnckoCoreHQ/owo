@@ -525,7 +525,9 @@ pub struct Due {
 }
 
 /// The sessions in `<root>/.owo/sessions/` whose bookmark has a pending run, by session id.
-pub fn due(root: &Path) -> Result<Vec<Due>> {
+/// With `slug`, only the runs whose slice is in `sources/<slug>/`.
+pub fn due(root: &Path, slug: Option<&str>) -> Result<Vec<Due>> {
+    let prefix = slug.map(|s| format!("sources/{s}/"));
     let dir = root.join(".owo/sessions");
     let entries = match fs::read_dir(&dir) {
         Ok(e) => e,
@@ -543,7 +545,9 @@ pub fn due(root: &Path) -> Result<Vec<Due>> {
         };
         let bookmark = Bookmark::deserialize(&doc)
             .with_context(|| format!("{} does not parse; fix it by hand", path.display()))?;
-        if let Some(p) = bookmark.pending {
+        let of_identity =
+            |p: &PendingRun| prefix.as_ref().is_none_or(|pre| p.source.starts_with(pre));
+        if let Some(p) = bookmark.pending.filter(of_identity) {
             out.push(Due {
                 session: bookmark.session,
                 prompt: p.prompt,

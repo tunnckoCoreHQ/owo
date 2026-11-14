@@ -5,7 +5,7 @@ owo means "one world, one identity". It is a CLI for living agent identities: fo
 ## Install
 
 ```sh
-cargo install --path cli
+cargo install --path crates/cli
 ```
 
 ## Use

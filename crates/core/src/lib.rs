@@ -270,9 +270,14 @@ impl Root {
         Ok(sync::done(&self.config.root, &req.session, req.until)?)
     }
 
-    /// The sessions in the root that have a pending run, by session id.
+    /// The sessions in the root that have a pending run, by session id. With a picked identity
+    /// (`Select::identity`), only the runs of that identity.
     pub fn sync_due(&self) -> Result<Vec<SyncDue>> {
-        Ok(sync::due(&self.config.root)?)
+        let slug = match self.config.identity_source {
+            Some(Source::Flag) => Some(need_identity(&self.config)?),
+            _ => None,
+        };
+        Ok(sync::due(&self.config.root, slug.as_deref())?)
     }
 }
 
