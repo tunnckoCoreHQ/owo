@@ -2,7 +2,7 @@
 
 mod common;
 
-use common::{copy_example, json, owo};
+use common::{copy_example, copy_tree, examples, json, owo};
 use std::fs;
 
 #[test]
@@ -418,4 +418,36 @@ fn sync_every_from_config_and_sync_due() {
     );
     run(&["done", "--session", "g1", "--until", "2"]);
     assert_eq!(run(&["due"])["data"]["due"], serde_json::json!([]));
+}
+
+#[test]
+fn sync_due_with_an_identity_lists_only_its_runs() {
+    let tmp = copy_example("nicole");
+    copy_tree(&examples().join("reviewer"), &tmp.path().join("reviewer"));
+    let turns = r#"[{"id":1,"role":"user","text":"a"}]"#;
+    for (id, session) in [("nicole", "n1"), ("reviewer", "r1")] {
+        let v = json(owo(tmp.path()).args([
+            "-i",
+            id,
+            "sync",
+            "push",
+            "--session",
+            session,
+            "--now",
+            "--turns",
+            turns,
+        ]));
+        assert_eq!(v["data"]["due"], true);
+    }
+    let sessions = |args: &[&str]| -> Vec<String> {
+        json(owo(tmp.path()).args(args).args(["sync", "due"]))["data"]["due"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|d| d["session"].as_str().unwrap().to_string())
+            .collect()
+    };
+    assert_eq!(sessions(&[]), ["n1", "r1"], "no identity lists every run");
+    assert_eq!(sessions(&["-i", "nicole"]), ["n1"]);
+    assert_eq!(sessions(&["-i", "reviewer"]), ["r1"]);
 }
