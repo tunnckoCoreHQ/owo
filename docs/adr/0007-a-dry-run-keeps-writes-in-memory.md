@@ -6,6 +6,6 @@ So a dry run is one switch in the write layer, not a parameter of each command. 
 
 This has a cost. A new write must go through `Writes`, and a read of a file that the same call can write must go through the reads of `write`, or the dry run breaks. Three places write outside `Writes` and check `write::dry` instead: `new` makes no identity folder, the sync lock is not taken, and the cleanup of `new` and `migrate` after an error does not run.
 
-The list belongs to one thread, so the calls of other threads write as usual. The ACP proxy stores turns on its own thread, so it runs each store of its dry run inside `write::dry_run` there. The list goes away when the call returns or panics. The MCP server catches a panic and answers the next call on the same thread, and that call is not a dry run.
+The list belongs to one thread, so the calls of other threads write as usual. The ACP proxy stores turns on its own thread, so in a dry run it runs the whole loop of that thread inside one `write::dry_run`, and each store sees the turns of the earlier ones. The list goes away when the call returns or panics. The MCP server catches a panic and answers the next call on the same thread, and that call is not a dry run.
 
 The other choice was a `dry_run` field on each of the fourteen request types, passed down to each commit. It would still need the reads that see the kept files for `new` and `migrate`, and it would add a parameter to each write path.

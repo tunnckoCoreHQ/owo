@@ -20,7 +20,7 @@ Each command that writes files takes `--dry-run`, and its MCP tool takes `dry-ru
 
 A dry run does not try the writes, so it gives the errors that come before the writes, with their exit codes, and not the errors of a write. For example, `owo new <name> --dry-run` for an identity that exists exits 1, but a file in a read-only folder is still in the list. A dry run takes no sync lock.
 
-The ACP proxy takes `--dry-run` too: `owo acp --dry-run -- <agent command>` stores no turns, and writes `owo: would write <path>` on stderr for each path a store would write. The MCP server that the proxy adds is a separate `owo mcp` process, and its tools write unless a call sets `dry-run`. The `owo mcp` command itself writes no files and takes no `--dry-run`.
+The ACP proxy takes `--dry-run` too: `owo acp --dry-run -- <agent command>` stores no turns. Each store sees the turns that the earlier stores would have stored, so a run still comes due. When the agent exits, the proxy writes `owo: would write <path>` on stderr for each path its stores would write. The MCP server that the proxy adds is a separate `owo mcp` process, and its tools write unless a call sets `dry-run`. The `owo mcp` command itself writes no files and takes no `--dry-run`.
 
 ## Commands
 

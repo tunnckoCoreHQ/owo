@@ -185,8 +185,8 @@ pub struct Options {
     /// The command and arguments that start the owo MCP server the proxy adds to each session,
     /// for the identity resolved at start.
     pub mcp_server: fn(Option<&str>) -> (String, Vec<String>),
-    /// Store no turns, and write one `owo: would write <path>` line to the warnings writer for
-    /// each path a store would write.
+    /// Store no turns. When the stores end, write one `owo: would write <path>` line to the
+    /// warnings writer for each path the stores would write.
     pub dry_run: bool,
 }
 
@@ -217,22 +217,12 @@ impl Owo {
     }
 
     /// Stores `turns` for `identity` in `session`, with the default run size, so a due push
-    /// writes the slice and the prompt. A dry run writes a line for each path instead.
+    /// writes the slice and the prompt.
     fn push(&self, identity: &str, session: &str, turns: Vec<crate::Turn>) -> crate::Result<()> {
-        let store = || -> crate::Result<()> {
-            self.root(identity)?
-                .sync()?
-                .push(session, &turns, &crate::SyncOptions::default())?;
-            Ok(())
-        };
-        if !self.dry_run {
-            return store();
-        }
-        let (result, paths) = crate::write::dry_run(store);
-        for path in paths {
-            self.write(&format!("owo: would write {path}\n"));
-        }
-        result
+        self.root(identity)?
+            .sync()?
+            .push(session, &turns, &crate::SyncOptions::default())?;
+        Ok(())
     }
 
     /// Writes `text` to the warnings writer. A failed write is ignored.
@@ -354,9 +344,20 @@ impl Proxy {
 
         // Stores run on their own thread, so they never delay the pass-through.
         let (store, jobs) = mpsc::channel::<Job>();
+        // A dry run keeps every store of the proxy in one list, so each store sees the turns
+        // the earlier ones kept; the paths are written when the stores end.
         let storer = std::thread::spawn(move || {
-            for (identity, session, turns) in jobs {
-                push(&owo, &identity, &session, turns);
+            let store_all = || {
+                for (identity, session, turns) in jobs {
+                    push(&owo, &identity, &session, turns);
+                }
+            };
+            if !owo.dry_run {
+                return store_all();
+            }
+            let ((), paths) = crate::write::dry_run(store_all);
+            for path in paths {
+                owo.write(&format!("owo: would write {path}\n"));
             }
         });
 

@@ -559,6 +559,8 @@ fn acp_push_writes_the_run_when_due() {
 #[test]
 fn acp_dry_run_stores_no_turns() {
     let tmp = root(&["nicole"]);
+    let mut replies = vec![vec![new_reply()]];
+    replies.extend((2..=7).map(|i| vec![chunk(&format!("m{i}"), "ok"), end(i)]));
     let mut p = start(
         tmp.path(),
         acp::Options {
@@ -566,19 +568,32 @@ fn acp_dry_run_stores_no_turns() {
             mcp_server,
             dry_run: true,
         },
-        vec![vec![new_reply()], vec![chunk("m1", "ok"), end(2)]],
+        replies,
     );
     p.send(&new_session());
     p.read();
     p.read();
-    p.send(&prompt(2, "hello"));
-    p.read();
-    p.read();
+    for i in 2..=7 {
+        p.send(&prompt(i, &format!("turn {i}")));
+        p.read();
+        p.read();
+    }
     let warnings = String::from_utf8(p.end()).unwrap();
-    let store = tmp.path().join(".owo/sessions/s1.nicole.turns.jsonl");
-    assert!(
-        warnings.contains(&format!("owo: would write {}\n", store.display())),
-        "{warnings}"
+    let sessions = tmp.path().join(".owo/sessions");
+    // Each store sees the turns of the earlier ones, so six user turns make a run due.
+    for path in [
+        sessions.join("s1.nicole.turns.jsonl"),
+        sessions.join("s1.nicole.json"),
+        sessions.join("s1.nicole.prompt.md"),
+    ] {
+        let line = format!("owo: would write {}\n", path.display());
+        assert!(warnings.contains(&line), "{warnings}");
+    }
+    let slice = format!(
+        "owo: would write {}",
+        tmp.path().join("sources/nicole/").display()
     );
+    assert!(warnings.contains(&slice), "{warnings}");
     assert!(!tmp.path().join(".owo").exists());
+    assert!(!tmp.path().join("sources").exists());
 }

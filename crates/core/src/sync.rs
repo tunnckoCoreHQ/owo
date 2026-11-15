@@ -375,7 +375,7 @@ pub fn push(req: &StartRequest, turns: &[Turn]) -> Result<Start> {
     for (n, t) in turns.iter().enumerate() {
         check_turn_id(n, &t.id)?;
     }
-    let mut bytes = match fs::read(&file) {
+    let mut bytes = match crate::write::read(&file) {
         Ok(b) => b,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => vec![],
         Err(e) => return Err(e).with_context(|| format!("reading {}", file.display())),
