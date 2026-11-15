@@ -1,5 +1,3 @@
-//! `owo new`: creates an identity folder from the embedded templates.
-
 use crate::identity::{Identity, LIFE_CATEGORIES};
 use crate::write::Writes;
 use crate::{index, state, templates};
@@ -15,9 +13,6 @@ pub struct Created {
     pub files: Vec<String>,
 }
 
-/// Creates `<root>/<slug>`; error text names the folder under `shown`, the root as the request
-/// gave it. A path already there, even a broken symlink, is an error and is left alone. On a
-/// later error, the folder this call created is removed. A dry run makes no folder.
 pub fn new_identity(root: &Path, shown: &Path, name: &str, slug: &str) -> Result<Created> {
     if !crate::slug::is_slug(slug) {
         bail!("invalid slug {slug:?}: use lowercase letters, digits and single hyphens");
@@ -52,7 +47,6 @@ pub fn new_identity(root: &Path, shown: &Path, name: &str, slug: &str) -> Result
     })
 }
 
-/// Writes the files of a new identity into `<root>/<slug>`, shown as `shown`.
 fn fill(root: &Path, shown: &Path, name: &str, slug: &str) -> Result<Vec<String>> {
     let dir = root.join(slug);
     let mut values = BTreeMap::new();

@@ -1,6 +1,3 @@
-//! `owo migrate v1 <path> --out <root>/<slug>`: the mechanical part of moving a v1
-//! identity (a `references/` tree) into the owo layout. Prints a checklist for the rest.
-
 use crate::markdown::{first_heading, parse_frontmatter, Fields};
 use crate::slug::slugify;
 use anyhow::{bail, Result};
@@ -38,7 +35,6 @@ fn frontmatter(text: &str) -> Fields {
         .unwrap_or_default()
 }
 
-/// The first line of why a v1 file's frontmatter does not parse, if it does not.
 fn frontmatter_error(text: &str) -> Option<String> {
     crate::markdown::split(text)
         .frontmatter
@@ -46,7 +42,6 @@ fn frontmatter_error(text: &str) -> Option<String> {
         .map(|e| e.lines().next().unwrap_or_default().to_string())
 }
 
-/// The title a migrated file gets: frontmatter `title`, else the first `# ` heading, else the stem.
 fn title_of(text: &str, stem: &str) -> String {
     frontmatter(text)
         .get("title")
@@ -56,9 +51,6 @@ fn title_of(text: &str, stem: &str) -> String {
         .unwrap_or_else(|| stem.replace('-', " "))
 }
 
-/// Splits a v1 body into its `## Sources` citations, the links among them, and the body
-/// without that section. `sources/<file>` paths become `<slug>/<file>`. A bullet with a link
-/// counts as both: its links (with `#section`) for a lesson's `evidence`, its text as a citation.
 fn take_sources(body: &str, slug: &str) -> (Vec<String>, Vec<String>, String) {
     let (mut cites, mut links, mut rest) = (vec![], vec![], vec![]);
     let mut inside = false;
@@ -94,8 +86,6 @@ fn take_sources(body: &str, slug: &str) -> (Vec<String>, Vec<String>, String) {
     (cites, links, rest.join("\n"))
 }
 
-/// Appends `items` to the list at `key`, skipping ones it has. A missing key becomes a list,
-/// and a single string value becomes its first item.
 fn merge(map: &mut Fields, key: &str, items: Vec<String>) {
     let mut list = match map.remove(key) {
         Some(Value::Array(a)) => a,
@@ -110,8 +100,6 @@ fn merge(map: &mut Fields, key: &str, items: Vec<String>) {
     map.insert(key.to_string(), Value::Array(list));
 }
 
-/// Adds the owo frontmatter fields a v1 file lacks; keeps every existing field.
-/// `parent` is the overview title for a location detail.
 fn normalize(
     text: &str,
     kind: &str,
@@ -156,8 +144,6 @@ fn normalize(
         ),
         _ => {}
     }
-    // Body citations join any list the frontmatter already has. A lesson's linked bullets are its
-    // evidence, not citations.
     let cites: Vec<String> = match kind {
         "lesson" => {
             merge(&mut map, "evidence", links);
@@ -167,7 +153,6 @@ fn normalize(
     };
     merge(&mut map, "sources", cites);
     map.insert("type".to_string(), Value::from(kind));
-    // v1 status values such as "established" mean canon.
     if !matches!(
         map.get("status").and_then(Value::as_str),
         Some("canon" | "disputed" | "superseded")
@@ -203,10 +188,6 @@ fn stem_of(p: &Path) -> String {
         .unwrap_or_default()
 }
 
-/// v1 `world/locations/`: a folder `<x>/` becomes `life/locations/<x>/` with its overview
-/// (`overview.md`, `index.md`, `README.md`, `<x>.md` inside, or `<x>.md` beside it) and its
-/// other files as location details. A folder with no such file gets a stub overview.
-/// A loose `<x>.md` becomes `life/locations/<x>/overview.md`.
 fn migrate_locations(
     locs: &Path,
     dir: &Path,
@@ -287,7 +268,6 @@ fn migrate_locations(
             "location",
             None,
         )?;
-        // A v1 index that is not the overview is dropped, as everywhere else.
         for p in inside.iter().filter(|p| {
             Some(*p) != overview.as_ref() && !matches!(stem_of(p).as_str(), "index" | "_index")
         }) {
@@ -304,7 +284,6 @@ fn migrate_locations(
     Ok(())
 }
 
-/// Migrates `src` into `out`; relative paths join onto `cwd`. The report names `out` as given.
 pub fn v1(cwd: &Path, src: &Path, out: &Path) -> Result<Report> {
     let refs = cwd.join(src).join("references");
     if !refs.is_dir() {
@@ -337,7 +316,6 @@ pub fn v1(cwd: &Path, src: &Path, out: &Path) -> Result<Report> {
     let had_sources = sources.exists();
     crate::create::new_identity(root, shown, &name, &slug)?;
     let mut report = fill(src, &refs, root, &slug, &manifest).inspect_err(|_| {
-        // A dry run made nothing to remove.
         if crate::write::dry() {
             return;
         }
@@ -350,7 +328,6 @@ pub fn v1(cwd: &Path, src: &Path, out: &Path) -> Result<Report> {
     Ok(report)
 }
 
-/// Fills a just-created identity from a v1 folder. The caller removes the folder on error.
 fn fill(src: &Path, refs: &Path, root: &Path, slug: &str, manifest: &Value) -> Result<Report> {
     let dir = root.join(slug);
     let today = crate::state::today();
@@ -413,7 +390,6 @@ fn fill(src: &Path, refs: &Path, root: &Path, slug: &str, manifest: &Value) -> R
         ("threads", "life/threads", "thread", false),
     ];
     for (from, to, kind, dated) in groups {
-        // v1 index files are generated; owo writes its own.
         for p in md_files(&world.join(from))
             .into_iter()
             .filter(|p| !matches!(stem_of(p).as_str(), "index" | "_index"))

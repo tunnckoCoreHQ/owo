@@ -1,8 +1,3 @@
-//! Root, identity and project resolution.
-//!
-//! Root order: the picked root (`Select`), `OWO_ROOT`, `root` in the nearest `.owo.toml`, `root` in the
-//! user config, then `$XDG_DATA_HOME/owo`. Identity and project follow the same chain.
-
 use anyhow::{Context, Result};
 use serde::Deserialize;
 use std::fs;
@@ -10,21 +5,16 @@ use std::path::{Path, PathBuf};
 
 pub const PROJECT_FILE: &str = ".owo.toml";
 
-/// Fields shared by `.owo.toml` and the user config.
 #[derive(Debug, Default, Deserialize)]
 pub struct FileConfig {
     pub root: Option<String>,
     pub identity: Option<String>,
     pub project: Option<String>,
-    /// New user turns per sync run.
     pub sync_every: Option<usize>,
-    /// The ACP proxy runs each due or pending run of a push as a background agent.
     pub auto_ingest: Option<bool>,
-    /// The command of that agent; the proxy adds the run's prompt as its last argument.
     pub ingest_command: Option<Vec<String>>,
 }
 
-/// Where a resolved value came from, reported by `owo config`.
 #[derive(Debug, Clone, serde::Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum Source {
@@ -43,18 +33,13 @@ pub struct Resolved {
     pub identity: Option<String>,
     pub identity_source: Option<Source>,
     pub project: Option<String>,
-    /// `sync_every` from `.owo.toml`, else from the user config.
     pub sync_every: Option<usize>,
-    /// `auto_ingest` from `.owo.toml`, else from the user config, else false.
     pub auto_ingest: bool,
-    /// `ingest_command` from `.owo.toml`, else from the user config.
     pub ingest_command: Option<Vec<String>>,
 }
 
-/// Inputs to resolution, so tests can run without touching the real environment.
 #[derive(Debug, Default)]
 pub struct Inputs {
-    /// The root, identity and project the caller picks.
     pub select: crate::Select,
     pub env_root: Option<String>,
     pub env_identity: Option<String>,
@@ -66,7 +51,6 @@ pub struct Inputs {
 }
 
 impl Inputs {
-    /// The picks from `select` and the environment values from `env`.
     pub fn new(select: &crate::Select, env: &crate::Env) -> Self {
         Self {
             select: select.clone(),
@@ -109,7 +93,6 @@ impl Inputs {
     }
 }
 
-/// `~/<rest>` under `home`; any other value as written.
 pub fn expand_home(value: &str, home: Option<&Path>) -> PathBuf {
     match (value.strip_prefix("~/"), home) {
         (Some(rest), Some(home)) => home.join(rest),
@@ -122,7 +105,6 @@ fn read_config(path: &Path) -> Result<FileConfig> {
     toml::from_str(&text).with_context(|| format!("parsing {}", path.display()))
 }
 
-/// Finds the nearest `.owo.toml` walking up from `start`.
 pub fn find_project_file(start: &Path) -> Option<PathBuf> {
     start
         .ancestors()
@@ -212,7 +194,6 @@ pub fn resolve(inputs: &Inputs) -> Result<Resolved> {
     })
 }
 
-/// A field set in `.owo.toml`, else in the user config.
 fn first<T>(
     configs: [&Option<(PathBuf, FileConfig)>; 2],
     field: impl Fn(&FileConfig) -> Option<T>,
@@ -222,7 +203,6 @@ fn first<T>(
         .find_map(|cfg| cfg.as_ref().and_then(|(_, c)| field(c)))
 }
 
-/// Lists identity folders: direct children of the root that hold `identity.json`.
 pub fn list_identities(root: &Path) -> Vec<String> {
     let Ok(entries) = fs::read_dir(root) else {
         return vec![];
@@ -245,7 +225,6 @@ fn only_identity(root: &Path) -> Option<String> {
     }
 }
 
-/// A selection or config problem; the CLI exits 3 for it.
 #[derive(Debug)]
 pub struct ConfigError(pub String);
 
@@ -257,7 +236,6 @@ impl std::fmt::Display for ConfigError {
 
 impl std::error::Error for ConfigError {}
 
-/// The selected identity slug, checked to be a slug with a folder in the root.
 pub fn need_identity(r: &Resolved) -> Result<String> {
     let slug = r
         .identity
@@ -275,7 +253,6 @@ pub fn need_identity(r: &Resolved) -> Result<String> {
     Ok(slug)
 }
 
-/// Checks that the selected project is a slug with a `project.md` in the identity folder.
 pub fn need_project<'a>(dir: &Path, project: Option<&'a str>) -> Result<Option<&'a str>> {
     let Some(p) = project else {
         return Ok(None);

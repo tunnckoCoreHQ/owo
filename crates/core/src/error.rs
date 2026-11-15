@@ -1,98 +1,78 @@
-//! Why a library call failed: the kind of failure, its text, and for the failures a caller may
-//! word in its own terms, a typed `Fault`. A fault's text names fields and operations, never a
-//! flag or a command of a caller.
-
 use crate::identity::Kind;
 use std::path::PathBuf;
 
-/// What kind of failure an `Error` is.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ErrorKind {
-    /// A bad argument, such as `add` with no title.
     Usage,
-    /// A root, identity or project that does not resolve or does not exist.
     Config,
-    /// A file that cannot be read or written.
     Io,
-    /// Anything else the call could not do.
     Failed,
 }
 
-/// A failure with its facts, so a caller can say what to do in its own terms.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Fault {
-    /// No root given, in the environment, or in a config file, and no default.
     NoRoot,
-    /// No identity selected in this root.
     NoIdentity(PathBuf),
-    /// `add` with no title, for an entry type that needs one.
     NeedsTitle(Kind),
-    /// `add` with a field that only the entry type `kind` takes; `given` has no `noun`.
     OnlyFor {
         field: &'static str,
         noun: &'static str,
         kind: Kind,
         given: Kind,
     },
-    /// `add` of an entry type that needs a field, such as `location-detail` without `parent`.
-    KindNeeds { kind: Kind, field: &'static str },
-    /// A template with no `line` to put the field in.
+    KindNeeds {
+        kind: Kind,
+        field: &'static str,
+    },
     TemplateLacks {
         template: String,
         line: &'static str,
         field: &'static str,
     },
-    /// `write` with no text for the file.
     NoText(String),
-    /// A field given as empty text.
     Empty(&'static str),
-    /// A field whose value does not name what the field needs.
-    Field { name: &'static str, error: String },
-    /// `migrate_v1` with an `out` that does not end in a slug.
+    Field {
+        name: &'static str,
+        error: String,
+    },
     OutNoSlug,
-    /// `changes` outside Git with a `since` that is not a day.
     SinceNotDay(String),
-    /// A template name that no template has.
     UnknownTemplate(String),
-    /// The selected identity has no folder at this path.
     NoIdentityFolder(PathBuf),
-    /// The project has no `work/projects/<slug>/project.md`.
     NoProject(String),
-    /// A write to a generated file; `Identity::index` writes it.
     Generated(String),
-    /// `soul/state.json` is missing; `Identity::stamp` writes it.
     NoSoulState,
-    /// Another sync step holds the lock file of the session.
-    SessionBusy { session: String, lock: PathBuf },
-    /// A session of pushed turns, given to `SessionSync::start`.
+    SessionBusy {
+        session: String,
+        lock: PathBuf,
+    },
     PushedSession(String),
-    /// A session that reads a host transcript, given to `SessionSync::push`.
-    TranscriptSession { session: String, transcript: String },
-    /// A transcript with text but no user or assistant message in its format.
+    TranscriptSession {
+        session: String,
+        transcript: String,
+    },
     NoMessages {
         transcript: PathBuf,
         format: &'static str,
     },
-    /// `Root::sync_done` for a session that no sync step started.
     NoBookmark(String),
-    /// `Root::sync_done` before the bookmark.
-    BehindBookmark { until: usize, bookmark: usize },
-    /// `Root::sync_done` past the messages the last sync step read.
-    PastMessages { until: usize, seen: u64 },
-    /// A number outside the range of its field, such as `days` outside 0 to `MAX_DAYS`.
+    BehindBookmark {
+        until: usize,
+        bookmark: usize,
+    },
+    PastMessages {
+        until: usize,
+        seen: u64,
+    },
     OutOfRange {
         name: &'static str,
         value: i64,
         min: i64,
         max: i64,
     },
-    /// Two fields that cannot be given together, such as `since` and `days` of `changes`.
     Conflict(&'static str, &'static str),
-    /// A field given without the field it needs, such as `png` without `out` of a card.
     Needs(&'static str, &'static str),
-    /// The proxy option `inject` in a root with no identity.
     InjectNeedsIdentity,
-    /// `auto_ingest` on, with no `ingest_command` and an ACP agent command owo does not know.
     NoIngestCommand(String),
 }
 
@@ -114,7 +94,6 @@ impl Fault {
     }
 }
 
-/// `a` or `an` for the word.
 fn article(word: &str) -> &'static str {
     if word.starts_with(['a', 'e', 'i', 'o', 'u']) {
         "an"
@@ -206,12 +185,9 @@ impl std::fmt::Display for Fault {
 
 impl std::error::Error for Fault {}
 
-/// Why a call failed. `Display` is the whole error text.
 #[derive(Debug)]
 pub struct Error {
     pub kind: ErrorKind,
-    /// The failure with its facts, when it is one a caller may word itself. The error text is
-    /// then the fault's text.
     pub fault: Option<Fault>,
     message: String,
 }

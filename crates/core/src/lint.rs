@@ -1,5 +1,3 @@
-//! `owo lint`: validates one identity against the design rules.
-
 use crate::identity::{Entry, Identity, Kind, LIFE_CATEGORIES, SOUL_FILES};
 use crate::markdown;
 use crate::output::{Diagnostic, Level};
@@ -10,7 +8,6 @@ use serde_json::Value as Json;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fs;
 
-/// Soft word budgets for soul files.
 pub const BUDGETS: &[(&str, usize)] = &[
     ("IDENTITY.md", 800),
     ("SOUL.md", 800),
@@ -22,10 +19,8 @@ pub const BUDGETS: &[(&str, usize)] = &[
 const DUPE_WORDS: usize = 12;
 const STATUSES: &[&str] = &["canon", "disputed", "superseded"];
 
-/// A rule appends its findings; the runner names them after the rule.
 type Check = fn(&Identity, &mut Vec<Diagnostic>);
 
-/// Every rule, in run order.
 const CHECKS: &[(&str, Check)] = &[
     ("tree", tree),
     ("schema", schema),
@@ -46,12 +41,10 @@ const CHECKS: &[(&str, Check)] = &[
     ("kb", kb_links),
 ];
 
-/// One lint rule.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Rule(usize);
 
 impl Rule {
-    /// Every rule, in run order.
     pub fn all() -> impl Iterator<Item = Rule> {
         (0..CHECKS.len()).map(Rule)
     }
@@ -65,7 +58,6 @@ impl Rule {
     }
 }
 
-/// Runs the `rules`, or every rule when `rules` is empty.
 pub fn run(id: &Identity, rules: &[Rule]) -> Vec<Diagnostic> {
     let mut out = vec![];
     for rule in Rule::all() {
@@ -417,7 +409,6 @@ fn unique(id: &Identity, out: &mut Vec<Diagnostic>) {
     }
 }
 
-/// Identifier values and their home file.
 fn identifier_values(id: &Identity) -> Vec<(String, String)> {
     let mut out = vec![];
     for e in id.entries.iter().filter(|e| !e.is_generated()) {
@@ -450,7 +441,6 @@ fn identifier_values(id: &Identity) -> Vec<(String, String)> {
 fn identifiers(id: &Identity, out: &mut Vec<Diagnostic>) {
     let values = identifier_values(id);
     for e in &id.entries {
-        // In the home file, only the `## Identifiers` lines may hold the values.
         let split = markdown::split(&e.text);
         let home_lines: Vec<usize> = markdown::section(split.body, "Identifiers")
             .map(|(_, lines)| lines.iter().map(|(i, _)| i + split.body_line).collect())
@@ -489,7 +479,6 @@ fn journal(id: &Identity, out: &mut Vec<Diagnostic>) {
     }
 }
 
-/// Entries the links in `value` resolve to; an ambiguous link resolves to none.
 fn link_hits(id: &Identity, value: &str) -> Vec<usize> {
     markdown::links(value)
         .iter()
@@ -549,12 +538,10 @@ fn memory_review(id: &Identity, out: &mut Vec<Diagnostic>) {
     ));
 }
 
-/// The drift `owo stamp --check` reports, one warning per file.
 fn state_rule(id: &Identity, out: &mut Vec<Diagnostic>) {
     let report = match crate::stamp::run(id, true) {
         Ok(r) => r,
         Err(e) => {
-            // Only a state file that does not parse stops the check.
             let path = state::SCOPES
                 .iter()
                 .map(|s| format!("{s}/state.json"))
@@ -618,7 +605,6 @@ fn dupes(id: &Identity, out: &mut Vec<Diagnostic>) {
             owners.entry(s).or_default().push(i);
         }
     }
-    // Per file pair: how many windows they share, and the first shared one to quote.
     let mut pairs: BTreeMap<(usize, usize), (usize, &str)> = BTreeMap::new();
     for (s, files) in owners.iter().filter(|(_, f)| f.len() > 1) {
         for (a, x) in files.iter().enumerate() {
@@ -693,8 +679,6 @@ fn review_due(id: &Identity, out: &mut Vec<Diagnostic>) {
     }
 }
 
-/// `[[kb:<p>:<path>#<Section>]]` links: the project must exist; when its KB folder exists,
-/// the file and section must too. A KB that is not checked out is skipped.
 fn kb_links(id: &Identity, out: &mut Vec<Diagnostic>) {
     for e in id.entries.iter().filter(|e| !e.is_generated()) {
         for (line, link) in crate::find::raw_links(e) {

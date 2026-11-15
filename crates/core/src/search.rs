@@ -1,6 +1,3 @@
-//! `owo search`: small in-crate BM25 over title, aliases, summary and body.
-//! Fields are weighted by repeating their tokens: title and aliases x3, summary x2, body x1.
-
 use crate::identity::{Entry, Identity};
 use serde::Serialize;
 use std::collections::HashMap;
@@ -44,12 +41,10 @@ pub struct Hit {
     pub score: f64,
     pub line: Option<usize>,
     pub snippet: Option<String>,
-    /// The query is the title or an alias; such hits rank first.
     #[serde(skip)]
     exact: bool,
 }
 
-/// One of the three folders of an identity.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Scope {
     Soul,
@@ -130,8 +125,6 @@ pub fn search(id: &Identity, filter: &Request) -> Vec<Hit> {
         }
         if score > 0.0 {
             let names: Vec<&String> = e.title.iter().chain(&e.aliases).collect();
-            // The best line comes from the body (the title is shown already), else from
-            // the frontmatter when only the summary or aliases match.
             let body_line = crate::markdown::split(&e.text).body_line;
             let best_in = |in_body: bool| {
                 e.text

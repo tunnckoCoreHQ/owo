@@ -1,5 +1,3 @@
-//! `owo resolve`, `owo show`, `owo links`: read-side lookups over one identity.
-
 use crate::identity::{Entry, Identity, Kind};
 use crate::markdown;
 use serde::Serialize;
@@ -48,8 +46,6 @@ fn levenshtein(a: &str, b: &str) -> usize {
     prev[b.len()]
 }
 
-/// The identity-relative path of a name typed as a file path inside the identity folder
-/// (absolute, or relative to the working directory). Links in files never go through this.
 fn identity_rel(id: &Identity, name: &str) -> Option<String> {
     if !(name.contains('/') || name.ends_with(".md")) {
         return None;
@@ -60,7 +56,6 @@ fn identity_rel(id: &Identity, name: &str) -> Option<String> {
     Some(rel.to_string_lossy().replace('\\', "/"))
 }
 
-/// Resolves a name the way links do, optionally limited to one entry type.
 pub fn resolve(id: &Identity, name: &str, kind: Option<Kind>) -> Resolution {
     let matches_kind = |i: &usize| kind.is_none_or(|k| id.entries[*i].kind == k);
     let hits: Vec<usize> = id
@@ -72,7 +67,6 @@ pub fn resolve(id: &Identity, name: &str, kind: Option<Kind>) -> Resolution {
         1 => Resolution::Found(hits[0]),
         0 => {
             let needle = name.trim().to_lowercase();
-            // An empty needle is in every key, so it has no candidates.
             if needle.is_empty() {
                 return Resolution::Missing(vec![]);
             }
@@ -105,12 +99,10 @@ pub fn resolve(id: &Identity, name: &str, kind: Option<Kind>) -> Resolution {
     }
 }
 
-/// The error for a name that does not resolve to one entry, without the candidate list.
 pub(crate) fn unresolved(name: &str) -> String {
     format!("{name:?} does not resolve to one entry")
 }
 
-/// The one entry a name resolves to; the error lists up to five candidates.
 pub fn one(id: &Identity, name: &str) -> anyhow::Result<usize> {
     match resolve(id, name, None) {
         Resolution::Found(i) => Ok(i),
@@ -126,16 +118,12 @@ pub fn one(id: &Identity, name: &str) -> anyhow::Result<usize> {
     }
 }
 
-/// One section of `body` with its heading line (any heading level, case-insensitive);
-/// the error names `path`.
 pub fn section_text(body: &str, name: &str, path: &str) -> anyhow::Result<String> {
     let (head, text) = markdown::section_text(body, name)
         .ok_or_else(|| anyhow::anyhow!("no section {name:?} in {path}"))?;
     Ok(format!("{head}\n{}\n", text.trim_end()))
 }
 
-/// What `owo show` prints for a name, as (path, text): a `kb:` link's file, else an entry.
-/// Either is the whole file or one section.
 pub fn show(id: &Identity, name: &str, section: Option<&str>) -> anyhow::Result<(String, String)> {
     let target = name.trim_start_matches("[[").trim_end_matches("]]");
     if let Some(shown) = crate::kb::show(id, target, section) {
@@ -157,7 +145,6 @@ pub struct LinkRef {
     pub target: String,
 }
 
-/// Links that point at entry `idx` (backlinks), from authored files.
 pub fn backlinks(id: &Identity, idx: usize) -> Vec<LinkRef> {
     let mut out = vec![];
     for (src, e) in id.entries.iter().enumerate() {
@@ -178,7 +165,6 @@ pub fn backlinks(id: &Identity, idx: usize) -> Vec<LinkRef> {
     out
 }
 
-/// Links going out of entry `idx`, with the path they resolve to (empty when broken).
 pub fn outlinks(id: &Identity, idx: usize) -> Vec<LinkRef> {
     let e = &id.entries[idx];
     file_links(e)
@@ -199,15 +185,12 @@ pub fn outlinks(id: &Identity, idx: usize) -> Vec<LinkRef> {
         .collect()
 }
 
-/// Every wiki-link in a file with its 1-based line, frontmatter included,
-/// leaving out `kb:` links and empty targets.
 pub fn file_links(e: &Entry) -> Vec<(usize, markdown::Link)> {
     let mut out = raw_links(e);
     out.retain(|(_, l)| !l.target.is_empty() && !l.target.starts_with("kb:"));
     out
 }
 
-/// Every wiki-link in a file with its 1-based line, frontmatter included.
 pub fn raw_links(e: &Entry) -> Vec<(usize, markdown::Link)> {
     let split = markdown::split(&e.text);
     let mut out = vec![];
@@ -231,7 +214,6 @@ fn line_text(e: &Entry, line: usize) -> String {
         .to_string()
 }
 
-/// Entries that should be linked from somewhere but are not.
 pub fn orphans(id: &Identity) -> Vec<usize> {
     let mut inbound = vec![0usize; id.entries.len()];
     for (src, e) in id

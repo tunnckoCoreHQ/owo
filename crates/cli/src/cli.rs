@@ -1,15 +1,9 @@
-//! The command line, built from the core's operations: each operation is a command and each
-//! field of its request type a flag or a positional argument, with its help text, default,
-//! allowed values and rules. The global flags, the command groups and `mcp` and `acp`, which
-//! connect the process to the core, are the CLI's own.
-
 use clap::builder::PossibleValuesParser;
 use clap::{value_parser, Arg, ArgAction, ArgMatches, Command};
 use owo_core::{Args, Field, Operation, Select, Type};
 use serde_json::{Map, Value};
 use std::path::PathBuf;
 
-/// The help line of each command that only groups other commands.
 const GROUPS: &[(&str, &str)] = &[
     ("export", "Export the identity to another format"),
     (
@@ -19,7 +13,6 @@ const GROUPS: &[(&str, &str)] = &[
     ("migrate", "Migrate an identity from an older layout"),
 ];
 
-/// The flags every command takes.
 pub struct Global {
     pub select: Select,
     pub json: bool,
@@ -40,7 +33,6 @@ impl Global {
     }
 }
 
-/// The whole command line: the global flags, a command per operation, `mcp` and `acp`.
 pub fn command(ops: &[Operation]) -> Command {
     let mut root = Command::new("owo")
         .version(env!("CARGO_PKG_VERSION"))
@@ -154,8 +146,6 @@ fn acp() -> Command {
         )
 }
 
-/// The help of a field in the CLI's words, where they differ from the core's: flags, stdin and
-/// exit codes.
 fn help(op: &Operation, f: &Field) -> &'static str {
     match (op.path, f.name) {
         (["stamp"], "check") => "Report drift and exit 1 instead of writing",
@@ -169,8 +159,6 @@ fn help(op: &Operation, f: &Field) -> &'static str {
     }
 }
 
-/// The flag of a field name: each capital letter becomes `-` and its small letter, so the
-/// field `dryRun` is the flag `--dry-run`.
 fn flag(name: &str) -> String {
     let mut flag = String::new();
     for c in name.chars() {
@@ -182,7 +170,6 @@ fn flag(name: &str) -> String {
     flag
 }
 
-/// The flag or positional argument of one field of `op`.
 fn arg(op: &Operation, f: &Field) -> Arg {
     let mut a = Arg::new(f.name).help(help(op, f));
     if !f.positional {
@@ -226,8 +213,6 @@ fn arg(op: &Operation, f: &Field) -> Arg {
     a
 }
 
-/// The arguments of `op` from the matches of its command, by field name: a switch as a boolean,
-/// a field with several values as an array of strings, else a string.
 pub fn args(op: &Operation, m: &ArgMatches) -> Map<String, Value> {
     let mut map = Map::new();
     for f in &op.fields {
@@ -251,7 +236,6 @@ pub fn args(op: &Operation, m: &ArgMatches) -> Map<String, Value> {
     map
 }
 
-/// `args` with the raw value of each path field given, so a path keeps bytes that are not UTF-8.
 pub fn with_paths(op: &Operation, m: &ArgMatches, mut args: Args) -> Args {
     for f in op.fields.iter().filter(|f| f.ty == Type::Path) {
         if let Some(p) = m.get_one::<PathBuf>(f.name) {

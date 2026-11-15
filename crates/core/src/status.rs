@@ -1,6 +1,3 @@
-//! Derived current state: `owo state` and the "Now" block of `owo context`.
-//! Everything here is computed from the state files and frontmatter dates.
-
 use crate::identity::{Entry, Identity, Kind};
 use crate::state::date_of;
 use chrono::{Duration, Utc};
@@ -53,7 +50,6 @@ pub struct State {
     pub open_conflicts: Vec<Link>,
     pub review: Review,
     pub last_soul_change: Option<crate::review::SoulChange>,
-    /// With `--project`: last update and recent notes for that project.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub project: Option<ProjectState>,
 }
@@ -61,7 +57,6 @@ pub struct State {
 #[derive(Debug, Serialize)]
 pub struct ProjectState {
     pub slug: String,
-    /// Newest stamp among the project's files.
     pub last_updated: Option<String>,
     pub notes: Vec<Link>,
 }
@@ -82,7 +77,6 @@ pub struct Row {
     pub projects: Vec<String>,
 }
 
-/// One row per identity in the root for `owo list`.
 pub fn list(root: &std::path::Path) -> Vec<Row> {
     crate::config::list_identities(root)
         .into_iter()
@@ -109,7 +103,6 @@ fn by_date_desc(id: &Identity, kind: Kind) -> Vec<&Entry> {
     v
 }
 
-/// Latest `updated` stamp per scope from the state files.
 fn scope_activity(id: &Identity) -> Vec<(String, String)> {
     crate::state::SCOPES
         .iter()
@@ -123,7 +116,6 @@ fn scope_activity(id: &Identity) -> Vec<(String, String)> {
         .collect()
 }
 
-/// Newest `work/state.json` stamp per project, from its files under `projects/<p>/`.
 fn project_stamps(id: &Identity) -> std::collections::BTreeMap<String, String> {
     let mut out = std::collections::BTreeMap::<String, String>::new();
     for (scope, rel, at) in crate::state::stamps(id) {
@@ -144,27 +136,22 @@ fn project_stamps(id: &Identity) -> std::collections::BTreeMap<String, String> {
     out
 }
 
-/// The project with the newest stamp, as (project, stamp).
 pub fn last_project(id: &Identity) -> Option<(String, String)> {
     project_stamps(id).into_iter().max_by(|a, b| a.1.cmp(&b.1))
 }
 
 pub fn compute(id: &Identity, days: i64, logs: usize) -> State {
     let today = Utc::now().date_naive();
-    // Recent events count back from the newest story date, since story time can run behind or
-    // ahead of real time.
     let newest = id
         .entries
         .iter()
         .filter(|e| matches!(e.kind, Kind::Log | Kind::Event))
-        // A log with nothing written yet is not a day that happened.
         .filter(|e| !(e.kind == Kind::Log && e.is_blank()))
         .filter_map(|e| date_of(&e.field_str("date")?))
         .max()
         .unwrap_or(today);
     let since = newest - Duration::days(days);
     let review = crate::state::review(id);
-    // A log with nothing written yet is not a day that happened.
     let log_entries: Vec<&Entry> = by_date_desc(id, Kind::Log)
         .into_iter()
         .filter(|e| !e.is_blank())
@@ -212,7 +199,6 @@ pub fn compute(id: &Identity, days: i64, logs: usize) -> State {
     }
 }
 
-/// The links as `[[title]]` wiki-links joined with commas, or "none".
 pub(crate) fn join(links: &[Link]) -> String {
     if links.is_empty() {
         "none".into()
@@ -221,7 +207,6 @@ pub(crate) fn join(links: &[Link]) -> String {
     }
 }
 
-/// The short generated "Now" block injected by `owo context`.
 pub fn now_block(s: &State, project: Option<&str>) -> String {
     let mut out = String::from("## Now\n\n");
     let scopes: Vec<String> = s

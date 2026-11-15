@@ -1,7 +1,3 @@
-//! `owo stamp`: refreshes the three state files from content hashes.
-//! Timestamps move only when a file's hash changed. Changed entries get today's
-//! `updated:` date in frontmatter; a changed soul file bumps the soul.json minor version.
-
 use crate::identity::{Identity, Kind};
 use crate::state::{self, hash, scope_of, SCOPES};
 use crate::write::Writes;
@@ -35,8 +31,6 @@ fn files_mut(doc: &mut Value) -> &mut Map<String, Value> {
     doc["files"].as_object_mut().expect("files is an object")
 }
 
-/// Sets `updated: <today>` inside frontmatter, keeping the file's line endings.
-/// Returns the new text when it changed.
 fn touch_updated(text: &str, today: &str) -> Option<String> {
     let split = crate::markdown::split(text);
     let fm = split.frontmatter?;
@@ -60,7 +54,6 @@ pub fn run(id: &Identity, check: bool) -> Result<Report> {
         bail!("{} is not valid UTF-8; fix it before stamping", e.rel);
     }
     let at = state::now();
-    // Frontmatter dates name the local day, like `owo add`; state stamps stay UTC.
     let today = state::local_today();
     let mut docs = SCOPES
         .iter()
@@ -69,7 +62,6 @@ pub fn run(id: &Identity, check: bool) -> Result<Report> {
     let mut report = Report::default();
     let mut soul_changed = false;
     let mut seen: Vec<(String, String)> = vec![];
-    // Frontmatter edits wait until soul.json is read, so a failed stamp changes no file.
     let mut touched: Vec<(String, String)> = vec![];
 
     for e in state::tracked(id) {
@@ -130,7 +122,6 @@ pub fn run(id: &Identity, check: bool) -> Result<Report> {
     if check || report.is_clean() {
         return Ok(report);
     }
-    // Read soul.json before any write, so a broken one fails the stamp with nothing recorded.
     let soul = if soul_changed { bumped_soul(id)? } else { None };
     let writes = touched.into_iter().fold(Writes::new(), |w, (rel, text)| {
         w.file(id.dir.join(&rel), rel, text)
@@ -148,7 +139,6 @@ pub fn run(id: &Identity, check: bool) -> Result<Report> {
     Ok(report)
 }
 
-/// `soul/soul.json` with its minor version bumped, or None when the file is missing.
 fn bumped_soul(id: &Identity) -> Result<Option<Value>> {
     let Some(mut soul) = id.read_object("soul/soul.json")? else {
         return Ok(None);

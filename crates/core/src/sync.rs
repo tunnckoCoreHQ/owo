@@ -1,8 +1,3 @@
-//! `owo sync start` / `owo sync done`: host-agnostic session sync.
-//! The host calls `start` after each turn; when enough new user turns exist, owo writes the
-//! slice to `<root>/sources/<slug>/` and an ingest prompt to `<root>/.owo/sessions/`.
-//! The host runs the ingest agent, whose last step is `done --until <n>`, which moves the bookmark.
-
 use crate::identity::read_object;
 use crate::write::Writes;
 use crate::Fault;
@@ -14,10 +9,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-/// The format of a host transcript; `Jsonl` by default.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Format {
-    /// One `{"role", "text"}` object per line, with an optional turn `id`.
     #[default]
     Jsonl,
     ClaudeJsonl,
@@ -40,22 +33,17 @@ impl Format {
     }
 }
 
-/// The bookmark of a session: where its transcript is, how far ingest got, and the run that
-/// waits for `Root::sync_done`.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Bookmark {
     pub session: String,
     pub transcript: String,
-    /// The messages the last sync step read.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub messages: Option<usize>,
-    /// The message index ingest reached.
     pub until: usize,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub pending: Option<PendingRun>,
 }
 
-/// A run whose slice and prompt are written, and that has no `Root::sync_done` yet.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct PendingRun {
     pub from: usize,
@@ -68,7 +56,6 @@ const OVERLAP_TURNS: usize = 2;
 
 #[derive(Debug, Clone)]
 pub struct Message {
-    /// The host's id for the message, when the transcript has one.
     pub id: Option<String>,
     pub role: String,
     pub text: String,
@@ -91,7 +78,6 @@ fn text_of(content: &Value) -> String {
     }
 }
 
-/// A string or number id as text.
 fn id_of(v: &Value) -> Option<String> {
     match v {
         Value::String(s) if !s.is_empty() => Some(s.clone()),
@@ -100,7 +86,6 @@ fn id_of(v: &Value) -> Option<String> {
     }
 }
 
-/// Parses a transcript into user and assistant messages with text.
 pub fn parse(raw: &str, format: Format) -> Result<Vec<Message>> {
     let mut out = vec![];
     let mut push = |id: Option<String>, role: Option<&str>, text: String| {
@@ -166,13 +151,10 @@ pub struct Start {
     pub source: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub prompt: Option<String>,
-    /// The prompt of a run that started earlier and has no `sync done` yet.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub pending: Option<String>,
-    /// Push only: turns stored by this push.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub added: Option<usize>,
-    /// Push only, when due: the slice and prompt text, for agents that cannot read the files.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub source_text: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -181,7 +163,6 @@ pub struct Start {
 
 pub struct StartRequest<'a> {
     pub root: &'a Path,
-    /// The caller's folder, which a relative transcript path joins onto.
     pub cwd: &'a Path,
     pub slug: &'a str,
     pub session: &'a str,
@@ -202,15 +183,11 @@ fn check_session(session: &str) -> Result<()> {
     Ok(())
 }
 
-/// Holds `<root>/.owo/sessions/<id>.lock` while one sync step reads and writes the bookmark,
-/// so parallel calls for one session run one after the other. The folders it made go when the
-/// lock goes and they are empty, so a failed step leaves none.
 struct Lock {
     path: PathBuf,
     _made: Made,
 }
 
-/// Folders a lock made, deepest first, removed when they are empty again.
 struct Made(Vec<PathBuf>);
 
 impl Drop for Made {
@@ -222,7 +199,6 @@ impl Drop for Made {
 }
 
 impl Lock {
-    /// None in a dry run, which writes no bookmark to guard.
     fn take(root: &Path, session: &str) -> Result<Option<Lock>> {
         if crate::write::dry() {
             return Ok(None);
@@ -239,7 +215,6 @@ impl Lock {
             {
                 Ok(_) => return Ok(Some(Lock { path, _made: made })),
                 Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
-                    // A lock older than a minute belongs to a process that ended without cleanup.
                     let stale = fs::metadata(&path)
                         .and_then(|m| m.modified())
                         .is_ok_and(|t| t.elapsed().unwrap_or_default() > Duration::from_secs(60));
@@ -279,7 +254,6 @@ fn bookmark_writes(root: &Path, session: &str, doc: &Value) -> Result<Writes> {
     Writes::new().json(&path, &path, doc)
 }
 
-/// The file that `push` stores turns in, relative to the root.
 fn store(session: &str) -> String {
     format!(".owo/sessions/{session}.turns.jsonl")
 }
@@ -299,7 +273,6 @@ pub fn start(req: &StartRequest, transcript: &Path, format: Format) -> Result<St
     Ok(out)
 }
 
-/// One turn a host pushes: its id (the host's id for the message), role and text.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Turn {
     pub id: String,
@@ -322,7 +295,6 @@ impl Role {
     }
 }
 
-/// A turn id is not empty and has no control characters.
 fn check_turn_id(n: usize, id: &str) -> Result<()> {
     if id.is_empty() || id.chars().any(char::is_control) {
         bail!("turn {n}: the turn id must be a number or a string with no control characters");
@@ -330,7 +302,6 @@ fn check_turn_id(n: usize, id: &str) -> Result<()> {
     Ok(())
 }
 
-/// Parses a JSON array of `{id, role, text}` turns; an id is a string or a number.
 pub fn parse_turns(json: &str) -> Result<Vec<Turn>> {
     let list: Value = serde_json::from_str(json).context("turns are not JSON")?;
     let list = list
@@ -357,8 +328,6 @@ pub fn parse_turns(json: &str) -> Result<Vec<Turn>> {
     Ok(turns)
 }
 
-/// Stores pushed turns in `<root>/.owo/sessions/<id>.turns.jsonl`, skipping ids already
-/// stored and turns with no text, then runs `start` on that file.
 pub fn push(req: &StartRequest, turns: &[Turn]) -> Result<Start> {
     check_session(req.session)?;
     let _lock = Lock::take(req.root, req.session)?;
@@ -380,8 +349,6 @@ pub fn push(req: &StartRequest, turns: &[Turn]) -> Result<Start> {
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => vec![],
         Err(e) => return Err(e).with_context(|| format!("reading {}", file.display())),
     };
-    // A write cut off before its newline leaves a partial last line, perhaps mid-character;
-    // drop it before decoding.
     bytes.truncate(bytes.iter().rposition(|b| *b == b'\n').map_or(0, |i| i + 1));
     let mut stored = String::from_utf8(bytes)
         .with_context(|| format!("{} is not UTF-8; fix it by hand", file.display()))?;
@@ -410,8 +377,6 @@ pub fn push(req: &StartRequest, turns: &[Turn]) -> Result<Start> {
     Ok(out)
 }
 
-/// Parses `raw`, the text of `transcript`, decides whether a run is due, and returns the writes
-/// of the slice, the prompt and the bookmark for the caller to commit. The caller holds the lock.
 fn run(
     req: &StartRequest,
     transcript: &Path,
@@ -430,8 +395,6 @@ fn run(
     let done = doc["until"].as_u64().unwrap_or(0) as usize;
     let done = done.min(messages.len());
     let until = messages.len();
-    // While a run is pending, count from its end so the next turns do not start it again.
-    // The slice still starts at the bookmark, so a run that never finished is covered again.
     let counted_from = doc["pending"]["until"]
         .as_u64()
         .map_or(done, |u| (u as usize).clamp(done, until));
@@ -519,7 +482,6 @@ fn run(
     ))
 }
 
-/// A session with a pending run: its prompt and the messages the run covers.
 #[derive(Debug, Serialize)]
 pub struct Due {
     pub session: String,
@@ -528,8 +490,6 @@ pub struct Due {
     pub until: usize,
 }
 
-/// The sessions in `<root>/.owo/sessions/` whose bookmark has a pending run, by session id.
-/// With `slug`, only the runs whose slice is in `sources/<slug>/`.
 pub fn due(root: &Path, slug: Option<&str>) -> Result<Vec<Due>> {
     let prefix = slug.map(|s| format!("sources/{s}/"));
     let dir = root.join(".owo/sessions");

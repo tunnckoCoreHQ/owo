@@ -1,11 +1,3 @@
-//! The MCP server. Each tool is an operation of `operations`, and its input schema comes from
-//! the fields of the operation's request type. A tool call maps its JSON arguments into the
-//! request, runs the operation and returns its envelope, or for `context`, `show` and `soul`
-//! its text.
-//! The typed call checks the rules, and a library error reaches the client as its plain
-//! text. Messages are JSON-RPC 2.0: one per line with `serve`, or one per POST to `/mcp` with
-//! `serve_http`. `reply` answers one message.
-
 use crate::request::{scalar, Args, Field, Type};
 use crate::{operations, Env, Envelope, Operation, Outcome, Ran, Select};
 use anyhow::Context;
@@ -15,15 +7,12 @@ use std::net::{TcpListener, TcpStream};
 use std::time::{Duration, Instant};
 
 const PROTOCOL: &str = "2025-06-18";
-/// Versions whose messages this server speaks; `initialize` echoes one of these, else `PROTOCOL`.
 const SUPPORTED: &[&str] = &[PROTOCOL, "2025-03-26", "2024-11-05"];
 
-/// The tools whose result is the text, not the envelope.
 fn returns_text(op: &Operation) -> bool {
     matches!(op.path, ["context"] | ["show"] | ["soul"])
 }
 
-/// The JSON schema type of a field: a multi-word positional is one string.
 fn schema_type(f: &Field) -> &'static str {
     match f.ty {
         Type::Switch => "boolean",
@@ -79,7 +68,6 @@ fn result(text: String, error: bool) -> Value {
     json!({ "content": [{ "type": "text", "text": text }], "isError": error })
 }
 
-/// Runs one tool call. A panic becomes an error result, so the server answers the next request.
 fn call(op: &Operation, params: &Value, select: &Select, env: &Env) -> Value {
     guarded(|| run_tool(op, params, select, env))
 }
@@ -95,12 +83,9 @@ fn guarded(f: impl FnOnce() -> Value) -> Value {
     })
 }
 
-/// Maps the tool's arguments into the request of its operation, runs it, and returns the
-/// result. The `identity` and `project` arguments replace those of `select`.
 fn run_tool(op: &Operation, params: &Value, select: &Select, env: &Env) -> Value {
     let empty = Map::new();
     let map = params["arguments"].as_object().unwrap_or(&empty);
-    // No argument holds a NUL, as a command line cannot; `turns` is a JSON document.
     let nul = map
         .iter()
         .filter(|(k, _)| *k != "turns")
@@ -122,7 +107,6 @@ fn run_tool(op: &Operation, params: &Value, select: &Select, env: &Env) -> Value
     let mut args = map.clone();
     args.remove("identity");
     args.remove("project");
-    // A JSON field reaches the request as its JSON text, as the CLI gives it.
     for f in op.fields.iter().filter(|f| f.ty == Type::Json) {
         if let Some(v) = args.get_mut(f.name) {
             *v = Value::String(v.to_string());
@@ -136,8 +120,6 @@ fn run_tool(op: &Operation, params: &Value, select: &Select, env: &Env) -> Value
     }
 }
 
-/// The tool result of a run: the envelope as pretty JSON, or for a text tool its text, then the
-/// warning lines; for a failed text tool the warning lines and the error line.
 fn reply_of(op: &Operation, ran: Ran) -> Value {
     let Ran {
         mut warnings,
@@ -174,7 +156,6 @@ fn reply_of(op: &Operation, ran: Ran) -> Value {
     result(text, error)
 }
 
-/// The text of a text tool.
 fn text(o: &Outcome) -> String {
     match o {
         Outcome::Context { text, .. } | Outcome::Show { text, .. } | Outcome::Soul { text, .. } => {
@@ -214,8 +195,6 @@ fn respond(id: &Value, method: &str, params: &Value, select: &Select, env: &Env)
     }
 }
 
-/// The reply to one JSON-RPC message, or None for notifications and responses.
-/// Bytes that are not UTF-8 JSON get a parse error.
 pub fn reply(message: &[u8], select: &Select, env: &Env) -> Option<Value> {
     match serde_json::from_slice::<Value>(message) {
         Ok(msg) if msg.get("id").is_some() && msg.get("method").is_some() => {
@@ -231,8 +210,6 @@ pub fn reply(message: &[u8], select: &Select, env: &Env) -> Option<Value> {
     }
 }
 
-/// Serves MCP on `input` and `output`, one message per line, until `input` ends. `select` picks
-/// the default root, identity and project of each tool call.
 pub fn serve(
     mut input: impl BufRead,
     mut output: impl Write,
@@ -253,15 +230,10 @@ pub fn serve(
 }
 
 const DEFAULT_PORT: u16 = 4224;
-/// Largest request body the HTTP mode reads; a tool call is a few kilobytes.
 const MAX_BODY: usize = 8 << 20;
-/// Largest request line plus headers the HTTP mode reads.
 const MAX_HEAD: usize = 16 << 10;
-/// Time one HTTP request may take to arrive, and its reply to leave.
 const DEADLINE: Duration = Duration::from_secs(30);
 
-/// The listener for the HTTP mode on `addr`. Without `port` it takes 4224, or the next free
-/// port up to 4323. The server URL is `http://<local_addr>/mcp`.
 pub fn bind(addr: &str, port: Option<u16>) -> crate::Result<TcpListener> {
     Ok(match port {
         Some(p) => TcpListener::bind((addr, p)).with_context(|| format!("binding {addr}:{p}"))?,
@@ -271,18 +243,14 @@ pub fn bind(addr: &str, port: Option<u16>) -> crate::Result<TcpListener> {
     })
 }
 
-/// Serves MCP over HTTP on `listener` at `/mcp` (Streamable HTTP with JSON replies), one
-/// request at a time.
 pub fn serve_http(listener: TcpListener, select: &Select, env: &Env) -> std::io::Result<()> {
     for stream in listener.incoming() {
         let Ok(stream) = stream else { continue };
-        // A broken or slow client only ends its own request.
         let _ = http_request(stream, select, env);
     }
     Ok(())
 }
 
-/// Reads from the stream until one deadline for the whole request.
 struct Timed {
     stream: TcpStream,
     until: Instant,
@@ -323,7 +291,6 @@ fn http_request(stream: TcpStream, select: &Select, env: &Env) -> std::io::Resul
         let (k, v) = (k.trim().to_ascii_lowercase(), v.trim());
         match k.as_str() {
             "content-length" => length = v.parse::<usize>().ok(),
-            // owo reads only a Content-Length body, so a chunked one gets 411.
             "transfer-encoding" => chunked = true,
             "content-type" => {
                 json_body = v
@@ -369,10 +336,6 @@ fn http_request(stream: TcpStream, select: &Select, env: &Env) -> std::io::Resul
         reply.len()
     )?;
     stream.flush()?;
-    // A refused body that was not read (no length, or past a cap) would reset the connection on
-    // close and cut the reply. Send the reply's end first, then discard what the client still
-    // sends: stop after 200ms with nothing arriving, or after 2 seconds, so an idle client
-    // cannot hold this one-at-a-time server.
     if !body_read {
         stream.shutdown(std::net::Shutdown::Write)?;
         stream.set_read_timeout(Some(Duration::from_millis(200)))?;

@@ -1,7 +1,3 @@
-//! Deterministic slugs shared by paths, links and templates.
-
-/// Turns a name into a slug: ASCII, lowercase, apostrophes removed, other runs of
-/// non-alphanumeric characters collapsed to one hyphen, edges trimmed.
 pub fn slugify(input: &str) -> String {
     let ascii = deunicode::deunicode(input).to_lowercase();
     let mut out = String::with_capacity(ascii.len());
@@ -23,7 +19,6 @@ pub fn slugify(input: &str) -> String {
     out
 }
 
-/// True when the value is already a valid slug.
 pub fn is_slug(value: &str) -> bool {
     !value.is_empty() && slugify(value) == value
 }

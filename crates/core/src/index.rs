@@ -1,6 +1,3 @@
-//! Generated files: `life/_index.md`, each life category `_index.md`, `life/timeline.md`, `work/_index.md`.
-//! Output depends only on entry content, so `owo index --check` and lint can compare.
-
 use crate::identity::{Entry, Identity, Kind, LIFE_CATEGORIES};
 use std::collections::BTreeMap;
 
@@ -18,7 +15,6 @@ fn heading(category: &str) -> String {
 fn line(e: &Entry) -> String {
     let title = e.label();
     let mut out = format!("- [[{title}]]");
-    // A closed thread, resolved conflict or non-canon entry says so, so it does not read as current.
     let marks: Vec<String> = [
         e.field_str("state").filter(|s| s != "open"),
         e.field_str("status").filter(|s| s != "canon"),
@@ -59,7 +55,6 @@ fn in_folder<'a>(identity: &'a Identity, prefix: &str) -> Vec<&'a Entry> {
         .collect()
 }
 
-/// All generated files for an identity, keyed by identity-relative path.
 pub fn generate(identity: &Identity) -> BTreeMap<String, String> {
     let mut out = BTreeMap::new();
     let mut top = vec![];
@@ -121,7 +116,6 @@ fn timeline(identity: &Identity) -> String {
         l.replace_range(0..2, &format!("- {date}: "));
         l
     };
-    // Each event's era, resolved the way links resolve (title, alias, slug, `|label`).
     let era_of: Vec<Option<String>> = events
         .iter()
         .map(|ev| {
@@ -174,12 +168,10 @@ fn work(identity: &Identity) -> String {
     doc("Work", &lines)
 }
 
-/// Writes generated files that differ. Returns the paths written.
 pub fn write(identity: &Identity) -> anyhow::Result<Vec<String>> {
     write_as(identity, &identity.dir)
 }
 
-/// Like `write`, but error text names the identity folder as `shown`. Writes all files or none.
 pub fn write_as(identity: &Identity, shown: &std::path::Path) -> anyhow::Result<Vec<String>> {
     let stale = differing(identity);
     stale
@@ -191,7 +183,6 @@ pub fn write_as(identity: &Identity, shown: &std::path::Path) -> anyhow::Result<
     Ok(stale.into_iter().map(|(rel, _)| rel).collect())
 }
 
-/// Generated paths whose file content differs from what `generate` produces.
 pub fn stale(identity: &Identity) -> Vec<String> {
     differing(identity)
         .into_iter()
@@ -199,8 +190,6 @@ pub fn stale(identity: &Identity) -> Vec<String> {
         .collect()
 }
 
-/// The generated files whose file content differs from what `generate` produces, with the
-/// content it produces.
 fn differing(identity: &Identity) -> Vec<(String, String)> {
     generate(identity)
         .into_iter()

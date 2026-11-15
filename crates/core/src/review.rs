@@ -1,6 +1,3 @@
-//! `owo review` (the packet the review skill compiles MEMORY from), `owo review done`,
-//! and the soul history: `owo soul note`, `owo soul history`.
-
 use crate::identity::{Identity, Kind};
 use crate::state::parse_day;
 use crate::status::Link;
@@ -18,7 +15,6 @@ pub struct Changed {
     pub summary: Option<String>,
     pub words: usize,
     pub updated: String,
-    /// Lines added and removed in Git since the last review, when the root is a repo.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub git: Option<(usize, usize)>,
 }
@@ -50,7 +46,6 @@ pub struct Packet {
     pub last_soul_change: Option<SoulChange>,
 }
 
-/// Short function words; a recurring phrase may not start or end with one.
 const STOP_WORDS: &[&str] = &[
     "a", "an", "and", "are", "as", "at", "be", "but", "by", "for", "from", "had", "has", "have",
     "he", "her", "his", "if", "in", "into", "is", "it", "its", "me", "my", "of", "on", "or", "our",
@@ -58,12 +53,9 @@ const STOP_WORDS: &[&str] = &[
     "with", "you", "your",
 ];
 
-/// Three-word phrases that show up on at least three different log days and start and end
-/// with a content word.
 fn recurring(days: &[Day]) -> Vec<(String, usize)> {
     let content = |w: &str| !STOP_WORDS.contains(&w);
     let mut seen: BTreeMap<String, BTreeSet<&str>> = BTreeMap::new();
-    // A phrase stays inside one line, so two bullets never join into one.
     for d in days {
         for line in d.body.lines() {
             let toks = crate::search::tokens(line);
@@ -92,7 +84,6 @@ pub fn packet(id: &Identity) -> Packet {
         let updated = crate::state::updated(id, &e.rel)
             .unwrap_or_default()
             .to_string();
-        // A file with no stamp yet is new since the last stamp, so it counts as changed.
         let reviewed =
             !updated.is_empty() && last.as_deref().is_some_and(|l| updated.as_str() <= l);
         if reviewed || e.rel == "soul/MEMORY.md" {
@@ -119,7 +110,6 @@ pub fn packet(id: &Identity) -> Packet {
             path: e.rel.clone(),
             date: e.field_str("date").unwrap_or_default(),
             title: e.title.clone().unwrap_or_default(),
-            // The `###` heading carries the title, so the H1 is left out.
             body: e
                 .body()
                 .lines()
@@ -170,18 +160,13 @@ pub fn packet(id: &Identity) -> Packet {
     }
 }
 
-/// The review record in `soul/state.json` → `review`.
 #[derive(Debug, Serialize)]
 pub struct ReviewRecord {
     pub last_reviewed: String,
-    /// The last story day the review covered.
     pub reviewed_through: Option<String>,
-    /// The hash of `soul/MEMORY.md` at the review.
     pub memory_hash: Option<String>,
 }
 
-/// Records a review: last_reviewed = now, reviewed_through = `through` or the newest
-/// story date among logs, events and journal entries, memory_hash = current MEMORY.md hash.
 pub fn done(id: &Identity, through: Option<NaiveDate>) -> Result<ReviewRecord> {
     let mut doc = id
         .read_object("soul/state.json")?
@@ -210,18 +195,14 @@ pub fn done(id: &Identity, through: Option<NaiveDate>) -> Result<ReviewRecord> {
     Ok(review)
 }
 
-/// One record of the soul history in `soul/state.json` → `history`. A record written by hand
-/// may lack a field or carry others.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SoulChange {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub at: Option<String>,
-    /// The soul file, such as `SOUL.md`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub file: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub change: Option<String>,
-    /// The evidence entries as `[[link]]`s.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub evidence: Option<Vec<String>>,
     #[serde(flatten)]
@@ -229,8 +210,6 @@ pub struct SoulChange {
 }
 
 impl SoulChange {
-    /// A history record as written. A field of the wrong type stays in `other`, so the record
-    /// serializes as it was; a record that is not an object has no fields.
     fn of(record: &Value) -> Self {
         let mut other = record.as_object().cloned().unwrap_or_default();
         let mut take = |key: &str, is: fn(&Value) -> bool| match other.get(key) {
@@ -255,12 +234,10 @@ impl SoulChange {
     }
 }
 
-/// The soul history records, oldest first.
 fn soul_changes(id: &Identity) -> impl Iterator<Item = SoulChange> + '_ {
     crate::state::history(id).iter().map(SoulChange::of)
 }
 
-/// The newest soul history record.
 pub fn last_soul_change(id: &Identity) -> Option<SoulChange> {
     soul_changes(id).last()
 }
@@ -270,7 +247,6 @@ pub struct Note {
     pub warning: Option<String>,
 }
 
-/// Appends an evidence-backed record to `soul/state.json` → `history`.
 pub fn soul_note(id: &Identity, file: &str, change: &str, evidence: &[String]) -> Result<Note> {
     let file = file.trim_start_matches("soul/");
     if !crate::identity::SOUL_FILES.contains(&file) {

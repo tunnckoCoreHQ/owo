@@ -1,5 +1,3 @@
-//! `owo add`: creates one entry from its template at its deterministic path.
-
 use crate::identity::{Identity, Kind};
 use crate::slug::slugify;
 use crate::templates;
@@ -10,8 +8,6 @@ use std::collections::BTreeMap;
 
 use crate::AddRequest as Request;
 
-/// Returns the entry path and true when the file is new.
-/// `project` is the project of a note, checked to exist.
 pub fn add(id: &Identity, req: &Request, project: Option<&str>) -> Result<(String, bool)> {
     let name = req
         .kind
@@ -35,13 +31,11 @@ pub fn add(id: &Identity, req: &Request, project: Option<&str>) -> Result<(Strin
         }
         .into());
     }
-    // The local day, so `owo add log` names the day the user is living.
     let today = crate::state::local_today();
     let date = req
         .date
         .map(|d| d.to_string())
         .unwrap_or_else(|| today.clone());
-    // A log without a title is titled by its date, so titles stay unique.
     let title = match req.title.trim() {
         "" if req.kind == Kind::Log => date.as_str(),
         t => t,
@@ -149,8 +143,6 @@ pub fn add(id: &Identity, req: &Request, project: Option<&str>) -> Result<(Strin
     Ok((rel, true))
 }
 
-/// Writes the full text of one authored file, creating its folder. Returns true when the file
-/// is new. The path stays inside soul/, life/ or work/ and is never a generated file.
 pub fn write(id: &Identity, rel: &str, text: &str) -> Result<bool> {
     if text.trim().is_empty() {
         return Err(Fault::NoText(rel.into()).into());

@@ -1,17 +1,9 @@
-//! Every operation by name, with its request type: `operations` is the list the CLI builds its
-//! commands from and the MCP server its tools. `Operation::run` maps checked arguments into the
-//! request, opens the root, makes the typed call, which checks the rules, and returns
-//! the typed `Outcome`. `Outcome::envelope` is the `{ ok, data, warnings, errors }` JSON of a
-//! result, which the CLI prints with `--json` and the MCP server returns.
-
 use crate::request::{Args, DryRun, Field, Request};
 use crate::*;
 use serde::Serialize;
 use serde_json::json;
 use std::io::Read;
 
-/// What one operation call reads beside its request: the root it opens, the caller's input,
-/// and the warnings found on the way.
 struct Call<'a> {
     select: &'a Select,
     env: &'a Env,
@@ -20,7 +12,6 @@ struct Call<'a> {
 }
 
 impl Call<'_> {
-    /// The selected root; its config warnings join the warnings.
     fn root(&mut self) -> Result<Root> {
         let root = Root::open(self.select, self.env)?;
         self.warnings.extend(root.warnings.iter().cloned());
@@ -31,7 +22,6 @@ impl Call<'_> {
         self.root()?.identity()
     }
 
-    /// The whole caller input, read once, when a request leaves out a text it can take from it.
     fn input(&mut self) -> Result<String> {
         Ok(std::io::read_to_string(&mut self.input).map_err(anyhow::Error::from)?)
     }
@@ -39,32 +29,23 @@ impl Call<'_> {
 
 type Run = dyn Fn(&Args, &mut Call) -> Result<Result<Outcome>> + Send + Sync;
 
-/// One operation: its name, its help line, the fields of its request type, and its call.
 pub struct Operation {
-    /// The words of its name: `["review", "done"]`.
     pub path: &'static [&'static str],
     pub about: &'static str,
     pub fields: Vec<Field>,
     run: Box<Run>,
 }
 
-/// What `Operation::run` gives: the warnings found before the result or the failure, and the
-/// result.
 pub struct Ran {
     pub warnings: Vec<String>,
     pub result: Result<Outcome>,
 }
 
 impl Operation {
-    /// The name of the operation as one word: `review_done`.
     pub fn name(&self) -> String {
         self.path.join("_")
     }
 
-    /// Runs the operation with `args`, checked with `Args::new`. `select` and `env` pick the
-    /// root, and `input` gives the text that `write` and `sync push` read when the request has
-    /// none, only after the root resolves. An argument of the wrong type is a usage error,
-    /// before any call.
     pub fn run(
         &self,
         args: &Args,
@@ -86,7 +67,6 @@ impl Operation {
     }
 }
 
-/// The operation `path`, with the request type `R` and its call.
 fn op<R: Request + 'static>(
     path: &'static [&'static str],
     about: &'static str,
@@ -104,8 +84,6 @@ fn op<R: Request + 'static>(
     }
 }
 
-/// The operation `path` of a call that writes files: `op` with the `dry-run` field, which runs
-/// the call with its writes kept in memory and gives `Outcome::DryRun`.
 fn write_op<R: Request + 'static>(
     path: &'static [&'static str],
     about: &'static str,
@@ -129,12 +107,10 @@ fn write_op<R: Request + 'static>(
     }
 }
 
-/// The call of `templates` and `templates list`.
 fn templates(_: (), s: &mut Call) -> Result<Outcome> {
     Ok(Outcome::Templates(s.root()?.templates()))
 }
 
-/// Every operation, in the order the CLI lists them.
 pub fn operations() -> Vec<Operation> {
     vec![
         write_op::<NewRequest>(
@@ -277,7 +253,6 @@ pub fn operations() -> Vec<Operation> {
             &["search"],
             "BM25 search over titles, aliases, summaries and bodies",
             |mut r, s| {
-                // The project filter is the selected project, not the configured one.
                 r.project = s.select.project.clone();
                 Ok(Outcome::Search(s.identity()?.search(&r)?))
             },
@@ -324,7 +299,6 @@ pub fn operations() -> Vec<Operation> {
             &["export", "card"],
             "Character Card JSON (V3 with V2-compatible fields, or V2)",
             |mut r, s| {
-                // The project filter is the selected project, not the configured one.
                 r.project = s.select.project.clone();
                 let card = s.identity()?.export_card(&r)?;
                 Ok(Outcome::Card { card, out: r.out })
@@ -354,13 +328,10 @@ pub fn operations() -> Vec<Operation> {
             |r, s| {
                 let root = s.root()?;
                 let sync = root.sync()?;
-                // The input is read after the session checks of `sync`.
                 let turns = match r.turns {
                     Some(t) => t,
                     None => s.input()?,
                 };
-                // The turns parse before the call, so a bad turns text fails before the
-                // checks of the session.
                 let turns = parse_turns(&turns)?;
                 Ok(Outcome::Synced(sync.push(&r.session, &turns, &r.options)?))
             },
@@ -395,7 +366,6 @@ pub fn operations() -> Vec<Operation> {
     ]
 }
 
-/// The typed result of one operation, with what its output needs beside the library result.
 pub enum Outcome {
     Slug(String),
     Config(Resolved),
@@ -421,12 +391,10 @@ pub enum Outcome {
         check: bool,
         report: StampReport,
     },
-    /// The written generated files, or with `check` the stale ones.
     Index {
         check: bool,
         paths: Vec<String>,
     },
-    /// The entry, or the candidates when `name` does not resolve to one.
     Resolve {
         name: String,
         found: Result<Hit, Vec<Hit>>,
@@ -437,14 +405,12 @@ pub enum Outcome {
     },
     Orphans(Vec<Hit>),
     Links(Links),
-    /// The load set and its text: the file contents, or the file list.
     Context {
         context: Context,
         text: String,
     },
     State(State),
     Search(Vec<SearchHit>),
-    /// A `sync start` or `sync push` run.
     Synced(SyncRun),
     SyncDone {
         session: String,
@@ -455,8 +421,6 @@ pub enum Outcome {
     Migrate(MigrateReport),
     Review(Packet),
     ReviewDone(ReviewRecord),
-    /// The soul files as (path, text), and their text: each file after an
-    /// `<!-- owo: <path> -->` line.
     Soul {
         files: Vec<(String, String)>,
         text: String,
@@ -464,7 +428,6 @@ pub enum Outcome {
     SoulNote(SoulNote),
     SoulHistory(Vec<SoulChange>),
     Changes(Changes),
-    /// A built card, and the file it was written to.
     Card {
         card: Card,
         out: Option<PathBuf>,
@@ -479,23 +442,18 @@ pub enum Outcome {
         template: Template,
         text: String,
     },
-    /// A dry run: the outcome of the call, which wrote nothing, and the files and folders it
-    /// would write, a folder ending in `/`.
     DryRun {
         outcome: Box<Outcome>,
         writes: Vec<String>,
     },
 }
 
-/// The JSON shape of every result: `{ ok, data, warnings, errors }`, and `would_write` after
-/// them for a dry run.
 #[derive(Debug, Serialize)]
 pub struct Envelope {
     pub ok: bool,
     pub data: Value,
     pub warnings: Vec<Value>,
     pub errors: Vec<Value>,
-    /// The paths a dry run would write.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub would_write: Option<Vec<String>>,
 }
@@ -515,7 +473,6 @@ impl Envelope {
         Self::new(true, data)
     }
 
-    /// A failure with one error text.
     pub fn fail(message: &str) -> Self {
         Self::new(false, Value::Null).with_errors([message])
     }
@@ -525,7 +482,6 @@ impl Envelope {
         self
     }
 
-    /// The warnings that are text, for a caller that prints them as lines.
     pub fn text_warnings(&self) -> impl Iterator<Item = String> + '_ {
         self.warnings
             .iter()
@@ -544,8 +500,6 @@ fn value(v: impl Serialize) -> Value {
 }
 
 impl Outcome {
-    /// The envelope of the result. `ok` is false when the operation found a problem, such as
-    /// lint errors or a stale check.
     pub fn envelope(&self) -> Envelope {
         match self {
             Outcome::Slug(slug) => Envelope::ok(json!({ "slug": slug })),

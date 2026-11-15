@@ -1,14 +1,10 @@
-//! Thin wrapper over the `git` binary for history-based commands.
-
 use std::path::Path;
 use std::process::Command;
 
-/// Runs git in `dir` and returns stdout, or None when git fails or `dir` is outside a repo.
 pub fn run(dir: &Path, args: &[&str]) -> Option<String> {
     let out = Command::new("git")
         .arg("-C")
         .arg(dir)
-        // Print non-ASCII paths as they are, not octal-quoted.
         .args(["-c", "core.quotepath=off"])
         .args(args)
         .output()
@@ -22,7 +18,6 @@ pub fn is_repo(dir: &Path) -> bool {
     run(dir, &["rev-parse", "--is-inside-work-tree"]).is_some_and(|s| s.trim() == "true")
 }
 
-/// Lines added and removed in `rel` (relative to `dir`) by commits since `since`.
 pub fn numstat_since(dir: &Path, since: &str, rel: &str) -> Option<(usize, usize)> {
     let out = run(
         dir,
@@ -44,7 +39,6 @@ pub fn numstat_since(dir: &Path, since: &str, rel: &str) -> Option<(usize, usize
     Some(sum)
 }
 
-/// Paths (relative to `dir`) with uncommitted or untracked changes under `dir`.
 pub fn dirty(dir: &Path) -> Option<Vec<String>> {
     // `diff --relative` and `ls-files` print paths relative to `dir`; with `-z` they are
     // NUL-separated and never quoted. Before the first commit there is no HEAD, and every

@@ -1,6 +1,3 @@
-//! State files: `soul/state.json`, `life/state.json`, `work/state.json`.
-//! Each tracks authored Markdown files by content hash with an `updated` stamp.
-
 use crate::identity::{Identity, Kind};
 use chrono::{DateTime, NaiveDate, SecondsFormat, Utc};
 use serde_json::{json, Map, Value};
@@ -11,7 +8,6 @@ pub fn hash(text: &str) -> String {
     format!("b3:{}", blake3::hash(text.as_bytes()).to_hex())
 }
 
-/// The `YYYY-MM-DD` part of a stamp, or the whole text when it is shorter.
 pub(crate) fn day(stamp: &str) -> &str {
     stamp.get(..10).unwrap_or(stamp)
 }
@@ -20,24 +16,20 @@ pub fn now() -> String {
     Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true)
 }
 
-/// The local day, as `YYYY-MM-DD`: the day frontmatter dates name.
 pub fn local_today() -> String {
     chrono::Local::now().format("%Y-%m-%d").to_string()
 }
 
-/// The local day `days` ago, as `YYYY-MM-DD`, which Git reads a plain `--since` day in.
 pub fn local_day_ago(days: i64) -> String {
     (chrono::Local::now() - chrono::Duration::days(days))
         .format("%Y-%m-%d")
         .to_string()
 }
 
-/// The UTC day of `now`, as `YYYY-MM-DD`.
 pub fn today() -> String {
     day(&now()).to_string()
 }
 
-/// A zero-padded `YYYY-MM-DD` day. Also the clap parser for date flags.
 pub fn parse_day(value: &str) -> Result<NaiveDate, String> {
     let shaped = value.len() == 10
         && value.bytes().enumerate().all(|(i, b)| match i {
@@ -50,7 +42,6 @@ pub fn parse_day(value: &str) -> Result<NaiveDate, String> {
     }
 }
 
-/// Splits `life/events/x.md` into (`life`, `events/x.md`).
 pub fn scope_of(rel: &str) -> Option<(&'static str, &str)> {
     SCOPES.iter().find_map(|s| {
         rel.strip_prefix(s)
@@ -59,7 +50,6 @@ pub fn scope_of(rel: &str) -> Option<(&'static str, &str)> {
     })
 }
 
-/// Authored files tracked in state: everything except generated indexes.
 pub fn tracked(identity: &Identity) -> impl Iterator<Item = &crate::identity::Entry> {
     identity
         .entries
@@ -67,7 +57,6 @@ pub fn tracked(identity: &Identity) -> impl Iterator<Item = &crate::identity::En
         .filter(|e| e.kind != Kind::Generated && e.kind != Kind::Unknown)
 }
 
-/// Fresh state documents for a just-created identity, all files stamped `at`.
 pub fn initial(identity: &Identity, at: &str) -> Vec<(String, Value)> {
     let mut files: Map<String, Value> = SCOPES
         .iter()
@@ -101,7 +90,6 @@ pub fn initial(identity: &Identity, at: &str) -> Vec<(String, Value)> {
     ]
 }
 
-/// The loaded `<scope>/state.json`, or Null when it is missing or does not parse.
 pub fn doc<'a>(id: &'a Identity, scope: &str) -> &'a Value {
     &id.state[SCOPES
         .iter()
@@ -109,13 +97,11 @@ pub fn doc<'a>(id: &'a Identity, scope: &str) -> &'a Value {
         .expect("a known scope")]
 }
 
-/// The `updated` stamp of an identity-relative path.
 pub fn updated<'a>(id: &'a Identity, rel: &str) -> Option<&'a str> {
     let (scope, rest) = scope_of(rel)?;
     doc(id, scope)["files"][rest]["updated"].as_str()
 }
 
-/// Every `updated` stamp as (scope, scope-relative path, stamp), in `SCOPES` order.
 pub fn stamps(id: &Identity) -> impl Iterator<Item = (&'static str, &str, &str)> {
     SCOPES.iter().flat_map(move |scope| {
         doc(id, scope)["files"]
@@ -126,32 +112,26 @@ pub fn stamps(id: &Identity) -> impl Iterator<Item = (&'static str, &str, &str)>
     })
 }
 
-/// The soul change records in `soul/state.json` → `history`, oldest first.
 pub fn history(id: &Identity) -> &[Value] {
     doc(id, "soul")["history"]
         .as_array()
         .map_or(&[], Vec::as_slice)
 }
 
-/// The day at the start of a date or stamp, when it parses.
 pub fn date_of(text: &str) -> Option<NaiveDate> {
     parse_day(text.get(..10)?).ok()
 }
 
-/// Review status from `soul/state.json` → `review` and `identity.json` → `review_every_days`.
 pub struct Review {
     pub last_reviewed: Option<String>,
     pub reviewed_through: Option<NaiveDate>,
-    /// Days since `last_reviewed`; None when never reviewed or not an RFC 3339 timestamp.
     pub days_since: Option<i64>,
     pub every_days: i64,
     pub due: bool,
-    /// MEMORY.md exists and its hash differs from the one the last review recorded.
     pub memory_changed: bool,
 }
 
 impl Review {
-    /// True when a story date parses and falls after `reviewed_through` (or nothing is reviewed).
     pub fn unreviewed(&self, date: Option<&str>) -> bool {
         match (date.and_then(date_of), self.reviewed_through) {
             (Some(d), Some(r)) => d > r,

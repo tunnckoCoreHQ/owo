@@ -1,12 +1,7 @@
-//! The output of one command from its typed outcome: the core's envelope, and the text for
-//! people from `text`.
-
 use crate::output::{exit, Output};
 use crate::text;
 use owo_core::{Kind, Level, Outcome, Ran};
 
-/// The output of a run. A failure keeps the warnings found before it. Without `json` the
-/// envelope's text warnings join the warnings, and `quiet` drops the confirmation lines.
 pub fn output(ran: Ran, json: bool, quiet: bool) -> Output {
     let outcome = match ran.result {
         Ok(o) => o,
@@ -29,7 +24,6 @@ pub fn output(ran: Ran, json: bool, quiet: bool) -> Output {
         write(&mut t, &outcome);
         text = t.buf;
     }
-    // A name that does not resolve and a search with no hits also print an error line.
     let error = match &outcome {
         Outcome::Resolve {
             found: Err(hits), ..
@@ -53,27 +47,23 @@ pub fn output(ran: Ran, json: bool, quiet: bool) -> Output {
     }
 }
 
-/// The text result of one command.
 struct Text {
     quiet: bool,
     buf: String,
 }
 
 impl Text {
-    /// Adds a confirmation line unless `--quiet` is set.
     fn say(&mut self, text: impl AsRef<str>) {
         if !self.quiet {
             self.line(text);
         }
     }
 
-    /// Adds a line.
     fn line(&mut self, text: impl AsRef<str>) {
         self.push(text);
         self.buf.push('\n');
     }
 
-    /// Adds text as it is.
     fn push(&mut self, text: impl AsRef<str>) {
         self.buf.push_str(text.as_ref());
     }
@@ -224,7 +214,6 @@ fn write(t: &mut Text, outcome: &Outcome) {
         }
         Outcome::Template { text, .. } => t.push(text),
         Outcome::DryRun { outcome, writes } => {
-            // The confirmation lines would name writes that did not happen.
             let quiet = std::mem::replace(&mut t.quiet, true);
             write(t, outcome);
             t.quiet = quiet;

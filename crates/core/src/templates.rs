@@ -1,12 +1,9 @@
-//! Built-in templates, embedded in the binary. `<root>/.templates/<file>` overrides one.
-
 use regex::{Captures, Regex};
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
-/// Templates used by `owo new`, keyed by their identity-relative output path.
 pub const IDENTITY_FILES: &[(&str, &str)] = &[
     (
         "identity.json",
@@ -54,7 +51,6 @@ pub const IDENTITY_FILES: &[(&str, &str)] = &[
     ),
 ];
 
-/// Entry templates, keyed by entry type.
 pub const ENTRY_TEMPLATES: &[(&str, &str)] = &[
     (
         "character",
@@ -106,7 +102,6 @@ pub const ENTRY_TEMPLATES: &[(&str, &str)] = &[
     ("note", include_str!("../../../templates/entries/note.md")),
 ];
 
-/// Every template as (name shown by `owo templates`, file name looked up in `.templates/`, built-in text).
 pub fn all() -> Vec<(&'static str, String, &'static str)> {
     IDENTITY_FILES
         .iter()
@@ -119,12 +114,10 @@ pub fn all() -> Vec<(&'static str, String, &'static str)> {
         .collect()
 }
 
-/// The override for a template: `<root>/.templates/<file>`, where `<file>` is the name from `all`.
 pub fn override_path(root: &Path, file: &str) -> Option<PathBuf> {
     Some(root.join(".templates").join(file)).filter(|p| p.is_file())
 }
 
-/// Returns the template text for a name, preferring its override in `<root>/.templates/`.
 pub fn get(root: &Path, name: &str, builtin: &str) -> String {
     override_path(root, name)
         .and_then(|p| fs::read_to_string(p).ok())
@@ -136,9 +129,6 @@ fn placeholder_re() -> &'static Regex {
     RE.get_or_init(|| Regex::new(r"\{\{(\w+)\}\}").expect("valid regex"))
 }
 
-/// Replaces `{{key}}` placeholders in one pass, so a value that holds `{{key}}` text stays as
-/// written. Keys ending in `_yaml` get double-quote YAML escaping, keys ending in `_json` JSON
-/// string escaping.
 pub fn fill(template: &str, values: &BTreeMap<&str, String>) -> String {
     placeholder_re()
         .replace_all(template, |cap: &Captures| {
@@ -158,7 +148,6 @@ pub fn fill(template: &str, values: &BTreeMap<&str, String>) -> String {
         .into_owned()
 }
 
-/// Escapes a value for a double-quoted YAML string.
 pub fn yaml_escape(value: &str) -> String {
     value
         .replace('\\', "\\\\")

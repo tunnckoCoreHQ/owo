@@ -1,10 +1,3 @@
-//! A pass-through proxy for the Agent Client Protocol (newline-delimited JSON-RPC). It copies
-//! lines between a client and an agent, on streams the caller gives it, as the bytes it
-//! received. When the root has identities, it gives each session an identity the client can
-//! switch with the `identity` config option or the `/owo` command, changes only the lines that
-//! carry the injection, the picker and the command, and stores user and agent turns through
-//! the library's session sync.
-
 use crate::Result;
 use serde_json::{json, Value};
 use std::collections::{HashMap, HashSet, VecDeque};
@@ -12,24 +5,16 @@ use std::io::{BufRead, Write};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{mpsc, Arc, Mutex};
 
-/// The picker value for no identity.
 const NONE: &str = "_none";
 
-/// What the proxy knows from the start.
 struct Setup {
-    /// The slug and name of each identity in the root.
     identities: Vec<(String, String)>,
-    /// True with `inject`: the identity block is the output of `owo context`.
     context: bool,
-    /// The owo MCP server entry. None with `inject`.
     server: Option<Value>,
     owo: Arc<Owo>,
 }
 
 impl Setup {
-    /// The identity block for `id`. By default it tells the agent to load the identity with the
-    /// owo MCP `context` tool. With `inject` it is the text of the identity's load set; when
-    /// that fails, one warning line goes to the warnings writer and nothing is injected.
     fn text(&self, id: &str) -> Option<String> {
         if !self.context {
             return Some(format!("Your identity is the owo identity \"{id}\". Before you answer, load it with the `context` tool of the owo MCP server, with the argument `identity` set to \"{id}\", and keep to it."));
@@ -40,7 +25,6 @@ impl Setup {
             .ok()
     }
 
-    /// The `identity` config option with `current` selected.
     fn option(&self, current: Option<&str>) -> Value {
         let mut options = vec![json!({ "value": NONE, "name": "None" })];
         options.extend(
@@ -59,7 +43,6 @@ impl Setup {
         })
     }
 
-    /// The identity a picker value names: `Some(None)` for none, None for an unknown value.
     fn pick(&self, value: &str) -> Option<Option<String>> {
         if value == NONE {
             return Some(None);
@@ -71,57 +54,38 @@ impl Setup {
     }
 }
 
-/// A client request that waits for the agent's response.
 enum Pending {
     New,
     Load(String),
     Resume(String),
     Prompt(String),
-    /// A `session/set_config_option` for an option of the agent.
     Config(String),
 }
 
-/// One open turn of a session: a `session/prompt` or a `session/load` that waits for its response.
 struct Turn {
-    /// The JSON text of the request id.
     request: String,
-    /// True for a `session/load`, whose updates are a replay.
     replay: bool,
     user: String,
-    /// Agent messages in order: the `messageId`, when there is one, and the joined text.
     agent: Vec<(Option<String>, String)>,
-    /// The prompt carried the identity block.
     intro: bool,
-    /// The identity of the session when the turn started; the turn is stored for it.
     identity: Option<String>,
-    /// Another update, such as a tool call, came after the last message chunk.
     split: bool,
 }
 
-/// What the proxy knows of one session.
 struct Session {
-    /// The identity the session records into. None stores nothing and injects nothing.
     identity: Option<String>,
-    /// The agent's last config option list.
     options: Vec<Value>,
-    /// False when the agent gave only the older `modes` field: the proxy then shows no picker.
     picker: bool,
-    /// The agent's last command list.
     commands: Vec<Value>,
 }
 
-/// The identity, the sync session name and the turns of one store.
 type Job = (String, String, Vec<crate::Turn>);
 
 #[derive(Default)]
 struct State {
-    /// The identity resolved at start, which each session starts with.
     start: Option<String>,
-    /// Keyed by the JSON text of the request id.
     pending: HashMap<String, Pending>,
-    /// Sessions whose next prompt gets the identity block.
     intro: HashSet<String>,
-    /// The open turns of each session, oldest first. An update belongs to the oldest one.
     turns: HashMap<String, VecDeque<Turn>>,
     sessions: HashMap<String, Session>,
 }
@@ -137,7 +101,6 @@ impl State {
         })
     }
 
-    /// The complete config option list of a session: the agent's, then the identity option.
     fn options(&mut self, setup: &Setup, session: &str) -> Value {
         let s = self.session(session);
         let mut all = s.options.clone();
@@ -145,15 +108,12 @@ impl State {
         all.into()
     }
 
-    /// The complete command list of a session: the agent's, then `owo`.
     fn commands(&mut self, session: &str) -> Value {
         let mut all = self.session(session).commands.clone();
         all.push(json!({ "name": "owo", "description": "Switch the owo identity of this session", "input": { "hint": "identity" } }));
         all.into()
     }
 
-    /// Switches the identity of a session, so its next prompt carries the block for the new
-    /// one. Returns false when the session already has that identity.
     fn switch(&mut self, session: &str, to: Option<String>) -> bool {
         let s = self.session(session);
         if s.identity == to {
@@ -169,33 +129,20 @@ impl State {
     }
 }
 
-/// The store of the turns of one finished turn, for the identity it started with. None when
-/// it had no identity or there is nothing to store.
 fn job(identity: Option<String>, session: &str, turns: Vec<crate::Turn>) -> Option<Job> {
     let id = identity?;
     let name = format!("{session}.{id}");
     (!turns.is_empty()).then_some((id, name, turns))
 }
 
-/// What the proxy does beside the injection.
 #[derive(Debug, Clone)]
 pub struct Options {
-    /// Put the text of the identity's load set in the prompt, and add no owo MCP server.
     pub inject: bool,
-    /// The command and arguments that start the owo MCP server the proxy adds to each session,
-    /// for the identity resolved at start.
     pub mcp_server: fn(Option<&str>) -> (String, Vec<String>),
-    /// Store no turns and start no ingest. When the stores end, write one
-    /// `owo: would write <path>` line to the warnings writer for each path the stores would
-    /// write.
     pub dry_run: bool,
-    /// The command and arguments of the ACP agent. With `auto_ingest`, it names the harness
-    /// whose non-interactive command runs the ingest.
     pub agent: Vec<String>,
 }
 
-/// The non-interactive command of the harness that an ACP agent command runs, for the ACP
-/// adapters owo knows; the run's prompt goes after it. None for any other agent.
 pub fn harness_command(agent: &[String]) -> Option<Vec<String>> {
     let command: &[&str] = agent.iter().find_map(|arg| {
         // A path, or a package such as `@zed-industries/claude-agent-acp@0.5.0`.
@@ -223,20 +170,13 @@ pub fn harness_command(agent: &[String]) -> Option<Vec<String>> {
     Some(command.iter().map(|s| s.to_string()).collect())
 }
 
-/// The background agent that runs the ingest prompt of a sync run, one at a time.
 struct Ingest {
-    /// The command; the prompt text is its last argument.
     command: Vec<String>,
-    /// The root, which the prompt paths are relative to, and where the agent runs.
     root: std::path::PathBuf,
-    /// True while an agent runs.
     busy: Arc<AtomicBool>,
 }
 
 impl Ingest {
-    /// The ingest of the config: None when `auto_ingest` is off. The command is
-    /// `ingest_command`, else the one of the agent's harness; a config error when owo knows
-    /// neither.
     fn of(config: &crate::Resolved, agent: &[String]) -> Result<Option<Ingest>> {
         if !config.auto_ingest {
             return Ok(None);
@@ -254,8 +194,6 @@ impl Ingest {
         }))
     }
 
-    /// Starts the agent for the run whose prompt file is `prompt`, unless an agent runs. Its
-    /// output goes nowhere, so the client never sees it. A failure is one warning line.
     fn start(&self, prompt: &str, owo: &Arc<Owo>) {
         if self.busy.swap(true, Ordering::SeqCst) {
             return;
@@ -290,19 +228,15 @@ impl Ingest {
     }
 }
 
-/// Calls the library for a session's identity, and writes warning lines.
 struct Owo {
     env: crate::Env,
-    /// The root and project of each call; the identity is the session's.
     select: crate::Select,
     warnings: Mutex<Box<dyn Write + Send>>,
     dry_run: bool,
-    /// None when `auto_ingest` is off, or in a dry run.
     ingest: Option<Ingest>,
 }
 
 impl Owo {
-    /// The root with `identity` selected.
     fn root(&self, identity: &str) -> crate::Result<crate::Root> {
         let select = crate::Select {
             identity: Some(identity.into()),
@@ -311,15 +245,12 @@ impl Owo {
         crate::Root::open(&select, &self.env)
     }
 
-    /// The text of the default load set of `identity`, as `owo context` prints it.
     fn context(&self, identity: &str) -> crate::Result<String> {
         let id = self.root(identity)?.identity()?;
         let ctx = id.context(&crate::ContextRequest::default())?;
         Ok(id.context_text(&ctx))
     }
 
-    /// Stores `turns` for `identity` in `session`, with the default run size, so a due push
-    /// writes the slice and the prompt.
     fn push(
         &self,
         identity: &str,
@@ -331,32 +262,23 @@ impl Owo {
             .push(session, &turns, &crate::SyncOptions::default())
     }
 
-    /// Writes `text` to the warnings writer. A failed write is ignored.
     fn write(&self, text: &str) {
         let mut w = self.warnings.lock().unwrap();
         let _ = w.write_all(text.as_bytes()).and_then(|_| w.flush());
     }
 
-    /// Writes one `owo: warning: <text>` line.
     fn warn(&self, text: &str) {
         self.write(&crate::warning_line(text));
     }
 }
 
-/// An ACP proxy that knows its identities and waits for its streams.
 pub struct Proxy {
     owo: Arc<Owo>,
-    /// None when the root has no identity: the proxy then changes and stores nothing.
     setup: Option<Arc<Setup>>,
-    /// The identity resolved at start.
     start: Option<String>,
 }
 
 impl Proxy {
-    /// Resolves the identity and reads the identities of the root, before the agent starts.
-    /// `select` gives the root, identity and project. Warning lines go to `warnings`. An
-    /// identity with no folder, or a project that is not found, is a config error; `inject`
-    /// with no identity in the root is a usage error.
     pub fn new(
         select: &crate::Select,
         env: &crate::Env,
@@ -372,7 +294,6 @@ impl Proxy {
             },
             warnings: Mutex::new(Box::new(warnings)),
             dry_run: options.dry_run,
-            // An ingest agent edits the root, which a dry run must not do.
             ingest: Ingest::of(&root.config, &options.agent)?.filter(|_| !options.dry_run),
         });
         let (start, rows) = identity(&owo, &root)?;
@@ -396,11 +317,6 @@ impl Proxy {
         Ok(Self { owo, setup, start })
     }
 
-    /// Copies lines between the client and the agent until `agent_out` ends, then stores the
-    /// turns the agent left open. When writing to `client_out` fails, it stops copying, stores
-    /// the open turns and returns the error; the caller then stops the agent. The thread that
-    /// reads `client_in` may stay blocked on it after this returns; it closes `agent_in` when
-    /// `client_in` ends.
     pub fn run(
         self,
         client_in: impl BufRead + Send + 'static,
@@ -415,8 +331,6 @@ impl Proxy {
             ..State::default()
         }));
 
-        // Client to agent. It answers the requests the proxy handles itself, without waiting
-        // for the agent.
         let (client_setup, client_state, client_emit) =
             (setup.clone(), state.clone(), client_out.clone());
         std::thread::spawn(move || {
@@ -448,13 +362,9 @@ impl Proxy {
                 }
                 line.clear();
             }
-            // Dropping `agent_in` closes the agent's input.
         });
 
-        // Stores run on their own thread, so they never delay the pass-through.
         let (store, jobs) = mpsc::channel::<Job>();
-        // A dry run keeps every store of the proxy in one list, so each store sees the turns
-        // the earlier ones kept; the paths are written when the stores end.
         let storer = std::thread::spawn(move || {
             let store_all = || {
                 for (identity, session, turns) in jobs {
@@ -470,8 +380,6 @@ impl Proxy {
             }
         });
 
-        // Agent to client. The state changes, and a finished turn goes to the store, before the
-        // line is written, so the client's next request already sees them.
         let copied = (|| -> std::io::Result<()> {
             let mut line = vec![];
             while agent_out.read_until(b'\n', &mut line)? > 0 {
@@ -493,7 +401,6 @@ impl Proxy {
             }
             Ok(())
         })();
-        // The agent is gone, or the client closed its output: store the turns left open.
         let mut st = state.lock().unwrap();
         let open: Vec<_> = st.turns.drain().collect();
         for (session, open) in open {
@@ -509,9 +416,6 @@ impl Proxy {
     }
 }
 
-/// The identity the library resolved for `root` from the selection, `OWO_IDENTITY` and the
-/// config, and the row of each identity in the root. An identity with no folder, or a project
-/// that is not found, is a config error here, before the agent starts.
 fn identity(owo: &Owo, root: &crate::Root) -> Result<(Option<String>, Vec<crate::Row>)> {
     for w in &root.warnings {
         owo.warn(w);
@@ -527,15 +431,11 @@ fn identity(owo: &Owo, root: &crate::Root) -> Result<(Option<String>, Vec<crate:
     Ok((start, root.list()))
 }
 
-/// What the proxy does with a client line it reads.
 enum Reply {
-    /// The message changed: forward the new one.
     Changed,
-    /// The proxy answers with these lines, and the agent never gets the request.
     Answer(Vec<Value>),
 }
 
-/// Tracks a client message, and returns what to do when the proxy does not forward it unchanged.
 fn from_client(msg: &mut Value, state: &Mutex<State>, setup: &Setup) -> Option<Reply> {
     let method = msg.get("method")?.as_str()?.to_string();
     let id = msg.get("id")?.clone();
@@ -567,7 +467,6 @@ fn from_client(msg: &mut Value, state: &Mutex<State>, setup: &Setup) -> Option<R
             }
             let (params, server) = (params?, setup.server.as_ref()?);
             match params.get_mut("mcpServers").and_then(Value::as_array_mut) {
-                // A server the client already named `owo` stays the only one.
                 Some(servers) if servers.iter().any(|s| s["name"] == "owo") => return None,
                 Some(servers) => servers.push(server.clone()),
                 None => params["mcpServers"] = json!([server]),
@@ -625,9 +524,6 @@ fn from_client(msg: &mut Value, state: &Mutex<State>, setup: &Setup) -> Option<R
     Some(Reply::Changed)
 }
 
-/// The text a person typed, from the text blocks of a prompt. A client such as T3 Code adds its
-/// own instructions as XML-like elements: the content of a `<user_request>` element is the
-/// typed text, and a block made only of other such elements is left out.
 fn typed(prompt: &[Value]) -> impl Iterator<Item = &str> {
     prompt
         .iter()
@@ -641,8 +537,6 @@ fn typed(prompt: &[Value]) -> impl Iterator<Item = &str> {
         })
 }
 
-/// True when the text is one or more `<some_name>...</some_name>` elements and nothing else.
-/// The name has an underscore, so a pasted HTML or XML snippet is not taken for one.
 fn only_elements(text: &str) -> bool {
     let mut rest = text.trim();
     let mut found = false;
@@ -661,15 +555,12 @@ fn only_elements(text: &str) -> bool {
     found
 }
 
-/// The argument of a `/owo` command in the first typed text of a prompt.
 fn command(prompt: &[Value]) -> Option<&str> {
     let text = typed(prompt).next()?;
     let (name, arg) = text.split_once(char::is_whitespace).unwrap_or((text, ""));
     (name == "/owo").then_some(arg.trim())
 }
 
-/// Runs `/owo <arg>` and returns the lines that answer the prompt: a message, a config
-/// update when the identity changed, and the end of the turn.
 fn run_command(st: &mut State, setup: &Setup, session: &str, id: &Value, arg: &str) -> Vec<Value> {
     let to = match arg {
         "" => None,
@@ -730,18 +621,13 @@ fn turn(request: &str, replay: bool, user: String) -> Turn {
     }
 }
 
-/// What the proxy does with an agent line.
 #[derive(Default)]
 struct Agent {
-    /// The message to write instead of the line read.
     line: Option<Value>,
-    /// A message of the proxy's own to write after it.
     after: Option<Value>,
     store: Option<Job>,
 }
 
-/// Tracks an agent line. It returns the turns to store when a turn completes, and the new
-/// message when the line carries a config option list or a command list.
 fn from_agent_line(line: &[u8], state: &Mutex<State>, setup: &Setup) -> Option<Agent> {
     let mut msg: Value = serde_json::from_slice(line).ok()?;
     let mut st = state.lock().unwrap();
@@ -749,7 +635,6 @@ fn from_agent_line(line: &[u8], state: &Mutex<State>, setup: &Setup) -> Option<A
         let session = msg["params"]["sessionId"].as_str()?.to_string();
         let update = &mut msg["params"]["update"];
         track(&mut st, &session, update);
-        // Both lists are complete: the proxy keeps the agent's and adds its own entry.
         let options = match update["sessionUpdate"].as_str() {
             Some("config_option_update") => true,
             Some("available_commands_update") => false,
@@ -798,8 +683,6 @@ fn from_agent_line(line: &[u8], state: &Mutex<State>, setup: &Setup) -> Option<A
             return Some(out);
         }
     };
-    // A session response: the picker goes after the agent's options, and the `owo` command
-    // follows the response.
     if !msg["result"].is_object() {
         return Some(out);
     }
@@ -824,7 +707,6 @@ fn from_agent_line(line: &[u8], state: &Mutex<State>, setup: &Setup) -> Option<A
     Some(out)
 }
 
-/// Adds a session update to the oldest open turn of the session.
 fn track(st: &mut State, session: &str, update: &Value) -> Option<()> {
     let turn = st.turns.get_mut(session)?.front_mut()?;
     if update["sessionUpdate"] != "agent_message_chunk" || update["content"]["type"] != "text" {
@@ -833,8 +715,6 @@ fn track(st: &mut State, session: &str, update: &Value) -> Option<()> {
     }
     let text = update["content"]["text"].as_str()?;
     let id = update["messageId"].as_str().map(String::from);
-    // Chunks with one `messageId` are one message. Chunks with none are one message until
-    // another update, such as a tool call, comes between them.
     let same = match &id {
         Some(_) => turn.agent.iter_mut().find(|(i, _)| *i == id),
         None if turn.split => None,
@@ -848,19 +728,15 @@ fn track(st: &mut State, session: &str, update: &Value) -> Option<()> {
     Some(())
 }
 
-/// Closes the open turn of a response and returns its store.
 fn finish(st: &mut State, session: &str, request: &str, error: bool) -> Option<Job> {
     let open = st.turns.get_mut(session)?;
     let turn = open.remove(open.iter().position(|t| t.request == request)?)?;
-    // A refused prompt did not deliver the identity block, so the next prompt carries it.
     if turn.intro && error {
         st.intro.insert(session.into());
     }
     job(turn.identity.clone(), session, turns(turn))
 }
 
-/// The `{id, role, text}` turns of a finished turn. The user turn's id is the first agent
-/// `messageId` plus `.user`. A live message with no id gets a clock id; a replayed one is left out.
 fn turns(turn: Turn) -> Vec<crate::Turn> {
     let mut out = vec![];
     if !turn.replay {
@@ -891,7 +767,6 @@ fn turns(turn: Turn) -> Vec<crate::Turn> {
     out
 }
 
-/// A unique id from the clock and a counter.
 fn clock_id() -> String {
     static NEXT: AtomicU64 = AtomicU64::new(0);
     let nanos = std::time::SystemTime::now()
@@ -900,23 +775,18 @@ fn clock_id() -> String {
     format!("acp-{nanos}-{}", NEXT.fetch_add(1, Ordering::Relaxed))
 }
 
-/// One JSON-RPC message as a line.
 fn encode(msg: &Value) -> Vec<u8> {
     let mut bytes = serde_json::to_vec(msg).expect("JSON serializes");
     bytes.push(b'\n');
     bytes
 }
 
-/// Writes one whole line to the client and flushes it. Both threads write through the one
-/// lock, so their lines never mix.
 fn emit(out: &Mutex<impl Write>, bytes: &[u8]) -> std::io::Result<()> {
     let mut out = out.lock().unwrap();
     out.write_all(bytes)?;
     out.flush()
 }
 
-/// Stores the turns for `identity`, and with `auto_ingest` starts the ingest of the run the
-/// push reports due or pending. A failure is one warning line.
 fn push(owo: &Arc<Owo>, identity: &str, session: &str, turns: Vec<crate::Turn>) {
     match owo.push(identity, session, turns) {
         Ok(run) => {

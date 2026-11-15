@@ -1,6 +1,3 @@
-//! `owo changes`: what changed in an identity, grouped by day.
-//! Reads Git history when the identity is in a repo, else the state-file stamps.
-
 use crate::identity::Identity;
 use serde::Serialize;
 use std::collections::BTreeMap;
@@ -8,7 +5,6 @@ use std::collections::BTreeMap;
 #[derive(Debug, Serialize)]
 pub struct Change {
     pub path: String,
-    /// Git status letter (A, M, D, R) or "stamp" for state-file history.
     pub status: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub commit: Option<String>,
@@ -20,7 +16,6 @@ pub struct Change {
 pub struct Changes {
     pub source: &'static str,
     pub days: BTreeMap<String, Vec<Change>>,
-    /// Uncommitted paths (Git only).
     pub pending: Vec<String>,
 }
 
@@ -79,12 +74,10 @@ pub fn changes(id: &Identity, since: Option<&str>) -> anyhow::Result<Changes> {
             pending: crate::git::dirty(&id.dir).unwrap_or_default(),
         });
     }
-    // Outside Git only a day compares; `git log --since` words such as "yesterday" do not.
     let since = since
         .map(|s| crate::state::parse_day(s).map_err(|e| crate::Fault::SinceNotDay(e.to_string())))
         .transpose()?
         .map(|d| d.to_string());
-    // Each tracked file's state stamp, else its frontmatter `updated`; newest first.
     let mut stamped: Vec<(String, String)> = crate::state::tracked(id)
         .filter_map(|e| {
             let at = crate::state::updated(id, &e.rel)
@@ -96,7 +89,6 @@ pub fn changes(id: &Identity, since: Option<&str>) -> anyhow::Result<Changes> {
     stamped.sort_by(|a, b| (&b.0, &a.1).cmp(&(&a.0, &b.1)));
     let mut days: BTreeMap<String, Vec<Change>> = BTreeMap::new();
     for (at, path) in stamped {
-        // Group by the local day, which `--days` counts from; a plain day is already local.
         let day = chrono::DateTime::parse_from_rfc3339(&at)
             .map(|t| {
                 t.with_timezone(&chrono::Local)
@@ -121,9 +113,6 @@ pub fn changes(id: &Identity, since: Option<&str>) -> anyhow::Result<Changes> {
     })
 }
 
-/// Files changed since the last commit or stamp: uncommitted Git paths plus stamp drift.
-/// Outside Git, files stamped today count too, so a session that ends with `stamp` still checks
-/// its own edits.
 pub fn changed_paths(id: &Identity) -> Vec<String> {
     let mut out = crate::git::dirty(&id.dir).unwrap_or_else(|| {
         let today = crate::state::today();

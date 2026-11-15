@@ -1,9 +1,3 @@
-//! owo: one world, one identity. The binary is the CLI of the owo core: it builds its commands
-//! from the core's operations, maps the parsed arguments into their requests, runs them and
-//! renders the outcome as text or the JSON envelope, with an exit code. `main` also connects
-//! the process (arguments, environment, stdio, the agent process) to the core's MCP server and
-//! ACP proxy.
-
 mod cli;
 mod output;
 mod render;
@@ -59,7 +53,6 @@ fn main() -> ExitCode {
         _ => run(&ops, &matches, &global, &env),
     };
     match out.usage() {
-        // A usage error is worded as clap words its own, so it keeps its colour on a terminal.
         Some(e) => {
             eprint!("{}", out.warning_lines());
             let _ = command
@@ -75,8 +68,6 @@ fn main() -> ExitCode {
     ExitCode::from(out.code as u8)
 }
 
-/// Runs the operation of the parsed command. The process stdin gives the text `owo write` and
-/// `owo sync push` read when they take no `--content` or `--turns`.
 fn run(ops: &[Operation], matches: &ArgMatches, global: &Global, env: &owo_core::Env) -> Output {
     let mut path = vec![];
     let mut m = matches;
@@ -97,7 +88,6 @@ fn run(ops: &[Operation], matches: &ArgMatches, global: &Global, env: &owo_core:
     }
 }
 
-/// The environment values the library uses, read from the process.
 fn env() -> owo_core::Env {
     let non_empty = |key: &str| std::env::var(key).ok().filter(|v| !v.is_empty());
     owo_core::Env {
@@ -111,7 +101,6 @@ fn env() -> owo_core::Env {
     }
 }
 
-/// Serves MCP on the process's stdin and stdout until stdin closes.
 fn mcp_stdio(global: &Global, env: &owo_core::Env) -> anyhow::Result<()> {
     #[cfg(unix)]
     {
@@ -132,7 +121,6 @@ fn mcp_stdio(global: &Global, env: &owo_core::Env) -> anyhow::Result<()> {
     )?)
 }
 
-/// Serves MCP over HTTP on `addr`, after it prints the URL.
 fn mcp_http(
     addr: &str,
     port: Option<u16>,
@@ -147,9 +135,6 @@ fn mcp_http(
     Ok(mcp::serve_http(listener, &global.select, env)?)
 }
 
-/// Points the process's stdin at `/dev/null` and its stdout at stderr. A tool call runs in this
-/// process, so a tool path such as `/dev/stdin` or `/dev/stdout` must not reach the server's
-/// own streams.
 #[cfg(unix)]
 fn detach_stdio() -> std::io::Result<()> {
     use std::os::fd::AsRawFd;
@@ -161,8 +146,6 @@ fn detach_stdio() -> std::io::Result<()> {
     Ok(())
 }
 
-/// The server's own stdin and stdout for the protocol, taken before `detach_stdio`. The copies
-/// are close-on-exec, so a `git` child does not inherit them.
 #[cfg(unix)]
 fn own_stdio() -> std::io::Result<(std::fs::File, std::fs::File)> {
     use std::os::fd::AsFd;
@@ -172,8 +155,6 @@ fn own_stdio() -> std::io::Result<(std::fs::File, std::fs::File)> {
     Ok((input.into(), output.into()))
 }
 
-/// Runs the agent behind the ACP proxy until it exits, and returns its exit code, or 1 when a
-/// signal killed it.
 fn acp(
     global: &Global,
     env: &owo_core::Env,
@@ -193,7 +174,6 @@ fn acp(
     let agent_out = std::io::BufReader::new(child.stdout.take().expect("piped stdout"));
     let client_in = std::io::BufReader::new(std::io::stdin());
     let copied = proxy.run(client_in, std::io::stdout(), agent_in, agent_out);
-    // A client that closed its stdout ends the session: stop the agent.
     if copied.is_err() {
         let _ = child.kill();
     }
@@ -202,9 +182,6 @@ fn acp(
     Ok(status.code().unwrap_or(1) as u8)
 }
 
-/// The command line of the owo MCP server the ACP proxy adds: this binary's `mcp`, with the
-/// identity the proxy resolved at start. The command is this binary's path, so the agent starts
-/// the proxy's own owo, not the one on its `PATH`; `owo` only when the path is unknown.
 fn mcp_server(identity: Option<&str>) -> (String, Vec<String>) {
     let mut args = vec!["mcp".to_string()];
     if let Some(id) = identity {

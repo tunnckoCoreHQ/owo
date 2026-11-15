@@ -1,7 +1,3 @@
-//! `owo context`: the tiered load set for an identity.
-//! Core (always): IDENTITY, SOUL, MEMORY. Voice: VOICE.md. Look: LOOK.md.
-//! Project: work README, project.md, recent notes, KB pointer. The generated "Now" block is last.
-
 use crate::identity::Identity;
 use crate::status;
 use anyhow::Result;
@@ -28,8 +24,6 @@ pub struct Context {
 }
 
 impl Context {
-    /// The file list of the load set: one `tier path (reason)` line per file, then the KB pointer,
-    /// then the Now block, last as in the text.
     pub fn paths_text(&self) -> String {
         let mut out = String::new();
         for it in &self.items {
@@ -55,7 +49,6 @@ fn item(tier: &'static str, path: &str, reason: &str) -> Item {
     }
 }
 
-/// The load set; `project` is checked to exist.
 pub fn build(id: &Identity, req: &Request, project: Option<&str>) -> Result<Context> {
     let mut items = vec![
         item("core", "soul/IDENTITY.md", "who the identity is"),
@@ -87,7 +80,6 @@ pub fn build(id: &Identity, req: &Request, project: Option<&str>) -> Result<Cont
     }
     for name in &req.with {
         match crate::find::one(id, name) {
-            // A file already in the load set is loaded once.
             Ok(i) if items.iter().any(|it| it.path == id.entries[i].rel) => {}
             Ok(i) => items.push(item(
                 "with",

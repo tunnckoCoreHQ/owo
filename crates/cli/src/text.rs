@@ -1,11 +1,8 @@
-//! The text each command prints without `--json`, built from the typed results of the library.
-
 use owo_core::{
     Changes, Diagnostic, Hit, Level, Link, LinkRef, MigrateReport, Packet, Row, SearchHit,
     SoulChange, State, SyncRun,
 };
 
-/// One finding as `level[rule] path:line: message`.
 pub fn diagnostic(d: &Diagnostic) -> String {
     let level = match d.level {
         Level::Error => "error",
@@ -69,7 +66,6 @@ pub fn search(hits: &[SearchHit]) -> String {
     out
 }
 
-/// The due run (slice and prompt), or why no run is due.
 pub fn sync(s: &SyncRun) -> String {
     match &s.source {
         Some(src) => format!(
@@ -91,8 +87,6 @@ pub fn sync(s: &SyncRun) -> String {
     }
 }
 
-/// The skipped files and the checklist; `moved` lines are left to the caller, which drops them
-/// under `--quiet`.
 pub fn migrate(r: &MigrateReport) -> String {
     let mut out = String::new();
     for s in &r.skipped {
@@ -193,8 +187,6 @@ pub fn review(p: &Packet) -> String {
 pub fn soul_history(list: &[SoulChange]) -> String {
     let mut out = String::new();
     for r in list {
-        // An `evidence` array with an entry that is not a string stays in `other`; its strings
-        // still print.
         let loose = r.other.get("evidence").and_then(|v| v.as_array());
         let evidence: Vec<&str> = (r.evidence.iter().flatten().map(String::as_str))
             .chain(loose.into_iter().flatten().filter_map(|v| v.as_str()))
@@ -261,12 +253,10 @@ pub fn links(back: &[LinkRef], fwd: &[LinkRef]) -> String {
     out
 }
 
-/// The `YYYY-MM-DD` part of a stamp, or the whole text when it is shorter.
 fn day(stamp: &str) -> &str {
     stamp.get(..10).unwrap_or(stamp)
 }
 
-/// The links as `[[title]]` wiki-links joined with commas, or "none".
 fn join_links(links: &[Link]) -> String {
     if links.is_empty() {
         return "none".into();

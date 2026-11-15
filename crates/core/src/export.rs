@@ -1,5 +1,3 @@
-//! `owo export card` (Character Card V3 or V2) and `owo export soulspec` (SoulSpec v0.5).
-
 use crate::identity::{Entry, Identity, Kind};
 use crate::markdown;
 use crate::write::Writes;
@@ -8,11 +6,9 @@ use serde_json::{json, Value};
 use std::fs;
 use std::path::Path;
 
-/// The Character Card spec version of a card.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Spec {
     V2,
-    /// V3, with the V2 fields too.
     V3,
 }
 
@@ -31,7 +27,6 @@ impl Spec {
     }
 }
 
-/// Licenses `export soulspec` accepts without a warning.
 pub const LICENSES: &[&str] = &[
     "MIT",
     "Apache-2.0",
@@ -45,8 +40,6 @@ pub const LICENSES: &[&str] = &[
     "UNLICENSED",
 ];
 
-/// Body text without its `# ` headings and without the listed sections at any level.
-/// Headings inside fenced code do not count.
 fn body_without(text: &str, drop: &[&str]) -> String {
     let body = markdown::split(text).body;
     let mut out = vec![];
@@ -83,13 +76,11 @@ fn section(id: &Identity, rel: &str, name: &str) -> String {
         .unwrap_or_default()
 }
 
-/// `## ` sections of a file as separate strings (greetings, one per section).
 fn sections(id: &Identity, rel: &str) -> Vec<String> {
     let body = id
         .entry(rel)
         .map(|e| body_without(&e.text, &[]))
         .unwrap_or_default();
-    // Intro text before the first `## ` heading is not a greeting; headings in fences do not count.
     let mut out: Vec<String> = vec![];
     for (_, line, open) in markdown::unfenced(&body) {
         if open && line.starts_with("## ") {
@@ -122,7 +113,6 @@ fn lore(e: &Entry, n: usize) -> Value {
     let mut keys = vec![title.clone()];
     keys.extend(e.aliases.iter().cloned());
     let summary = e.field_str("summary").unwrap_or_default();
-    // Summary plus `## Key facts`; an entry whose key facts are missing or empty gives its body.
     let facts = markdown::section_text(e.body(), "Key facts")
         .map(|(_, text)| text.trim().to_string())
         .filter(|t| !t.is_empty());
@@ -206,7 +196,6 @@ pub fn card(
             k => order(k).is_some(),
         })
         .collect();
-    // Kinds in lorebook order; within a kind, path order.
     lorebook.sort_by_key(|e| order(e.kind));
     for e in lorebook {
         entries.push(lore(e, entries.len()));
@@ -263,7 +252,6 @@ pub fn card(
     Ok(json!({ "spec": "chara_card_v3", "spec_version": "3.0", "data": data }))
 }
 
-/// Warnings for a built card: a card without a greeting or an example message opens on nothing.
 pub fn warnings(card: &Value) -> Vec<String> {
     ["first_mes", "mes_example"]
         .iter()
@@ -276,8 +264,6 @@ pub fn warnings(card: &Value) -> Vec<String> {
         .collect()
 }
 
-/// Writes the built `main` card to `out`: JSON, or embedded in the `png` avatar (the V2 card
-/// as `chara`, plus the V3 card as `ccv3` for V3).
 pub fn write_card(
     id: &Identity,
     main: &Value,
@@ -305,7 +291,6 @@ pub struct Report {
     pub warnings: Vec<String>,
 }
 
-/// Writes the package into `dir`; error text names it as `shown`, as the request gave it.
 pub fn soulspec(id: &Identity, dir: &Path, shown: &Path) -> Result<Report> {
     let soul = id.dir.join("soul");
     let mut manifest = id
@@ -360,7 +345,6 @@ pub fn soulspec(id: &Identity, dir: &Path, shown: &Path) -> Result<Report> {
     Ok(Report { files, warnings })
 }
 
-/// A `SKILL.md` wrapper for hosts that load identities as skills.
 pub fn skill(id: &Identity, dir: &Path) -> Result<()> {
     let name = id.name().to_string();
     let soul = id.read_json("soul/soul.json").unwrap_or(Value::Null);
@@ -455,8 +439,6 @@ fn base64(bytes: &[u8]) -> String {
     out
 }
 
-/// Writes `png` with the card embedded as tEXt chunks: `chara` (V2 JSON) always,
-/// `ccv3` (V3 JSON) for V3 cards. Existing `chara`/`ccv3` chunks are replaced.
 pub fn embed_png(png: &[u8], cards: &[(&str, &Value)]) -> Result<Vec<u8>> {
     const SIG: &[u8] = b"\x89PNG\r\n\x1a\n";
     if !png.starts_with(SIG) {

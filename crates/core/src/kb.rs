@@ -1,12 +1,8 @@
-//! Project knowledge bases: where a project's KB is, the pointer `owo context` prints,
-//! and `[[kb:<project>:<path>#<Section>]]` links for `owo show` and lint.
-
 use crate::identity::Identity;
 use crate::markdown;
 use serde::Serialize;
 use std::path::{Component, Path, PathBuf};
 
-/// KB path for a project: project.md `kb`, relative to the identity folder (`~/` is the home folder).
 pub fn root(id: &Identity, project: &str) -> Option<PathBuf> {
     let raw = id
         .project(project)
@@ -37,7 +33,6 @@ pub struct Kb {
     pub entry: Option<String>,
 }
 
-/// The KB pointer for `owo context`, and a warning when the KB is missing or has no path.
 pub fn pointer(id: &Identity, p: &str) -> (Option<Kb>, Option<String>) {
     let Some(path) = root(id, p) else {
         return (
@@ -67,7 +62,6 @@ pub fn pointer(id: &Identity, p: &str) -> (Option<Kb>, Option<String>) {
     (Some(kb), warning)
 }
 
-/// A `[[kb:<project>:<path>#<Section>]]` link resolved against the project KB.
 #[derive(Debug)]
 pub struct Link {
     pub root_exists: bool,
@@ -77,7 +71,6 @@ pub struct Link {
     pub section_exists: bool,
 }
 
-/// Parses and resolves a kb link target (without brackets). None when it is not a kb link.
 pub fn link(id: &Identity, target: &str) -> Option<Result<Link, String>> {
     let rest = target.strip_prefix("kb:")?;
     let Some((project, path)) = rest.split_once(':') else {
@@ -112,7 +105,6 @@ pub fn link(id: &Identity, target: &str) -> Option<Result<Link, String>> {
     let Some(kb) = root(id, project) else {
         return Some(Ok(out));
     };
-    // A folder named like a file (`lat.md/`) is a folder.
     let base = if !kb.is_dir() && kb.extension().is_some_and(|x| x == "md") {
         kb.parent().map(Path::to_path_buf).unwrap_or(kb.clone())
     } else {
@@ -135,8 +127,6 @@ pub fn link(id: &Identity, target: &str) -> Option<Result<Link, String>> {
     Some(Ok(out))
 }
 
-/// The KB file a kb link points at, as (path, text): the requested section, else the link's
-/// section, else the whole file. None when the target is not a kb link.
 pub fn show(
     id: &Identity,
     target: &str,

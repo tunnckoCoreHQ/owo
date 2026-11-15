@@ -1,63 +1,39 @@
-//! The request type of each operation. A request type reads itself with `Request::read`, and
-//! each read declares one field: the name, type, help text, default, allowed values and rules.
-//! `Request::fields` lists the fields: the CLI builds its flags from them and the MCP server its
-//! parameters. `Args::new` checks arguments against the fields, and `Request::from_args` maps
-//! them into the request. `Request::check` checks a request against the rules declared on its
-//! fields; each typed call runs it, so a request built by hand gets the same check.
-
 use crate::{Error, ErrorKind, Fault, Kind, Result, Rule, Scope, Spec, SyncFormat};
 use chrono::NaiveDate;
 use serde_json::{Map, Value};
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
-/// The largest number of days `state` and `changes` take.
 pub const MAX_DAYS: i64 = 36500;
 
-/// The type of a field's value.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Type {
-    /// On when given; takes no value.
     Switch,
     Text,
-    /// A whole number; one with a range is an `i64`, else a `usize`.
     Int,
-    /// A `YYYY-MM-DD` day.
     Day,
     Path,
-    /// One of these names.
     Choice(Vec<&'static str>),
-    /// A JSON document, such as the turns of `sync push`.
     Json,
 }
 
-/// One field of a request: an argument of its operation.
 #[derive(Debug, Clone)]
 pub struct Field {
-    /// The flag name (`--name`), the positional name, and the MCP parameter name.
     pub name: &'static str,
     pub help: &'static str,
     pub ty: Type,
-    /// Given by place, not by flag.
     pub positional: bool,
-    /// Takes several values: a repeatable flag, or the words of a positional.
     pub many: bool,
     pub required: bool,
     pub default: Option<String>,
-    /// The name of the value in help text, when it is not the field name in capitals.
     pub value_name: Option<&'static str>,
-    /// Takes a value that starts with `-`.
     pub hyphen: bool,
-    /// The smallest and largest value of an `Int`.
     pub range: Option<(i64, i64)>,
-    /// A field that cannot be given with this one.
     pub conflicts: Option<&'static str>,
-    /// A field this one needs.
     pub requires: Option<&'static str>,
 }
 
 impl Field {
-    /// A flag with one value of type `ty`.
     pub fn new(name: &'static str, ty: Type, help: &'static str) -> Self {
         Self {
             name,
@@ -75,12 +51,10 @@ impl Field {
         }
     }
 
-    /// A flag with no value.
     pub fn switch(name: &'static str, help: &'static str) -> Self {
         Self::new(name, Type::Switch, help)
     }
 
-    /// A positional value of type `ty`.
     pub fn positional(name: &'static str, ty: Type, help: &'static str) -> Self {
         Self {
             positional: true,
@@ -88,7 +62,6 @@ impl Field {
         }
     }
 
-    /// A positional value of several words, joined with spaces.
     pub fn words(name: &'static str, help: &'static str) -> Self {
         Self::positional(name, Type::Text, help).many()
     }
@@ -134,15 +107,12 @@ impl Field {
     }
 }
 
-/// The arguments of one call, by field name: a JSON value each, and the raw value of a path
-/// field that came as a path, not as text.
 #[derive(Debug, Clone, Default)]
 pub struct Args {
     map: Map<String, Value>,
     paths: BTreeMap<String, PathBuf>,
 }
 
-/// The text of a string, number or boolean.
 pub(crate) fn scalar(v: &Value) -> Option<String> {
     match v {
         Value::String(s) => Some(s.clone()),
@@ -157,9 +127,6 @@ fn usage(message: String) -> Error {
 }
 
 impl Args {
-    /// The arguments in `map` for the operation `name` with `fields`, checked: each one a field,
-    /// each required field there, and each value of a field with a fixed list in it. The typed
-    /// call checks the rules.
     pub fn new(name: &str, fields: &[Field], map: Map<String, Value>) -> Result<Self> {
         if let Some(k) = map.keys().find(|k| !fields.iter().any(|f| f.name == *k)) {
             return Err(usage(format!("unknown argument {k:?} for {name}")));
@@ -185,15 +152,11 @@ impl Args {
         Ok(args)
     }
 
-    /// The arguments with the raw value of the path field `name`, which the request takes
-    /// over its text. A command line path need not be UTF-8.
     pub fn with_path(mut self, name: &str, path: PathBuf) -> Self {
         self.paths.insert(name.to_string(), path);
         self
     }
 
-    /// The rules of `f`: a required path is there and not empty, and when `f` is given, its
-    /// range, conflicts and requires rules.
     fn check_rules(&self, f: &Field) -> Result<()> {
         if !self.given(f.name) {
             if f.required && f.ty == Type::Path {
@@ -225,17 +188,14 @@ impl Args {
         Ok(())
     }
 
-    /// An argument that is not null.
     fn get(&self, name: &str) -> Option<&Value> {
         self.map.get(name).filter(|v| !v.is_null())
     }
 
-    /// An argument that is there and not a switch that is off.
     fn given(&self, name: &str) -> bool {
         !matches!(self.get(name), None | Some(Value::Bool(false)))
     }
 
-    /// A single-value argument: the value, or the item of an array of one.
     fn one(&self, name: &str) -> Option<&Value> {
         match self.get(name)? {
             Value::Array(items) if items.len() == 1 => Some(&items[0]),
@@ -243,7 +203,6 @@ impl Args {
         }
     }
 
-    /// The scalar values of an argument: each item of an array, or the one value.
     fn strings(&self, name: &str) -> impl Iterator<Item = String> + '_ {
         let items = match self.get(name) {
             Some(Value::Array(items)) => items.as_slice(),
@@ -254,27 +213,19 @@ impl Args {
     }
 }
 
-/// What a `Reader` does with each field it reads.
 enum Mode<'a> {
-    /// Only collect the fields.
     Declare,
-    /// Take each value from the arguments, else from the base request.
     Args(&'a Args),
-    /// Note whether each value of the base request is given, and its number, for the rules.
     Check,
 }
 
-/// Reads a request field by field. Each read declares one field and gives its value: from the
-/// arguments, else the base request's. A value of the wrong type is the first error.
 pub struct Reader<'a> {
     mode: Mode<'a>,
     fields: Vec<Field>,
-    /// In check mode, the value of each field as the rules see it: null when not given.
     values: Map<String, Value>,
     error: Option<Error>,
 }
 
-/// A number field's value: parsed from text, and its number for the range rule.
 pub trait Number: Sized {
     fn parse(text: &str) -> Option<Self>;
     fn value(&self) -> Value;
@@ -316,7 +267,6 @@ impl Number for Option<i64> {
     }
 }
 
-/// True as given, null as not given.
 fn given(is: bool) -> Value {
     if is {
         Value::Bool(true)
@@ -335,8 +285,6 @@ impl<'a> Reader<'a> {
         }
     }
 
-    /// Declares `f`, notes `value` in check mode, and gives the field name and the arguments
-    /// when it reads arguments.
     fn declare(&mut self, f: Field, value: Value) -> Option<(&'static str, &'a Args)> {
         let name = f.name;
         self.fields.push(f);
@@ -354,8 +302,6 @@ impl<'a> Reader<'a> {
         self.error.get_or_insert_with(|| usage(message));
     }
 
-    /// The text of a single-value argument, when it is there. A value that is not one string,
-    /// number or boolean is an error that names the type of the field last declared.
     fn one(&mut self, name: &str, args: &Args) -> Option<String> {
         let text = scalar(args.one(name)?);
         if text.is_none() {
@@ -370,7 +316,6 @@ impl<'a> Reader<'a> {
         text
     }
 
-    /// A switch.
     pub fn flag(&mut self, f: Field, base: bool) -> bool {
         match self.declare(f, base.into()) {
             Some((name, a)) => a.get(name).and_then(Value::as_bool) == Some(true),
@@ -378,7 +323,6 @@ impl<'a> Reader<'a> {
         }
     }
 
-    /// A single-value text.
     pub fn text(&mut self, f: Field, base: Option<String>) -> Option<String> {
         match self.declare(f, given(base.is_some())) {
             Some((name, a)) => self.one(name, a).or(base),
@@ -386,7 +330,6 @@ impl<'a> Reader<'a> {
         }
     }
 
-    /// A required single-value text.
     pub fn string(&mut self, f: Field, base: String) -> String {
         match self.declare(f, given(!base.is_empty())) {
             Some((name, a)) => self.one(name, a).unwrap_or(base),
@@ -394,7 +337,6 @@ impl<'a> Reader<'a> {
         }
     }
 
-    /// The value of a single-value path argument: its raw path, else its text.
     fn one_path(&mut self, name: &str, args: &Args) -> Option<PathBuf> {
         match args.paths.get(name) {
             Some(p) => Some(p.clone()),
@@ -416,7 +358,6 @@ impl<'a> Reader<'a> {
         }
     }
 
-    /// Every value of a repeatable field.
     pub fn list(&mut self, f: Field, base: Vec<String>) -> Vec<String> {
         match self.declare(f, given(!base.is_empty())) {
             Some((name, a)) if a.get(name).is_some() => a.strings(name).collect(),
@@ -424,7 +365,6 @@ impl<'a> Reader<'a> {
         }
     }
 
-    /// The words of a positional, joined with spaces: a string, or an array of words.
     pub fn words(&mut self, f: Field, base: String) -> String {
         match self.declare(f, given(!base.is_empty())) {
             Some((name, a)) if a.get(name).is_some() => {
@@ -434,7 +374,6 @@ impl<'a> Reader<'a> {
         }
     }
 
-    /// An integer: a number, or a string of one.
     pub fn int<T: Number>(&mut self, f: Field, base: T) -> T {
         let Some((name, a)) = self.declare(f, base.value()) else {
             return base;
@@ -450,7 +389,6 @@ impl<'a> Reader<'a> {
         })
     }
 
-    /// A `YYYY-MM-DD` day. In check mode, a base day outside the years 0000 to 9999 is an error.
     pub fn day(&mut self, f: Field, base: Option<NaiveDate>) -> Option<NaiveDate> {
         let name = f.name;
         let Some((name, a)) = self.declare(f, given(base.is_some())) else {
@@ -473,7 +411,6 @@ impl<'a> Reader<'a> {
         }
     }
 
-    /// A value of a fixed list, as its typed value. `Args::new` checked the name.
     pub fn named<T>(
         &mut self,
         f: Field,
@@ -486,7 +423,6 @@ impl<'a> Reader<'a> {
         }
     }
 
-    /// A value of a fixed list that always has one: the argument's, else the base's.
     pub fn choice<T>(&mut self, f: Field, from: fn(&str) -> Option<T>, base: T) -> T {
         match self.declare(f, given(true)) {
             Some((name, a)) => self.one(name, a).and_then(|s| from(&s)).unwrap_or(base),
@@ -494,7 +430,6 @@ impl<'a> Reader<'a> {
         }
     }
 
-    /// The values of a repeatable field with a fixed list, as their typed values.
     pub fn all_named<T>(&mut self, f: Field, from: fn(&str) -> Option<T>, base: Vec<T>) -> Vec<T> {
         match self.declare(f, given(!base.is_empty())) {
             Some((name, a)) if a.get(name).is_some() => {
@@ -505,30 +440,21 @@ impl<'a> Reader<'a> {
     }
 }
 
-/// The arguments of one operation.
 pub trait Request: Default + Clone {
-    /// The request with each value read from `r`, else taken from `base`. Each read declares
-    /// one field, in the order the CLI lists them.
     fn read(r: &mut Reader, base: Self) -> Self;
 
-    /// The fields, in the order the CLI lists them.
     fn fields() -> Vec<Field> {
         let mut r = Reader::new(Mode::Declare);
         Self::read(&mut r, Self::default());
         r.fields
     }
 
-    /// The request from arguments checked with `Args::new`, with the defaults for the arguments
-    /// left out. The error is a usage error for an argument of the wrong type.
     fn from_args(args: &Args) -> Result<Self> {
         let mut r = Reader::new(Mode::Args(args));
         let req = Self::read(&mut r, Self::default());
         r.error.map_or(Ok(req), Err)
     }
 
-    /// Checks the request against its field types and the rules declared on its fields
-    /// (`required` paths, `range`, `conflicts`, `requires`): a usage error when one is broken.
-    /// Each typed call runs it.
     fn check(&self) -> Result<()> {
         let mut r = Reader::new(Mode::Check);
         Self::read(&mut r, self.clone());
@@ -543,12 +469,10 @@ pub trait Request: Default + Clone {
     }
 }
 
-/// An operation with no arguments.
 impl Request for () {
     fn read(_: &mut Reader, _: Self) -> Self {}
 }
 
-/// The request of an operation that writes files, with the switch that makes it write none.
 #[derive(Debug, Clone, Default)]
 pub(crate) struct DryRun<R> {
     pub req: R,
@@ -569,9 +493,7 @@ impl<R: Request> Request for DryRun<R> {
 
 #[derive(Debug, Clone, Default)]
 pub struct NewRequest {
-    /// The display name.
     pub name: String,
-    /// The slug; the slug of the name when None.
     pub slug: Option<String>,
 }
 
@@ -597,10 +519,7 @@ impl Request for NewRequest {
 
 #[derive(Debug, Clone, Default)]
 pub struct WriteRequest {
-    /// The identity-relative path.
     pub path: String,
-    /// The file text. The operation reads the caller's input when it is None; a call to
-    /// `Identity::write` with no text is an error.
     pub content: Option<String>,
 }
 
@@ -627,17 +546,14 @@ impl Request for WriteRequest {
 #[derive(Debug, Clone)]
 pub struct AddRequest {
     pub kind: Kind,
-    /// A log without one is titled by its date.
     pub title: String,
     pub date: Option<NaiveDate>,
     pub parent: Option<String>,
     pub aliases: Vec<String>,
-    /// KB path for a project (`kb:` in project.md)
     pub kb: Option<String>,
 }
 
 impl Default for AddRequest {
-    /// A log for today.
     fn default() -> Self {
         Self {
             kind: Kind::Log,
@@ -700,7 +616,6 @@ impl Request for AddRequest {
 
 #[derive(Debug, Clone, Copy, Default)]
 pub struct StampRequest {
-    /// Only report the drift.
     pub check: bool,
 }
 
@@ -717,9 +632,7 @@ impl Request for StampRequest {
 
 #[derive(Debug, Clone, Default)]
 pub struct LintRequest {
-    /// Every rule when empty.
     pub rules: Vec<Rule>,
-    /// Only the findings in files changed since the last commit or stamp.
     pub changed: bool,
 }
 
@@ -750,7 +663,6 @@ impl Request for LintRequest {
 
 #[derive(Debug, Clone, Copy, Default)]
 pub struct IndexRequest {
-    /// Only list the stale generated files.
     pub check: bool,
 }
 
@@ -798,7 +710,6 @@ impl Request for TemplateRequest {
 #[derive(Debug, Clone, Default)]
 pub struct ResolveRequest {
     pub name: String,
-    /// Only entries of this type.
     pub kind: Option<Kind>,
 }
 
@@ -826,7 +737,6 @@ impl Request for ResolveRequest {
 #[derive(Debug, Clone, Default)]
 pub struct ShowRequest {
     pub name: String,
-    /// Only this section: a heading at any level.
     pub section: Option<String>,
 }
 
@@ -855,11 +765,8 @@ impl Request for ShowRequest {
 #[derive(Debug, Clone, Default)]
 pub struct LinksRequest {
     pub name: String,
-    /// Only the links into the entry. Both when neither is set.
     pub inbound: bool,
-    /// Only the links out of the entry.
     pub outbound: bool,
-    /// The entries nothing links to, instead of the links of `name`.
     pub orphans: bool,
 }
 
@@ -893,16 +800,12 @@ impl Request for LinksRequest {
 pub struct ContextRequest {
     pub voice: bool,
     pub look: bool,
-    /// Resolvable entries to add.
     pub with: Vec<String>,
-    /// Recent project notes to include.
     pub notes: usize,
-    /// The file list instead of the file contents.
     pub paths: bool,
 }
 
 impl Default for ContextRequest {
-    /// The core files and three recent project notes, as text.
     fn default() -> Self {
         Self {
             voice: false,
@@ -944,12 +847,10 @@ impl Request for ContextRequest {
 
 #[derive(Debug, Clone, Copy)]
 pub struct StateRequest {
-    /// The window for recent events, from 0 to `MAX_DAYS`.
     pub days: i64,
 }
 
 impl Default for StateRequest {
-    /// Events of the last 14 days.
     fn default() -> Self {
         Self { days: 14 }
     }
@@ -969,23 +870,17 @@ impl Request for StateRequest {
     }
 }
 
-/// Which entries a search looks at, and how many hits it returns.
 #[derive(Debug, Clone)]
 pub struct SearchRequest {
     pub query: String,
     pub scope: Option<Scope>,
-    /// Every kind when empty.
     pub types: Vec<Kind>,
-    /// Only `work/projects/<p>/`. The operation sets it to the selected project.
     pub project: Option<String>,
-    /// Story `date`, else `updated`, on or after this day.
     pub since: Option<NaiveDate>,
-    /// The most hits to return.
     pub limit: usize,
 }
 
 impl Default for SearchRequest {
-    /// Every entry, and ten hits.
     fn default() -> Self {
         Self {
             query: String::new(),
@@ -1042,7 +937,6 @@ impl Request for SearchRequest {
 
 #[derive(Debug, Clone, Copy, Default)]
 pub struct ReviewDoneRequest {
-    /// The last story day covered; the newest one when None.
     pub through: Option<NaiveDate>,
 }
 
@@ -1063,10 +957,8 @@ impl Request for ReviewDoneRequest {
 
 #[derive(Debug, Clone, Default)]
 pub struct SoulNoteRequest {
-    /// The soul file, for example SOUL.md.
     pub file: String,
     pub change: String,
-    /// Evidence entry names or links.
     pub evidence: Vec<String>,
 }
 
@@ -1094,7 +986,6 @@ impl Request for SoulNoteRequest {
     }
 }
 
-/// Which soul files `soul` prints; IDENTITY.md and SOUL.md when none is set.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct SoulRequest {
     pub identity: bool,
@@ -1107,7 +998,6 @@ pub struct SoulRequest {
 impl Request for SoulRequest {
     fn read(r: &mut Reader, b: Self) -> Self {
         Self {
-            // The field is `id` because `identity` names the selected identity.
             identity: r.flag(Field::switch("id", "Print soul/IDENTITY.md"), b.identity),
             soul: r.flag(Field::switch("soul", "Print soul/SOUL.md"), b.soul),
             voice: r.flag(Field::switch("voice", "Print soul/VOICE.md"), b.voice),
@@ -1119,7 +1009,6 @@ impl Request for SoulRequest {
 
 #[derive(Debug, Clone, Default)]
 pub struct SoulHistoryRequest {
-    /// One soul file; every file when None.
     pub file: Option<String>,
 }
 
@@ -1138,12 +1027,9 @@ impl Request for SoulHistoryRequest {
     }
 }
 
-/// Which changes `changes` lists: all by default.
 #[derive(Debug, Clone, Default)]
 pub struct ChangesRequest {
-    /// A day, or what `git log --since` takes.
     pub since: Option<String>,
-    /// Only the last N days, from 0 to `MAX_DAYS`; not with `since`.
     pub days: Option<i64>,
 }
 
@@ -1167,23 +1053,16 @@ impl Request for ChangesRequest {
     }
 }
 
-/// What `export_card` builds, and where it writes the card.
 #[derive(Debug, Clone)]
 pub struct CardRequest {
     pub spec: Spec,
-    /// The project whose notes join the card; it must exist. The operation sets it to the
-    /// selected project.
     pub project: Option<String>,
-    /// The event or location whose summary becomes the scenario.
     pub scenario: Option<String>,
-    /// Writes the card to this file when set.
     pub out: Option<PathBuf>,
-    /// Embeds the card in this PNG avatar; needs `out`.
     pub png: Option<PathBuf>,
 }
 
 impl Default for CardRequest {
-    /// A V3 card of the whole identity, not written.
     fn default() -> Self {
         Self {
             spec: Spec::V3,
@@ -1239,10 +1118,8 @@ impl Request for CardRequest {
     }
 }
 
-/// An export into a folder.
 #[derive(Debug, Clone, Default)]
 pub struct SkillRequest {
-    /// The folder to write SKILL.md into.
     pub out: PathBuf,
 }
 
@@ -1259,7 +1136,6 @@ impl Request for SkillRequest {
 
 #[derive(Debug, Clone, Default)]
 pub struct SoulspecRequest {
-    /// The package folder to write.
     pub out: PathBuf,
 }
 
@@ -1274,15 +1150,11 @@ impl Request for SoulspecRequest {
     }
 }
 
-/// The run size when neither the request nor the config gives one.
 pub const DEFAULT_SYNC_EVERY: usize = 6;
 
-/// When a sync step writes a slice for ingest.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct SyncOptions {
-    /// Take any new turns now (session end).
     pub now: bool,
-    /// New user turns per run; when None, `sync_every` in the config, else 6.
     pub every: Option<usize>,
 }
 
@@ -1316,7 +1188,6 @@ const SESSION_HELP: &str = "Session id: the host's id for this chat (letters, di
 #[derive(Debug, Clone, Default)]
 pub struct SyncStartRequest {
     pub session: String,
-    /// The transcript file the host keeps for this session.
     pub transcript: PathBuf,
     pub format: SyncFormat,
     pub options: SyncOptions,
@@ -1353,8 +1224,6 @@ impl Request for SyncStartRequest {
 #[derive(Debug, Clone, Default)]
 pub struct SyncPushRequest {
     pub session: String,
-    /// The turns as a JSON array of `{id, role, text}`. The operation reads the caller's input
-    /// when it is None, and parses it with `parse_turns`.
     pub turns: Option<String>,
     pub options: SyncOptions,
 }
@@ -1380,7 +1249,6 @@ impl Request for SyncPushRequest {
 #[derive(Debug, Clone, Default)]
 pub struct SyncDoneRequest {
     pub session: String,
-    /// The message index the ingest run reached.
     pub until: usize,
 }
 
@@ -1406,9 +1274,7 @@ impl Request for SyncDoneRequest {
 
 #[derive(Debug, Clone, Default)]
 pub struct MigrateRequest {
-    /// The v1 identity folder.
     pub path: PathBuf,
-    /// The new identity folder, `<root>/<slug>`.
     pub out: PathBuf,
 }
 

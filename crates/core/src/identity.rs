@@ -1,5 +1,3 @@
-//! Loads one identity folder into memory: manifest, state files and every Markdown entry.
-
 use crate::markdown;
 use crate::markdown::Fields;
 use crate::slug::slugify;
@@ -12,7 +10,6 @@ use walkdir::WalkDir;
 
 pub const SOUL_FILES: &[&str] = &["IDENTITY.md", "SOUL.md", "VOICE.md", "LOOK.md", "MEMORY.md"];
 
-/// Life folders that hold one entry type each, with the type they hold.
 pub const LIFE_CATEGORIES: &[(&str, Kind)] = &[
     ("characters", Kind::Character),
     ("locations", Kind::Location),
@@ -28,7 +25,6 @@ pub const LIFE_CATEGORIES: &[(&str, Kind)] = &[
     ("journal", Kind::Journal),
 ];
 
-/// What a file is, decided by its path.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Kind {
     Soul,
@@ -77,12 +73,10 @@ impl Kind {
         Kind::Unknown,
     ];
 
-    /// The kind whose `type:` value is `name`.
     pub fn from_type(name: &str) -> Option<Kind> {
         Kind::ALL.into_iter().find(|k| k.type_name() == Some(name))
     }
 
-    /// The `type:` value an entry of this kind carries in frontmatter.
     pub fn type_name(self) -> Option<&'static str> {
         Some(match self {
             Kind::Character => "character",
@@ -104,7 +98,6 @@ impl Kind {
         })
     }
 
-    /// The name of this kind in output and `--type`: its `type:` value, else a name for the file kind.
     pub fn name(self) -> &'static str {
         self.type_name().unwrap_or(match self {
             Kind::Soul => "soul",
@@ -115,22 +108,18 @@ impl Kind {
         })
     }
 
-    /// Every kind name, for `--type` value lists.
     pub fn names() -> impl Iterator<Item = &'static str> {
         Kind::ALL.into_iter().map(Kind::name)
     }
 
-    /// The kind `name` names, as `--type` takes it.
     pub fn from_name(name: &str) -> Option<Kind> {
         Kind::ALL.into_iter().find(|k| k.name() == name)
     }
 
-    /// Entries with YAML frontmatter.
     pub fn has_frontmatter(self) -> bool {
         self.type_name().is_some()
     }
 
-    /// Files named `YYYY-MM-DD.md` (log) or `YYYY-MM-DD_<slug>.md`.
     pub fn dated(self) -> Option<bool> {
         match self {
             Kind::Log => Some(false),
@@ -139,9 +128,6 @@ impl Kind {
         }
     }
 
-    /// The identity-relative path `owo add` gives a new entry; `classify` maps it back to this
-    /// kind. None for a kind `owo add` does not create, a location detail without its parent
-    /// location slug, or a note without its project.
     pub fn rel(
         self,
         slug: &str,
@@ -166,16 +152,13 @@ impl Kind {
     }
 }
 
-/// One Markdown file of the identity.
 #[derive(Debug)]
 pub struct Entry {
-    /// Path relative to the identity folder, with `/` separators.
     pub rel: String,
     pub kind: Kind,
     pub text: String,
     pub frontmatter: Option<Fields>,
     pub frontmatter_error: Option<String>,
-    /// True when the file is not valid UTF-8; `text` holds U+FFFD in place of the bad bytes.
     pub lossy: bool,
     pub title: Option<String>,
     pub aliases: Vec<String>,
@@ -199,13 +182,10 @@ impl Entry {
         }
     }
 
-    /// The title, else the stem key.
     pub fn label(&self) -> String {
         self.title.clone().unwrap_or_else(|| self.stem_key())
     }
 
-    /// Slug-like key from the path: the folder name for `overview.md` and `project.md`,
-    /// else the file stem.
     pub fn stem_key(&self) -> String {
         let path = Path::new(&self.rel);
         if matches!(
@@ -230,7 +210,6 @@ impl Entry {
         self.kind == Kind::Generated
     }
 
-    /// True when the body holds only its title, blank lines or empty bullets, as a fresh log does.
     pub fn is_blank(&self) -> bool {
         self.body().lines().all(|l| {
             let t = l.trim();
@@ -242,20 +221,13 @@ impl Entry {
 pub struct Identity {
     pub slug: String,
     pub dir: PathBuf,
-    /// `identity.json`, or Null when it is missing or does not parse.
     pub manifest: Json,
     pub manifest_error: Option<String>,
-    /// `soul`, `life` and `work` state.json in `state::SCOPES` order, read through `state::doc`.
     pub state: [Json; 3],
     pub entries: Vec<Entry>,
-    /// Lowercase link key to the entries it can point at; see `resolve_link`.
     pub keys: BTreeMap<String, Vec<usize>>,
-    /// The working project that `Root::identity` selects, not yet checked to exist; see
-    /// `Identity::working_project`.
     pub project: Option<String>,
-    /// The home folder for `~/` in a project KB path; the caller sets it.
     pub home: Option<PathBuf>,
-    /// The caller's folder, which relative export paths join onto; the caller sets it.
     pub cwd: PathBuf,
 }
 
@@ -320,13 +292,10 @@ fn parse_entry(rel: String, text: String, lossy: bool) -> Entry {
     entry
 }
 
-/// A JSON file, or None when it is missing or does not parse.
 pub fn read_json(path: &Path) -> Option<Json> {
     serde_json::from_str(&crate::write::read_to_string(path).ok()?).ok()
 }
 
-/// A JSON object file for a command that rewrites it: None when it is missing, an error when
-/// it does not parse or is not an object, so the rewrite does not drop its contents.
 pub fn read_object(path: &Path) -> Result<Option<Json>> {
     let text = match crate::write::read_to_string(path) {
         Ok(text) => text,
@@ -342,8 +311,6 @@ pub fn read_object(path: &Path) -> Result<Option<Json>> {
 }
 
 impl Identity {
-    /// Loads `<root>/<slug>`. In a dry run the files it kept replace or join the files on disk,
-    /// and the folder may be there only in memory.
     pub fn load(root: &Path, slug: &str) -> Result<Self> {
         let dir = root.join(slug);
         let (manifest, manifest_error) =
@@ -355,9 +322,7 @@ impl Identity {
                 Err(_) => (Json::Null, None),
             };
         let md = |p: &Path| p.extension().and_then(|e| e.to_str()) == Some("md");
-        // By path relative to the folder, which is the order of a walk that sorts by file name.
         let mut files = BTreeMap::new();
-        // A dry run may hold the folder only in memory.
         if !crate::write::dry() || dir.exists() {
             for item in WalkDir::new(&dir).sort_by_file_name() {
                 let item = item
@@ -414,7 +379,6 @@ impl Identity {
         self.entries.iter().find(|e| e.rel == rel)
     }
 
-    /// Map from lowercase link key to the entries it can point at.
     fn link_keys(entries: &[Entry]) -> BTreeMap<String, Vec<usize>> {
         let mut keys: BTreeMap<String, Vec<usize>> = BTreeMap::new();
         let mut add = |key: String, idx: usize| {
@@ -452,8 +416,6 @@ impl Identity {
         keys
     }
 
-    /// Resolves a link target to entry indexes. Tries the raw key (a path may end in `.md`),
-    /// then its slug.
     pub fn resolve_link(&self, target: &str) -> Vec<usize> {
         let raw = target.trim().to_lowercase();
         let raw = raw.strip_suffix(".md").unwrap_or(&raw).to_string();
@@ -463,22 +425,18 @@ impl Identity {
         self.keys.get(&slugify(target)).cloned().unwrap_or_default()
     }
 
-    /// Budget overrides from `identity.json` → `budgets`.
     pub fn budget_override(&self, file: &str) -> Option<usize> {
         self.manifest["budgets"][file].as_u64().map(|n| n as usize)
     }
 
-    /// The display name from `identity.json`, else the slug.
     pub fn name(&self) -> &str {
         self.manifest["name"].as_str().unwrap_or(&self.slug)
     }
 
-    /// The `project.md` of a project.
     pub fn project(&self, slug: &str) -> Option<&Entry> {
         self.entry(&format!("work/projects/{slug}/project.md"))
     }
 
-    /// Project slugs, in file-name order.
     pub fn projects(&self) -> Vec<String> {
         self.entries
             .iter()
@@ -487,7 +445,6 @@ impl Identity {
             .collect()
     }
 
-    /// The notes of a project, newest first.
     pub fn notes(&self, project: &str) -> Vec<&Entry> {
         let prefix = format!("work/projects/{project}/notes/");
         let mut notes: Vec<&Entry> = self
