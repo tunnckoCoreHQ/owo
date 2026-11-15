@@ -58,36 +58,29 @@ pub fn tracked(identity: &Identity) -> impl Iterator<Item = &crate::identity::En
 }
 
 pub fn initial(identity: &Identity, at: &str) -> Vec<(String, Value)> {
-    let mut files: Map<String, Value> = SCOPES
-        .iter()
-        .map(|s| (s.to_string(), Value::Object(Map::new())))
-        .collect();
-    for e in tracked(identity) {
-        if let Some((scope, rel)) = scope_of(&e.rel) {
-            if let Some(Value::Object(m)) = files.get_mut(scope) {
-                m.insert(
-                    rel.to_string(),
-                    json!({ "updated": at, "hash": hash(&e.text) }),
-                );
-            }
-        }
-    }
     let memory_hash = identity.entry("soul/MEMORY.md").map(|e| hash(&e.text));
-    let take = |files: &mut Map<String, Value>, s: &str| {
-        files.remove(s).unwrap_or(Value::Object(Map::new()))
-    };
-    let soul = json!({
-        "files": take(&mut files, "soul"),
-        "history": [],
-        "review": { "last_reviewed": null, "reviewed_through": null, "memory_hash": memory_hash }
-    });
-    let life = json!({ "files": take(&mut files, "life") });
-    let work = json!({ "files": take(&mut files, "work") });
-    vec![
-        ("soul/state.json".into(), soul),
-        ("life/state.json".into(), life),
-        ("work/state.json".into(), work),
-    ]
+    SCOPES
+        .iter()
+        .map(|scope| {
+            let files: Map<String, Value> = tracked(identity)
+                .filter_map(|e| match scope_of(&e.rel) {
+                    Some((s, rel)) if s == *scope => {
+                        Some((rel.to_string(), json!({ "updated": at, "hash": hash(&e.text) })))
+                    }
+                    _ => None,
+                })
+                .collect();
+            let doc = match *scope {
+                "soul" => json!({
+                    "files": files,
+                    "history": [],
+                    "review": { "last_reviewed": null, "reviewed_through": null, "memory_hash": memory_hash }
+                }),
+                _ => json!({ "files": files }),
+            };
+            (format!("{scope}/state.json"), doc)
+        })
+        .collect()
 }
 
 pub fn doc<'a>(id: &'a Identity, scope: &str) -> &'a Value {

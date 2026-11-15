@@ -143,16 +143,13 @@ fn bumped_soul(id: &Identity) -> Result<Option<Value>> {
     let Some(mut soul) = id.read_object("soul/soul.json")? else {
         return Ok(None);
     };
-    let version = soul
+    let mut parts = soul
         .get("version")
         .and_then(Value::as_str)
         .unwrap_or("0.0.0")
-        .to_string();
-    let parts: Vec<u64> = version.split('.').map(|p| p.parse().unwrap_or(0)).collect();
-    let (major, minor) = (
-        parts.first().copied().unwrap_or(0),
-        parts.get(1).copied().unwrap_or(0),
-    );
+        .split('.')
+        .map(|p| p.parse().unwrap_or(0));
+    let (major, minor): (u64, u64) = (parts.next().unwrap_or(0), parts.next().unwrap_or(0));
     soul["version"] = json!(format!("{major}.{}.0", minor + 1));
     Ok(Some(soul))
 }
