@@ -19,6 +19,13 @@ pub struct Changes {
     pub pending: Vec<String>,
 }
 
+fn since_day(since: Option<&str>) -> anyhow::Result<Option<String>> {
+    Ok(since
+        .map(|s| crate::state::parse_day(s).map_err(|e| crate::Fault::SinceNotDay(e.to_string())))
+        .transpose()?
+        .map(|d| d.to_string()))
+}
+
 pub fn changes(id: &Identity, since: Option<&str>) -> anyhow::Result<Changes> {
     if crate::git::is_repo(&id.dir) {
         let mut args = vec![
@@ -64,10 +71,7 @@ pub fn changes(id: &Identity, since: Option<&str>) -> anyhow::Result<Changes> {
             pending: crate::git::dirty(&id.dir).unwrap_or_default(),
         });
     }
-    let since = since
-        .map(|s| crate::state::parse_day(s).map_err(|e| crate::Fault::SinceNotDay(e.to_string())))
-        .transpose()?
-        .map(|d| d.to_string());
+    let since = since_day(since)?;
     let mut stamped: Vec<(String, String)> = crate::state::tracked(id)
         .filter_map(|e| {
             let at = crate::state::updated(id, &e.rel)
