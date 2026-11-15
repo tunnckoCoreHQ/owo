@@ -296,6 +296,14 @@ _Avoid_: preview, simulation
 The identity that an operation acts on. It comes from the flag, the environment, the config, or the only identity in the root.
 _Avoid_: current identity, active identity, picked identity
 
+**Local config**:
+The `.owo.toml` file that owo finds from the working folder up. It can set the root, the identity and the project.
+_Avoid_: project file, project config
+
+**User config**:
+The config file in the user's config folder. It can set the root and the identity, but not the project.
+_Avoid_: global config
+
 **Working project**:
 The project that context, state, sync and a new note use. It comes from the flag, the environment or the config.
 _Avoid_: current project, active project

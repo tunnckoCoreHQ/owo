@@ -34,6 +34,6 @@ A host with no local transcript, such as a hosted chat over MCP, sends its recen
 owo -i thea sync push --session <session_id> --json < turns.json
 ```
 
-When the reply has `due: true`, run a background agent with the prompt it names. The prompt is the whole task: it asks for owo ingest, and its last step is `owo sync done` for that run. With `owo acp`, set `auto_ingest = true` and the proxy runs that agent itself. For Claude Code, put the `sync start` line in a `Stop` hook.
+When the reply has `due: true`, run an ingest agent with the prompt it names. The prompt is the whole task: it asks for owo ingest, and its last step is `owo sync done` for that run. With `owo acp`, set `auto_ingest = true` and the proxy runs that agent itself. For Claude Code, put the `sync start` line in a `Stop` hook.
 
 More: [lat.md/](lat.md/lat.md).
