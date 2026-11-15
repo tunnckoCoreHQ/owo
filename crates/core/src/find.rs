@@ -85,16 +85,9 @@ pub fn resolve(id: &Identity, name: &str, kind: Option<Kind>) -> Resolution {
                 .filter(|(_, i)| matches_kind(i))
                 .collect();
             scored.sort();
-            let mut out = vec![];
-            for (d, i) in scored {
-                if d <= needle.len().max(4) / 2 && !out.contains(&i) {
-                    out.push(i);
-                }
-                if out.len() == 5 {
-                    break;
-                }
-            }
-            Resolution::Missing(out)
+            let mut seen = std::collections::HashSet::new();
+            scored.retain(|&(d, i)| d <= needle.len().max(4) / 2 && seen.insert(i));
+            Resolution::Missing(scored.into_iter().take(5).map(|(_, i)| i).collect())
         }
         _ => Resolution::Ambiguous(hits),
     }
