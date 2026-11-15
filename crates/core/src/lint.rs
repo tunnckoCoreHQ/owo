@@ -343,35 +343,30 @@ fn links(id: &Identity, out: &mut Vec<Diagnostic>) {
     for e in id.entries.iter().filter(|e| !e.is_generated()) {
         for (line, link) in crate::find::file_links(e) {
             let hits = id.resolve_link(&link.target);
-            match hits.len() {
-                0 => {
-                    out.push(err(&e.rel, format!("[[{}]] does not resolve", link.target)).at(line))
-                }
+            let d = match hits.len() {
+                0 => err(&e.rel, format!("[[{}]] does not resolve", link.target)),
                 1 => {
                     let target = &id.entries[hits[0]];
-                    if let Some(s) = link.section.as_deref().filter(|s| !s.is_empty()) {
-                        if markdown::section(target.body(), s).is_none() {
-                            out.push(
-                                warn(
-                                    &e.rel,
-                                    format!(
-                                        "[[{}#{s}]]: {} has no section {s:?}",
-                                        link.target, target.rel
-                                    ),
-                                )
-                                .at(line),
-                            );
-                        }
+                    let Some(s) = link.section.as_deref().filter(|s| !s.is_empty()) else {
+                        continue;
+                    };
+                    if markdown::section(target.body(), s).is_some() {
+                        continue;
                     }
-                }
-                _ => out.push(
                     warn(
                         &e.rel,
-                        format!("[[{}]] matches {} entries", link.target, hits.len()),
+                        format!(
+                            "[[{}#{s}]]: {} has no section {s:?}",
+                            link.target, target.rel
+                        ),
                     )
-                    .at(line),
+                }
+                _ => warn(
+                    &e.rel,
+                    format!("[[{}]] matches {} entries", link.target, hits.len()),
                 ),
-            }
+            };
+            out.push(d.at(line));
         }
     }
 }
@@ -683,38 +678,31 @@ fn review_due(id: &Identity, out: &mut Vec<Diagnostic>) {
 fn kb_links(id: &Identity, out: &mut Vec<Diagnostic>) {
     for e in id.entries.iter().filter(|e| !e.is_generated()) {
         for (line, link) in crate::find::raw_links(e) {
-            let full = match &link.section {
-                Some(s) => format!("{}#{s}", link.target),
-                None => link.target.clone(),
+            let full = link
+                .section
+                .as_ref()
+                .map_or(link.target.clone(), |s| format!("{}#{s}", link.target));
+            let d = match crate::kb::link(id, &full) {
+                Some(Err(msg)) => err(&e.rel, msg),
+                Some(Ok(k)) if k.root_exists && !k.file_exists => warn(
+                    &e.rel,
+                    format!(
+                        "[[{}]]: {} not found",
+                        link.target,
+                        k.file.unwrap_or_default()
+                    ),
+                ),
+                Some(Ok(k)) if k.root_exists && !k.section_exists => warn(
+                    &e.rel,
+                    format!(
+                        "[[{}]]: no section {:?}",
+                        link.target,
+                        k.section.unwrap_or_default()
+                    ),
+                ),
+                _ => continue,
             };
-            match crate::kb::link(id, &full) {
-                None => {}
-                Some(Err(msg)) => out.push(err(&e.rel, msg).at(line)),
-                Some(Ok(k)) if !k.root_exists => {}
-                Some(Ok(k)) if !k.file_exists => out.push(
-                    warn(
-                        &e.rel,
-                        format!(
-                            "[[{}]]: {} not found",
-                            link.target,
-                            k.file.unwrap_or_default()
-                        ),
-                    )
-                    .at(line),
-                ),
-                Some(Ok(k)) if !k.section_exists => out.push(
-                    warn(
-                        &e.rel,
-                        format!(
-                            "[[{}]]: no section {:?}",
-                            link.target,
-                            k.section.unwrap_or_default()
-                        ),
-                    )
-                    .at(line),
-                ),
-                Some(Ok(_)) => {}
-            }
+            out.push(d.at(line));
         }
     }
 }
