@@ -30,11 +30,7 @@ pub fn changes(id: &Identity, since: Option<&str>) -> anyhow::Result<Changes> {
         ];
         if let Some(s) = since {
             // Git reads a bare day as that day at the current time; start at midnight instead.
-            let midnight = if crate::state::parse_day(s).is_ok() {
-                " 00:00:00"
-            } else {
-                ""
-            };
+            let midnight = crate::state::parse_day(s).map_or("", |_| " 00:00:00");
             args.push(format!("--since={s}{midnight}"));
         }
         args.extend(["--".into(), ".".into()]);
@@ -51,17 +47,11 @@ pub fn changes(id: &Identity, since: Option<&str>) -> anyhow::Result<Changes> {
                 );
                 for l in lines.filter(|l| !l.trim().is_empty()) {
                     let mut parts = l.split('\t');
-                    let status = parts
-                        .next()
-                        .unwrap_or_default()
-                        .chars()
-                        .next()
-                        .unwrap_or('M')
-                        .to_string();
+                    let status = parts.next().and_then(|s| s.chars().next());
                     let path = parts.next_back().unwrap_or_default().to_string();
                     days.entry(date.clone()).or_default().push(Change {
                         path,
-                        status,
+                        status: status.unwrap_or('M').to_string(),
                         commit: commit.clone(),
                         subject: subject.clone(),
                     });
