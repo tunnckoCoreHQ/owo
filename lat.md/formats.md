@@ -7,8 +7,8 @@ The on-disk formats the code reads and writes.
 The root holds identity folders and shared working data. It works well as a Git repository; `owo changes` reads its history.
 
 - `<slug>/`: one identity per folder.
-- `sources/<slug>/`: raw source material (transcripts, notes, sync slices), outside every identity. Entries cite files here.
-- `.owo/sessions/`: sync bookmarks, prompts, locks and pushed turns (`<session>.turns.jsonl`).
+- `sources/<slug>/`: raw source material (transcripts, notes, slices), outside every identity. Entries cite files here.
+- `.owo/sessions/`: bookmarks, ingest prompts, locks and turns files (`<session>.turns.jsonl`).
 - `.templates/`: optional template overrides; see [[formats#Templates]].
 
 ## Identity layout
@@ -93,7 +93,7 @@ The tool manifest, read by the CLI.
 
 Each `state.json` has `files`: a map from scope-relative path to `{updated, hash}`. Stamps are RFC 3339 UTC and move only when the hash changes. Hashes are `b3:<blake3 hex>` of the file text.
 
-`soul/state.json` adds `history` and `review`. Each history record is `{at, file, change, evidence}`, appended by `owo soul note`. The `review` object holds `last_reviewed`, `reviewed_through` and `memory_hash`; when MEMORY.md's hash differs from `memory_hash`, lint warns that MEMORY changed outside a review.
+`soul/state.json` adds `history` and `review`. Each soul change in `history` is `{at, file, change, evidence}`, appended by `owo soul note`. The `review` object holds `last_reviewed`, `reviewed_through` and `memory_hash`; when MEMORY.md's hash differs from `memory_hash`, lint warns that MEMORY changed outside a review.
 
 Every file write is all or nothing: owo writes `<name>.tmp` next to the file and renames it over the file, and a failed write removes the temporary file. A command that writes several files (`stamp`, `index`, `sync start`, `sync push`, `export soulspec`, `new`) writes them as one set: when one fails, it puts back the files it replaced and removes the files and folders it made. A write follows a symlink to its file, and a device or pipe such as `/dev/stdout` is written in place. A symlink whose file is missing is an error and stays. A replaced file keeps its mode. A file in a read-only folder, or a file the caller cannot write, is not replaced, and a file the caller cannot read fails as a read. When `<name>.tmp` already exists, as a file or a symlink, the write fails and leaves it. Error text names the file, not its temporary file. See [[decisions#Writes are all or nothing]]. A command that rewrites a state file, `soul/soul.json` or a sync bookmark exits 1 when the file exists but does not parse or is not an object, so a broken file is never replaced with an empty one. When a soul file changed, `owo stamp` reads `soul/soul.json` before it writes any file, so a broken one fails the stamp with nothing recorded or touched.
 
@@ -111,7 +111,7 @@ When the root comes from a `.owo.toml` in a parent of the working folder, owo pr
 
 Identity resolves from `-i`, `OWO_IDENTITY`, `.owo.toml`, user config, then the only identity in the root. Project resolves from `--project`, `OWO_PROJECT`, `.owo.toml`; see [[decisions#Working project versus project filter]]. A relative `root` value resolves against the config file's folder; `~/` expands to `$HOME`. The run size of `sync` (`sync_every`, a number) resolves from `.owo.toml`, then the user config, then 6; an explicit `every` wins over it.
 
-Two fields set the auto-ingest of `owo acp`, and each resolves from `.owo.toml`, then the user config: `auto_ingest` (true or false, false by default) turns it on, and `ingest_command` (an array of strings, such as `["claude", "-p"]`) is the command of the background agent, which gets the prompt as its last argument. Without `ingest_command` the proxy takes the command from the ACP agent command; see [[decisions#ACP proxy runs the ingest in the background]].
+Two fields set the auto-ingest of `owo acp`, and each resolves from `.owo.toml`, then the user config: `auto_ingest` (true or false, false by default) turns it on, and `ingest_command` (an array of strings, such as `["claude", "-p"]`) is the ingest command, which gets the ingest prompt as its last argument. Without `ingest_command` the proxy takes the ingest command from the ACP agent command; see [[decisions#ACP proxy runs the ingest in the background]].
 
 ## Templates
 
