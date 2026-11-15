@@ -36,7 +36,7 @@ Each fact has one home. Write it there once, and link to it from everywhere else
 - A log bullet that points to an event is one line, with the link.
 - An exact quote lives in the `## Lines` of one event.
 - owo makes the indexes, the timeline and the Now block: `owo index`, `owo context`. Do not write them.
-- MEMORY holds patterns, hints and links. Only review writes it.
+- MEMORY holds patterns, hints and links. Create writes the first one, and after that only review writes it.
 - `owo lint --rule dupes` finds copied passages. Keep the passage in its home, and make the copy a link.
 
 ## Perspective

@@ -5,7 +5,7 @@ Put a source into the identity. A source is a transcript, notes, a document, or 
 ## The source
 
 - A sync run gives you a prompt and a slice in `<root>/sources/<slug>/`. The prompt is the whole task. Do every step of it, the last one too, which is `owo sync done` for that run.
-- A `sync_push` result that is due has the slice in `source_text` and the prompt in `prompt_text`, for an agent that cannot read the files. Cite the `source` path of the result.
+- A `sync_push` result that is due has the slice in `source_text` and the prompt in `prompt_text`, for an agent that cannot read the files. Its `source` field is the path of the slice from the root. Cite it without the leading `sources/`.
 - Copy any other file into `<root>/sources/<slug>/` first, and cite it by its path relative to `sources/`.
 
 ## Read
@@ -18,7 +18,7 @@ Run `owo context` and `owo state` first, so you know the identity and what is op
 - When the home exists, read it with `owo show`, and merge the fact in place.
 - When it does not exist, make it with `owo add <type> <title> [--date <day>] [--project <p>]`, and fill the template.
 - Add the source to the `sources` list in the frontmatter of the entry, with the lines it came from: `<slug>/<file>.md#L<a>-L<b>`.
-- Put a small thing as one bullet in the log of the day it happened, with `owo add log --date <day>`. An event gets one bullet in that log, with a link to it.
+- Put a small thing as one bullet in the log of the day it happened. Run `owo add log --date <day>`, which makes the log or prints `exists <path>` when it is there already. Then add the bullet to that file. An event gets one bullet in that log, with a link to it.
 - When the source disagrees with an entry, record a conflict with `owo add conflict`. Do not overwrite the entry.
 - Do not change `soul/MEMORY.md` or the soul files. That is the [review path](review.md).
 

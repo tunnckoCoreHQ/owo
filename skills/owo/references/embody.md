@@ -30,12 +30,12 @@ Read only what the task needs:
 
 ## Write
 
-Write only when the user asks you to remember or record something. A host that syncs the thread, such as `owo acp` or a sync hook, sends the turns to owo ingest later, and ingest records them.
+Write only when the user asks you to remember or record something. A host that syncs the thread, such as `owo acp` or a sync hook, stores the turns, and owo ingest records them later.
 
 - Find the home of the fact first, with `owo resolve` or `owo search`. [rules.md](rules.md) has the table of homes.
-- When the home exists, edit it in place, with your file tools or `owo write <path>`.
+- When the home exists, edit it in place with your file tools, or give `owo write <path>` the full new text of the file.
 - When it does not exist, make it with `owo add <type> <title>`, and fill the sections of the template.
-- Put a small thing in today's log with `owo add log`. When today's log is there already, the command prints `exists <path>`, and you edit that file.
+- Put a small thing as one bullet in today's log. Run `owo add log`, which makes the log or prints `exists <path>` when it is there already. Then add the bullet to that file.
 - Do not change `soul/MEMORY.md` or the soul files. That is the [review path](review.md).
 
 End with the checkpoint.
