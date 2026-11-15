@@ -106,7 +106,7 @@ struct Job {
 struct State {
     start: Option<String>,
     pending: HashMap<String, Pending>,
-    intro: HashSet<String>,
+    intro_due: HashSet<String>,
     turns: HashMap<String, VecDeque<Turn>>,
     sessions: HashMap<String, Session>,
 }
@@ -142,9 +142,9 @@ impl State {
         }
         s.identity = to;
         if s.identity.is_some() {
-            self.intro.insert(session.into());
+            self.intro_due.insert(session.into());
         } else {
-            self.intro.remove(session);
+            self.intro_due.remove(session);
         }
         true
     }
@@ -482,7 +482,7 @@ fn from_client(msg: &mut Value, state: &Mutex<State>, setup: &Setup) -> Option<R
             let user = user.join("\n");
             let identity = st.session(&session).identity.clone();
             let text = st
-                .intro
+                .intro_due
                 .remove(&session)
                 .then(|| identity.as_deref().and_then(|i| setup.text(i)))
                 .flatten();
@@ -665,7 +665,7 @@ fn from_agent_line(line: &[u8], state: &Mutex<State>, setup: &Setup) -> Option<A
         return Some(out);
     }
     if new && st.session(&session).identity.is_some() {
-        st.intro.insert(session.clone());
+        st.intro_due.insert(session.clone());
     }
     let agent = msg["result"]["configOptions"].as_array().cloned();
     // A client that gets `configOptions` hides the older `modes` field, so an agent with
@@ -705,7 +705,7 @@ fn finish(st: &mut State, session: &str, request: &str, error: bool) -> Option<J
     let open = st.turns.get_mut(session)?;
     let turn = open.remove(open.iter().position(|t| t.request == request)?)?;
     if turn.intro && error {
-        st.intro.insert(session.into());
+        st.intro_due.insert(session.into());
     }
     job(turn.identity.clone(), session, turns(turn))
 }
