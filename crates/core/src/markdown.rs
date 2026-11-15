@@ -8,35 +8,28 @@ pub struct Split<'a> {
 }
 
 pub fn split(text: &str) -> Split<'_> {
-    let Some(rest) = text
-        .strip_prefix("---\n")
+    text.strip_prefix("---\n")
         .or_else(|| text.strip_prefix("---\r\n"))
-    else {
-        return Split {
+        .and_then(|rest| {
+            let mut offset = 0;
+            rest.split_inclusive('\n').find_map(|line| {
+                let start = offset;
+                offset += line.len();
+                (line.trim_end() == "---").then(|| {
+                    let fm = &rest[..start];
+                    Split {
+                        frontmatter: Some(fm),
+                        body: &rest[offset..],
+                        body_line: 3 + fm.lines().count(),
+                    }
+                })
+            })
+        })
+        .unwrap_or(Split {
             frontmatter: None,
             body: text,
             body_line: 1,
-        };
-    };
-    let mut offset = 0;
-    for line in rest.split_inclusive('\n') {
-        if line.trim_end() == "---" {
-            let fm = &rest[..offset];
-            let body = &rest[offset + line.len()..];
-            let body_line = 2 + fm.lines().count() + 1;
-            return Split {
-                frontmatter: Some(fm),
-                body,
-                body_line,
-            };
-        }
-        offset += line.len();
-    }
-    Split {
-        frontmatter: None,
-        body: text,
-        body_line: 1,
-    }
+        })
 }
 
 pub type Fields = serde_json::Map<String, serde_json::Value>;
