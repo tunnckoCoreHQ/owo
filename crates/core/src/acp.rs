@@ -308,9 +308,7 @@ impl Proxy {
         });
         root.warnings.iter().for_each(|w| owo.warn(w));
         let start = root.config.identity.clone();
-        if start.is_some() {
-            root.identity()?.working_project()?;
-        }
+        check_start_identity(&root)?;
         let identities: Vec<_> = root.list().into_iter().map(|r| (r.slug, r.name)).collect();
         let context = options.inject;
         if identities.is_empty() && context {
@@ -404,6 +402,13 @@ impl Proxy {
         let _ = pushing.join();
         copied
     }
+}
+
+fn check_start_identity(root: &crate::Root) -> Result<()> {
+    if root.config.identity.is_some() {
+        root.identity()?.working_project()?;
+    }
+    Ok(())
 }
 
 enum Reply {
