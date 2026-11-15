@@ -4,7 +4,7 @@ use serde::Deserialize;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-pub const PROJECT_FILE: &str = ".owo.toml";
+pub const LOCAL_CONFIG: &str = ".owo.toml";
 
 #[derive(Debug, Default, Deserialize)]
 pub struct FileConfig {
@@ -18,10 +18,11 @@ pub struct FileConfig {
 
 #[derive(Debug, Clone, serde::Serialize)]
 #[serde(rename_all = "kebab-case")]
-pub enum Source {
+pub enum Origin {
     Flag,
     Env,
-    ProjectFile(PathBuf),
+    #[serde(rename = "project-file")]
+    LocalConfig(PathBuf),
     UserConfig(PathBuf),
     Default,
     OnlyIdentity,
@@ -30,16 +31,16 @@ pub enum Source {
 #[derive(Debug, serde::Serialize)]
 pub struct Resolved {
     pub root: PathBuf,
-    pub root_source: Source,
+    pub root_source: Origin,
     pub identity: Option<String>,
-    pub identity_source: Option<Source>,
+    pub identity_source: Option<Origin>,
     pub project: Option<String>,
     pub sync_every: Option<usize>,
     pub auto_ingest: bool,
     pub ingest_command: Option<Vec<String>>,
 }
 
-type Loaded = Option<(Source, FileConfig)>;
+type Loaded = Option<(Origin, FileConfig)>;
 
 pub fn expand_home(value: &str, home: Option<&Path>) -> PathBuf {
     match (value.strip_prefix("~/"), home) {
@@ -48,19 +49,19 @@ pub fn expand_home(value: &str, home: Option<&Path>) -> PathBuf {
     }
 }
 
-fn load(path: Option<PathBuf>, source: fn(PathBuf) -> Source) -> anyhow::Result<Loaded> {
+fn load(path: Option<PathBuf>, origin: fn(PathBuf) -> Origin) -> anyhow::Result<Loaded> {
     let Some(path) = path else {
         return Ok(None);
     };
     let text = fs::read_to_string(&path).with_context(|| format!("reading {}", path.display()))?;
     let config = toml::from_str(&text).with_context(|| format!("parsing {}", path.display()))?;
-    Ok(Some((source(path), config)))
+    Ok(Some((origin(path), config)))
 }
 
-pub fn find_project_file(start: &Path) -> Option<PathBuf> {
+pub fn find_local_config(start: &Path) -> Option<PathBuf> {
     start
         .ancestors()
-        .map(|dir| dir.join(PROJECT_FILE))
+        .map(|dir| dir.join(LOCAL_CONFIG))
         .find(|p| p.is_file())
 }
 
@@ -69,14 +70,14 @@ fn lookup(
     env: Option<&String>,
     files: &[Loaded],
     field: fn(&FileConfig) -> Option<&String>,
-) -> Option<(String, Source)> {
-    flag.map(|v| (v, Source::Flag))
-        .or_else(|| env.map(|v| (v.clone(), Source::Env)))
+) -> Option<(String, Origin)> {
+    flag.map(|v| (v, Origin::Flag))
+        .or_else(|| env.map(|v| (v.clone(), Origin::Env)))
         .or_else(|| {
             files
                 .iter()
                 .flatten()
-                .find_map(|(source, c)| Some((field(c)?.clone(), source.clone())))
+                .find_map(|(origin, c)| Some((field(c)?.clone(), origin.clone())))
         })
 }
 
@@ -89,12 +90,12 @@ pub fn resolve(select: &Select, env: &Env) -> Result<Resolved> {
         dir.clone().or_else(|| home.map(|h| h.join(under_home)))
     };
     let configs = [
-        load(find_project_file(&env.cwd), Source::ProjectFile)?,
+        load(find_local_config(&env.cwd), Origin::LocalConfig)?,
         load(
             xdg(&env.xdg_config_home, ".config")
                 .map(|d| d.join("owo").join("config.toml"))
                 .filter(|p| p.is_file()),
-            Source::UserConfig,
+            Origin::UserConfig,
         )?,
     ];
 
@@ -105,20 +106,20 @@ pub fn resolve(select: &Select, env: &Env) -> Result<Resolved> {
     let (root, root_source) = match lookup(root_flag, env.owo_root.as_ref(), &configs, |c| {
         c.root.as_ref()
     }) {
-        Some((value, source)) => {
-            let base = match &source {
-                Source::ProjectFile(p) | Source::UserConfig(p) => {
+        Some((value, origin)) => {
+            let base = match &origin {
+                Origin::LocalConfig(p) | Origin::UserConfig(p) => {
                     p.parent().unwrap_or(Path::new("."))
                 }
                 _ => env.cwd.as_path(),
             };
-            (base.join(expand_home(&value, home)), source)
+            (base.join(expand_home(&value, home)), origin)
         }
         None => (
             xdg(&env.xdg_data_home, ".local/share")
                 .ok_or(Fault::NoRoot)?
                 .join("owo"),
-            Source::Default,
+            Origin::Default,
         ),
     };
 
@@ -128,13 +129,13 @@ pub fn resolve(select: &Select, env: &Env) -> Result<Resolved> {
         &configs,
         |c| c.identity.as_ref(),
     )
-    .or_else(|| only_identity(&root).map(|slug| (slug, Source::OnlyIdentity)))
+    .or_else(|| only_identity(&root).map(|slug| (slug, Origin::OnlyIdentity)))
     .unzip();
-    let [project_file, _user_config] = &configs;
+    let [local_config, _user_config] = &configs;
     let project = lookup(
         select.project.clone(),
         env.owo_project.as_ref(),
-        std::slice::from_ref(project_file),
+        std::slice::from_ref(local_config),
         |c| c.project.as_ref(),
     )
     .map(|(value, _)| value);

@@ -1,5 +1,6 @@
 use owo_core::{
-    day, join_links, now_block, Diagnostic, Hit, Kind, Level, Outcome, ReviewPacket, SyncReport,
+    day, join_links, now_block, Diagnostic, Hit, Kind, Level, Origin, Outcome, ReviewPacket,
+    SyncReport,
 };
 
 struct Text {
@@ -82,7 +83,11 @@ impl Text {
         match outcome {
             Outcome::Slug(value) => self.line(value),
             Outcome::Config(r) => {
-                self.line(format!("root: {} ({:?})", r.root.display(), r.root_source));
+                let origin = match &r.root_source {
+                    Origin::LocalConfig(file) => format!("ProjectFile({file:?})"),
+                    other => format!("{other:?}"),
+                };
+                self.line(format!("root: {} ({origin})", r.root.display()));
                 self.line(format!(
                     "identity: {}",
                     r.identity.as_deref().unwrap_or("-")

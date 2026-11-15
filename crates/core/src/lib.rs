@@ -30,7 +30,7 @@ mod templates;
 mod write;
 
 pub use changes::{Change, Changes};
-pub use config::{Resolved, Source};
+pub use config::{Origin, Resolved};
 pub use context::{Context, Item as ContextItem};
 pub use create::Created;
 pub use error::{Error, ErrorKind, Fault, Result};
@@ -140,7 +140,7 @@ impl Root {
             e
         })?;
         let mut warnings = vec![];
-        if let Source::ProjectFile(file) = &config.root_source {
+        if let Origin::LocalConfig(file) = &config.root_source {
             if file.parent() != Some(env.cwd.as_path()) {
                 warnings.push(format!(
                     "the root comes from {} in a parent folder",
@@ -230,7 +230,7 @@ impl Root {
 
     pub fn sync_due(&self) -> Result<Vec<PendingSession>> {
         let slug = match self.config.identity_source {
-            Some(Source::Flag) => Some(need_identity(&self.config)?),
+            Some(Origin::Flag) => Some(need_identity(&self.config)?),
             _ => None,
         };
         Ok(sync::due(&self.config.root, slug.as_deref())?)
