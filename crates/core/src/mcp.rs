@@ -211,6 +211,9 @@ const DEFAULT_PORT: u16 = 4224;
 const MAX_BODY: usize = 8 << 20;
 const MAX_HEAD: usize = 16 << 10;
 const DEADLINE: Duration = Duration::from_secs(30);
+const DRAIN_IDLE: Duration = Duration::from_millis(200);
+const DRAIN_LIMIT: Duration = Duration::from_secs(2);
+const DRAIN_CHUNK: usize = 8192;
 
 pub fn bind(addr: &str, port: Option<u16>) -> crate::Result<TcpListener> {
     Ok(match port {
@@ -311,12 +314,17 @@ fn http_request(stream: TcpStream, select: &Select, env: &Env) -> std::io::Resul
     )?;
     stream.flush()?;
     if fits.is_none() {
-        stream.shutdown(std::net::Shutdown::Write)?;
-        stream.set_read_timeout(Some(Duration::from_millis(200)))?;
-        let stop = Instant::now() + Duration::from_secs(2);
-        let mut buf = [0u8; 8192];
-        while Instant::now() < stop && matches!(stream.read(&mut buf), Ok(n) if n > 0) {}
+        drain(stream)?;
     }
+    Ok(())
+}
+
+fn drain(mut stream: TcpStream) -> std::io::Result<()> {
+    stream.shutdown(std::net::Shutdown::Write)?;
+    stream.set_read_timeout(Some(DRAIN_IDLE))?;
+    let stop = Instant::now() + DRAIN_LIMIT;
+    let mut buf = [0u8; DRAIN_CHUNK];
+    while Instant::now() < stop && matches!(stream.read(&mut buf), Ok(n) if n > 0) {}
     Ok(())
 }
 
