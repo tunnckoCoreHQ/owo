@@ -20,7 +20,12 @@ impl Setup {
             return Some(format!("Your identity is the owo identity \"{id}\". Before you answer, load it with the `context` tool of the owo MCP server, with the argument `identity` set to \"{id}\", and keep to it."));
         }
         self.owo
-            .context(id)
+            .root(id)
+            .and_then(|root| {
+                let identity = root.identity()?;
+                let ctx = identity.context(&crate::ContextRequest::default())?;
+                Ok(identity.context_text(&ctx))
+            })
             .map_err(|e| self.owo.warn(&e.to_string()))
             .ok()
     }
@@ -244,23 +249,6 @@ impl Owo {
             ..self.select.clone()
         };
         crate::Root::open(&select, &self.env)
-    }
-
-    fn context(&self, identity: &str) -> crate::Result<String> {
-        let id = self.root(identity)?.identity()?;
-        let ctx = id.context(&crate::ContextRequest::default())?;
-        Ok(id.context_text(&ctx))
-    }
-
-    fn push(
-        &self,
-        identity: &str,
-        session: &str,
-        turns: Vec<crate::Turn>,
-    ) -> crate::Result<crate::SyncRun> {
-        self.root(identity)?
-            .sync()?
-            .push(session, &turns, &crate::SyncOptions::default())
     }
 
     fn write(&self, text: &str) {
@@ -781,7 +769,11 @@ fn emit(out: &Mutex<impl Write>, bytes: &[u8]) -> std::io::Result<()> {
 }
 
 fn push(owo: &Arc<Owo>, identity: &str, session: &str, turns: Vec<crate::Turn>) {
-    match owo.push(identity, session, turns) {
+    let run = owo.root(identity).and_then(|root| {
+        root.sync()?
+            .push(session, &turns, &crate::SyncOptions::default())
+    });
+    match run {
         Ok(run) => {
             if let Some((ingest, prompt)) = owo.ingest.as_ref().zip(run.prompt.or(run.pending)) {
                 ingest.start(&prompt, owo);
