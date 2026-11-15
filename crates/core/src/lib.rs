@@ -55,8 +55,7 @@ pub use stamp::Report as StampReport;
 pub use state::{day, parse_day};
 pub use status::{join_links, now_block, Link, ProjectState, Review, Row, State};
 pub use sync::{
-    parse_turns, Bookmark, Due as SyncDue, Format as SyncFormat, PendingRun, Role,
-    Start as SyncRun, Turn,
+    parse_turns, Bookmark, Format as SyncFormat, PendingRun, PendingSession, Role, SyncReport, Turn,
 };
 
 use config::{need_identity, need_project};
@@ -229,7 +228,7 @@ impl Root {
         Ok(sync::done(&self.config.root, &req.session, req.until)?)
     }
 
-    pub fn sync_due(&self) -> Result<Vec<SyncDue>> {
+    pub fn sync_due(&self) -> Result<Vec<PendingSession>> {
         let slug = match self.config.identity_source {
             Some(Source::Flag) => Some(need_identity(&self.config)?),
             _ => None,
@@ -263,7 +262,7 @@ impl SessionSync<'_> {
         }
     }
 
-    pub fn start(&self, req: &SyncStartRequest) -> Result<SyncRun> {
+    pub fn start(&self, req: &SyncStartRequest) -> Result<SyncReport> {
         req.check()?;
         Ok(sync::start(
             &self.request(&req.session, &req.options),
@@ -272,7 +271,7 @@ impl SessionSync<'_> {
         )?)
     }
 
-    pub fn push(&self, session: &str, turns: &[Turn], opts: &SyncOptions) -> Result<SyncRun> {
+    pub fn push(&self, session: &str, turns: &[Turn], opts: &SyncOptions) -> Result<SyncReport> {
         opts.check()?;
         Ok(sync::push(&self.request(session, opts), turns)?)
     }

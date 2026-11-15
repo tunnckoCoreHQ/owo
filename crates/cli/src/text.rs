@@ -1,5 +1,5 @@
 use owo_core::{
-    day, join_links, now_block, Diagnostic, Hit, Kind, Level, Outcome, Packet, SyncRun,
+    day, join_links, now_block, Diagnostic, Hit, Kind, Level, Outcome, Packet, SyncReport,
 };
 
 struct Text {
@@ -37,7 +37,7 @@ fn diagnostic(d: &Diagnostic) -> String {
     format!("{level}[{}] {place}: {}", d.rule, d.message)
 }
 
-fn sync(s: &SyncRun) -> String {
+fn sync(s: &SyncReport) -> String {
     match &s.source {
         Some(src) => format!(
             "due {} {}-{}\nsource {src}\nprompt {}",

@@ -42,7 +42,7 @@ const OVERLAP_TURNS: usize = 2;
 const STALE_LOCK: Duration = Duration::from_secs(60);
 
 #[derive(Debug, Clone)]
-pub struct Message {
+pub struct TranscriptTurn {
     pub id: Option<String>,
     pub role: String,
     pub text: String,
@@ -73,12 +73,12 @@ fn id_of(v: &Value) -> Option<String> {
     }
 }
 
-pub fn parse(raw: &str, format: Format) -> Result<Vec<Message>> {
+pub fn parse(raw: &str, format: Format) -> Result<Vec<TranscriptTurn>> {
     let mut out = vec![];
     let mut push = |id: Option<String>, role: Option<&str>, text: String| {
         if let Some(role @ ("user" | "assistant")) = role {
             if !text.trim().is_empty() {
-                out.push(Message {
+                out.push(TranscriptTurn {
                     id,
                     role: role.to_string(),
                     text: text.trim().to_string(),
@@ -126,7 +126,7 @@ pub fn parse(raw: &str, format: Format) -> Result<Vec<Message>> {
 }
 
 #[derive(Debug, Default, Serialize)]
-pub struct Start {
+pub struct SyncReport {
     pub due: bool,
     pub identity: String,
     pub session: String,
@@ -236,15 +236,15 @@ fn read_bookmark(root: &Path, session: &str) -> Result<Value> {
     Ok(read_object(&bookmark_path(root, session))?.unwrap_or_else(|| json!({})))
 }
 
-fn store(session: &str) -> String {
+fn turns_file(session: &str) -> String {
     format!(".owo/sessions/{session}.turns.jsonl")
 }
 
-pub fn start(req: &StartRequest, transcript: &Path, format: Format) -> Result<Start> {
+pub fn start(req: &StartRequest, transcript: &Path, format: Format) -> Result<SyncReport> {
     check_session(req.session)?;
     let _lock = Lock::take(req.root, req.session)?;
     if let Some(t) = read_bookmark(req.root, req.session)?["transcript"].as_str() {
-        if t.ends_with(&store(req.session)) {
+        if t.ends_with(&turns_file(req.session)) {
             return Err(Fault::PushedSession(req.session.into()).into());
         }
     }
@@ -300,16 +300,16 @@ pub fn parse_turns(json: &str) -> Result<Vec<Turn>> {
     Ok(turns)
 }
 
-fn drop_partial_line(bytes: &mut Vec<u8>) {
+fn drop_cut_off_line(bytes: &mut Vec<u8>) {
     bytes.truncate(bytes.iter().rposition(|b| *b == b'\n').map_or(0, |i| i + 1));
 }
 
-pub fn push(req: &StartRequest, turns: &[Turn]) -> Result<Start> {
+pub fn push(req: &StartRequest, turns: &[Turn]) -> Result<SyncReport> {
     check_session(req.session)?;
     let _lock = Lock::take(req.root, req.session)?;
-    let file = req.root.join(store(req.session));
+    let file = req.root.join(turns_file(req.session));
     if let Some(t) = read_bookmark(req.root, req.session)?["transcript"].as_str() {
-        if !t.ends_with(&store(req.session)) {
+        if !t.ends_with(&turns_file(req.session)) {
             return Err(Fault::TranscriptSession {
                 session: req.session.into(),
                 transcript: t.into(),
@@ -325,7 +325,7 @@ pub fn push(req: &StartRequest, turns: &[Turn]) -> Result<Start> {
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => vec![],
         Err(e) => return Err(e).with_context(|| format!("reading {}", file.display())),
     };
-    drop_partial_line(&mut bytes);
+    drop_cut_off_line(&mut bytes);
     let mut stored = String::from_utf8(bytes)
         .with_context(|| format!("{} is not UTF-8; fix it by hand", file.display()))?;
     let mut ids: HashSet<String> = parse(&stored, Format::Jsonl)?
@@ -353,7 +353,7 @@ pub fn push(req: &StartRequest, turns: &[Turn]) -> Result<Start> {
     Ok(out)
 }
 
-fn new_user_turns(messages: &[Message], done: usize, pending_end: Option<usize>) -> usize {
+fn new_user_turns(messages: &[TranscriptTurn], done: usize, pending_end: Option<usize>) -> usize {
     let counted_from = pending_end.map_or(done, |end| end.clamp(done, messages.len()));
     messages[counted_from..]
         .iter()
@@ -366,7 +366,7 @@ fn run(
     transcript: &Path,
     raw: &str,
     format: Format,
-) -> Result<(Start, Writes)> {
+) -> Result<(SyncReport, Writes)> {
     let messages = parse(raw, format)?;
     if messages.is_empty() && !raw.trim().is_empty() {
         return Err(Fault::NoMessages {
@@ -387,7 +387,7 @@ fn run(
         .filter(|&i| messages[i].role == "user")
         .nth(OVERLAP_TURNS - 1)
         .unwrap_or(0);
-    let mut out = Start {
+    let mut out = SyncReport {
         due,
         identity: req.slug.into(),
         session: req.session.into(),
@@ -395,7 +395,7 @@ fn run(
         every: req.every,
         from,
         until,
-        ..Start::default()
+        ..SyncReport::default()
     };
     doc["session"] = json!(req.session);
     doc["transcript"] = json!(transcript.display().to_string());
@@ -452,14 +452,14 @@ fn run(
 }
 
 #[derive(Debug, Serialize)]
-pub struct Due {
+pub struct PendingSession {
     pub session: String,
     pub prompt: String,
     pub from: usize,
     pub until: usize,
 }
 
-pub fn due(root: &Path, slug: Option<&str>) -> Result<Vec<Due>> {
+pub fn due(root: &Path, slug: Option<&str>) -> Result<Vec<PendingSession>> {
     let prefix = slug.map(|s| format!("sources/{s}/"));
     let dir = root.join(".owo/sessions");
     let entries = match fs::read_dir(&dir) {
@@ -481,7 +481,7 @@ pub fn due(root: &Path, slug: Option<&str>) -> Result<Vec<Due>> {
         let of_identity =
             |p: &PendingRun| prefix.as_ref().is_none_or(|pre| p.source.starts_with(pre));
         if let Some(p) = bookmark.pending.filter(of_identity) {
-            out.push(Due {
+            out.push(PendingSession {
                 session: bookmark.session,
                 prompt: p.prompt,
                 from: p.from,
