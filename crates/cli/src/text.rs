@@ -1,5 +1,5 @@
 use owo_core::{
-    day, join_links, now_block, Diagnostic, Hit, Kind, Level, Outcome, Packet, SyncReport,
+    day, join_links, now_block, Diagnostic, Hit, Kind, Level, Outcome, ReviewPacket, SyncReport,
 };
 
 struct Text {
@@ -321,7 +321,7 @@ impl Text {
         }
     }
 
-    fn review(&mut self, p: &Packet) {
+    fn review(&mut self, p: &ReviewPacket) {
         self.line(format!("# Review packet: {}\n", p.identity));
         self.line(format!(
             "Last reviewed: {}. Reviewed through: {}.\n",

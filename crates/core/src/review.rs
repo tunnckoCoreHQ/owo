@@ -21,7 +21,7 @@ pub struct Changed {
 }
 
 #[derive(Debug, Serialize)]
-pub struct Day {
+pub struct LogDay {
     pub path: String,
     pub date: String,
     pub title: String,
@@ -29,7 +29,7 @@ pub struct Day {
 }
 
 #[derive(Debug, Serialize)]
-pub struct Packet {
+pub struct ReviewPacket {
     pub identity: String,
     pub last_reviewed: Option<String>,
     pub reviewed_through: Option<String>,
@@ -37,7 +37,7 @@ pub struct Packet {
     pub memory_words: usize,
     pub memory_changed_outside_review: bool,
     pub changed: Vec<Changed>,
-    pub unreviewed_days: Vec<Day>,
+    pub unreviewed_days: Vec<LogDay>,
     pub events: Vec<Link>,
     pub lessons: Vec<Link>,
     pub journal: Vec<String>,
@@ -54,7 +54,7 @@ const STOP_WORDS: &[&str] = &[
     "with", "you", "your",
 ];
 
-fn recurring(days: &[Day]) -> Vec<(String, usize)> {
+fn recurring(days: &[LogDay]) -> Vec<(String, usize)> {
     let content = |w: &str| !STOP_WORDS.contains(&w);
     let mut seen: BTreeMap<String, BTreeSet<&str>> = BTreeMap::new();
     for d in days {
@@ -75,7 +75,7 @@ fn recurring(days: &[Day]) -> Vec<(String, usize)> {
     out
 }
 
-pub fn packet(id: &Identity) -> Packet {
+pub fn packet(id: &Identity) -> ReviewPacket {
     let review = crate::state::review(id);
     let last = review.last_reviewed.clone();
     let after_through = |d: &Option<String>| review.unreviewed(d.as_deref());
@@ -103,11 +103,11 @@ pub fn packet(id: &Identity) -> Packet {
         });
     }
     changed.sort_by(|a, b| b.updated.cmp(&a.updated).then(a.path.cmp(&b.path)));
-    let mut days: Vec<Day> = id
+    let mut days: Vec<LogDay> = id
         .entries
         .iter()
         .filter(|e| e.kind == Kind::Log && !e.is_blank() && after_through(&e.field_str("date")))
-        .map(|e| Day {
+        .map(|e| LogDay {
             path: e.rel.clone(),
             date: e.field_str("date").unwrap_or_default(),
             title: e.title.clone().unwrap_or_default(),
@@ -125,7 +125,7 @@ pub fn packet(id: &Identity) -> Packet {
     let of_kind = |k: Kind| id.entries.iter().filter(move |e| e.kind == k);
     let changed_paths: BTreeSet<&str> = changed.iter().map(|c| c.path.as_str()).collect();
     let memory = id.entry("soul/MEMORY.md");
-    Packet {
+    ReviewPacket {
         identity: id.slug.clone(),
         memory: memory.map(|e| e.text.clone()).unwrap_or_default(),
         memory_words: memory
@@ -225,12 +225,17 @@ impl SoulChange {
     }
 }
 
-pub struct Note {
+pub struct SoulChangeReport {
     pub record: SoulChange,
     pub warning: Option<String>,
 }
 
-pub fn soul_note(id: &Identity, file: &str, change: &str, evidence: &[String]) -> Result<Note> {
+pub fn soul_note(
+    id: &Identity,
+    file: &str,
+    change: &str,
+    evidence: &[String],
+) -> Result<SoulChangeReport> {
     let file = file.trim_start_matches("soul/");
     if !crate::identity::SOUL_FILES.contains(&file) {
         bail!(
@@ -279,7 +284,7 @@ pub fn soul_note(id: &Identity, file: &str, change: &str, evidence: &[String]) -
         None => doc["history"] = json!([value]),
     }
     crate::write::json(&id.dir.join("soul/state.json"), &doc)?;
-    Ok(Note { record, warning })
+    Ok(SoulChangeReport { record, warning })
 }
 
 pub fn soul_history(id: &Identity, file: Option<&str>) -> Vec<SoulChange> {
@@ -297,9 +302,9 @@ mod tests {
 
     #[test]
     fn recurring_phrases_skip_function_words() {
-        let days: Vec<Day> = ["01", "02", "03"]
+        let days: Vec<LogDay> = ["01", "02", "03"]
             .iter()
-            .map(|d| Day {
+            .map(|d| LogDay {
                 path: String::new(),
                 date: format!("2026-01-{d}"),
                 title: String::new(),

@@ -49,7 +49,7 @@ pub use request::{
     SoulNoteRequest, SoulRequest, SoulspecRequest, StampRequest, StateRequest, SyncDoneRequest,
     SyncOptions, SyncPushRequest, SyncStartRequest, TemplateRequest, Type, WriteRequest, MAX_DAYS,
 };
-pub use review::{Changed, Day, Note as SoulNote, Packet, ReviewRecord, SoulChange};
+pub use review::{Changed, LogDay, ReviewPacket, ReviewRecord, SoulChange, SoulChangeReport};
 pub use search::{Hit as SearchHit, Scope};
 pub use stamp::Report as StampReport;
 pub use state::{day, parse_day};
@@ -397,7 +397,7 @@ impl Identity {
         Ok(search::search(self, req))
     }
 
-    pub fn review(&self) -> Packet {
+    pub fn review(&self) -> ReviewPacket {
         review::packet(self)
     }
 
@@ -406,7 +406,7 @@ impl Identity {
         Ok(review::done(self, req.through)?)
     }
 
-    pub fn soul_note(&self, req: &SoulNoteRequest) -> Result<SoulNote> {
+    pub fn soul_note(&self, req: &SoulNoteRequest) -> Result<SoulChangeReport> {
         req.check()?;
         Ok(review::soul_note(
             self,

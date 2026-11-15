@@ -414,13 +414,13 @@ pub enum Outcome {
     },
     SyncDue(Vec<PendingSession>),
     Migrate(MigrateReport),
-    Review(Packet),
+    Review(ReviewPacket),
     ReviewDone(ReviewRecord),
     Soul {
         files: Vec<(String, String)>,
         text: String,
     },
-    SoulNote(SoulNote),
+    SoulNote(SoulChangeReport),
     SoulHistory(Vec<SoulChange>),
     Changes(Changes),
     Card {
