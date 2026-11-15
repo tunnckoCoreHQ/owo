@@ -167,7 +167,7 @@ pub fn write_as(identity: &Identity, shown: &std::path::Path) -> anyhow::Result<
     let stale = differing(identity);
     stale
         .iter()
-        .fold(crate::write::Writes::new(), |w, (rel, content)| {
+        .fold(crate::write::Writes::default(), |w, (rel, content)| {
             w.file(identity.dir.join(rel), shown.join(rel), content.as_str())
         })
         .commit()?;

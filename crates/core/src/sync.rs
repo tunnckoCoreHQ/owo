@@ -336,7 +336,7 @@ pub fn push(req: &StartRequest, turns: &[Turn]) -> Result<Start> {
         }
     }
     let (mut out, writes) = run(req, &file, &stored, Format::Jsonl)?;
-    Writes::new()
+    Writes::default()
         .file(&file, &file, stored)
         .and(writes)
         .commit()?;
@@ -401,7 +401,7 @@ fn run(
     if !due {
         out.pending = doc["pending"]["prompt"].as_str().map(str::to_string);
     }
-    let mut writes = Writes::new();
+    let mut writes = Writes::default();
     if due {
         let date = crate::state::now()[..10].to_string();
         let source = format!(
@@ -443,7 +443,7 @@ fn run(
         out.prompt = Some(prompt);
     }
     let path = bookmark_path(req.root, req.session);
-    Ok((out, writes.and(Writes::new().json(&path, &path, &doc)?)))
+    Ok((out, writes.and(Writes::default().json(&path, &path, &doc)?)))
 }
 
 #[derive(Debug, Serialize)]
@@ -516,6 +516,6 @@ pub fn done(root: &Path, session: &str, until: usize) -> Result<Bookmark> {
     let bookmark = Bookmark::deserialize(&doc)
         .with_context(|| format!("the bookmark of session {session:?} does not parse"))?;
     let path = bookmark_path(root, session);
-    Writes::new().json(&path, &path, &doc)?.commit()?;
+    Writes::default().json(&path, &path, &doc)?.commit()?;
     Ok(bookmark)
 }

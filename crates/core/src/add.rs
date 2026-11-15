@@ -131,7 +131,7 @@ pub fn add(id: &Identity, req: &Request, project: Option<&str>) -> Result<(Strin
         text = fill_line(&text, "kb: \"\"", &to, "kb")?;
     }
     let notes = path.with_file_name("notes");
-    let writes = Writes::new().file(&path, &path, text);
+    let writes = Writes::default().file(&path, &path, text);
     match req.kind {
         Kind::Project => writes.dir(&notes, &notes),
         _ => writes,

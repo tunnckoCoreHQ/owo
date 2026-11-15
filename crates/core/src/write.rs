@@ -89,22 +89,18 @@ struct Target {
 pub struct Writes(Vec<Target>);
 
 impl Writes {
-    pub fn new() -> Self {
-        Self::default()
+    fn push(mut self, path: PathBuf, shown: PathBuf, bytes: Option<Vec<u8>>) -> Self {
+        self.0.push(Target { path, shown, bytes });
+        self
     }
 
     pub fn file(
-        mut self,
+        self,
         path: impl Into<PathBuf>,
         shown: impl Into<PathBuf>,
         bytes: impl Into<Vec<u8>>,
     ) -> Self {
-        self.0.push(Target {
-            path: path.into(),
-            shown: shown.into(),
-            bytes: Some(bytes.into()),
-        });
-        self
+        self.push(path.into(), shown.into(), Some(bytes.into()))
     }
 
     pub fn json(
@@ -117,13 +113,8 @@ impl Writes {
         Ok(self.file(path, shown, text))
     }
 
-    pub fn dir(mut self, path: impl Into<PathBuf>, shown: impl Into<PathBuf>) -> Self {
-        self.0.push(Target {
-            path: path.into(),
-            shown: shown.into(),
-            bytes: None,
-        });
-        self
+    pub fn dir(self, path: impl Into<PathBuf>, shown: impl Into<PathBuf>) -> Self {
+        self.push(path.into(), shown.into(), None)
     }
 
     pub fn and(mut self, other: Writes) -> Self {
@@ -281,11 +272,11 @@ fn restore(path: &Path, old: &Old) -> io::Result<()> {
 }
 
 pub fn file(path: &Path, bytes: impl Into<Vec<u8>>) -> Result<()> {
-    Writes::new().file(path, path, bytes).commit()
+    Writes::default().file(path, path, bytes).commit()
 }
 
 pub fn json(path: &Path, doc: &Value) -> Result<()> {
-    Writes::new().json(path, path, doc)?.commit()
+    Writes::default().json(path, path, doc)?.commit()
 }
 
 #[cfg(all(test, unix))]

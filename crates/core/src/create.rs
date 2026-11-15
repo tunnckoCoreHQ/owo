@@ -57,7 +57,7 @@ fn fill(root: &Path, shown: &Path, name: &str, slug: &str) -> Result<Vec<String>
     let folders = life_categories()
         .map(|(category, _)| format!("life/{category}"))
         .chain(["work/projects".to_string()]);
-    let writes = folders.fold(Writes::new(), |w, rel| {
+    let writes = folders.fold(Writes::default(), |w, rel| {
         w.dir(dir.join(&rel), shown.join(&rel))
     });
     templates::IDENTITY_FILES
@@ -77,7 +77,7 @@ fn fill(root: &Path, shown: &Path, name: &str, slug: &str) -> Result<Vec<String>
     let states = state::initial(&identity, &state::now());
     states
         .iter()
-        .try_fold(Writes::new(), |w, (rel, value)| {
+        .try_fold(Writes::default(), |w, (rel, value)| {
             w.json(dir.join(rel), shown.join(rel), value)
         })?
         .commit()?;

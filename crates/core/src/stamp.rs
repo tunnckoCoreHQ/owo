@@ -123,9 +123,11 @@ pub fn run(id: &Identity, check: bool) -> Result<Report> {
         return Ok(report);
     }
     let soul = if soul_changed { bumped_soul(id)? } else { None };
-    let writes = touched.into_iter().fold(Writes::new(), |w, (rel, text)| {
-        w.file(id.dir.join(&rel), rel, text)
-    });
+    let writes = touched
+        .into_iter()
+        .fold(Writes::default(), |w, (rel, text)| {
+            w.file(id.dir.join(&rel), rel, text)
+        });
     let writes = docs.iter().try_fold(writes, |w, (scope, doc)| {
         let path = id.dir.join(format!("{scope}/state.json"));
         w.json(&path, &path, doc)

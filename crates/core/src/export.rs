@@ -248,7 +248,7 @@ pub fn write_card(
     png: Option<&Path>,
 ) -> Result<()> {
     let Some(png) = png else {
-        return Writes::new().json(out, shown, main)?.commit();
+        return Writes::default().json(out, shown, main)?.commit();
     };
     let avatar = fs::read(png)?;
     let image = if main["spec"] == "chara_card_v3" {
@@ -257,7 +257,7 @@ pub fn write_card(
     } else {
         embed_png(&avatar, &[("chara", main)])?
     };
-    Writes::new().file(out, shown, image).commit()
+    Writes::default().file(out, shown, image).commit()
 }
 
 pub struct Report {
@@ -307,7 +307,7 @@ pub fn soulspec(id: &Identity, dir: &Path, shown: &Path) -> Result<Report> {
     parts
         .iter()
         .fold(
-            Writes::new()
+            Writes::default()
                 .dir(dir.join("examples"), shown.join("examples"))
                 .json(dir.join("soul.json"), shown.join("soul.json"), &manifest)?,
             |w, (rel, body)| w.file(dir.join(rel), shown.join(rel), body.as_str()),
