@@ -280,12 +280,8 @@ impl SessionSync<'_> {
 }
 
 impl Identity {
-    fn check_project<'a>(&self, project: Option<&'a str>) -> Result<Option<&'a str>> {
-        Ok(need_project(&self.dir, project)?)
-    }
-
     pub fn working_project(&self) -> Result<Option<&str>> {
-        self.check_project(self.project.as_deref())
+        Ok(need_project(&self.dir, self.project.as_deref())?)
     }
 
     pub fn lint(&self, req: &LintRequest) -> Result<Vec<Diagnostic>> {
@@ -457,7 +453,7 @@ impl Identity {
 
     pub fn export_card(&self, req: &CardRequest) -> Result<Card> {
         req.check()?;
-        let project = self.check_project(req.project.as_deref())?;
+        let project = need_project(&self.dir, req.project.as_deref())?;
         let scenario = req.scenario.as_deref();
         let card = export::card(self, req.spec, project, scenario)?;
         let warnings = export::warnings(&card);
