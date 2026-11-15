@@ -70,17 +70,21 @@ fn guarded(f: impl FnOnce() -> Value) -> Value {
     })
 }
 
-fn run_tool(op: &Operation, params: &Value, select: &Select, env: &Env) -> Value {
-    let empty = Map::new();
-    let map = params["arguments"].as_object().unwrap_or(&empty);
-    let nul = map
-        .iter()
-        .filter(|(k, _)| *k != "turns")
+const JSON_DOCUMENT_ARGUMENT: &str = "turns";
+
+fn has_nul_argument(args: &Map<String, Value>) -> bool {
+    args.iter()
+        .filter(|(k, _)| *k != JSON_DOCUMENT_ARGUMENT)
         .any(|(_, v)| match v {
             Value::Array(items) => items.iter().filter_map(scalar).any(|s| s.contains('\0')),
             v => scalar(v).is_some_and(|s| s.contains('\0')),
-        });
-    if nul {
+        })
+}
+
+fn run_tool(op: &Operation, params: &Value, select: &Select, env: &Env) -> Value {
+    let empty = Map::new();
+    let map = params["arguments"].as_object().unwrap_or(&empty);
+    if has_nul_argument(map) {
         return result("an argument holds a NUL character".into(), true);
     }
     let pick = |key: &str, default: &Option<String>| {
