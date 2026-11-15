@@ -322,13 +322,13 @@ fn parse_entry(rel: String, text: String, lossy: bool) -> Entry {
 
 /// A JSON file, or None when it is missing or does not parse.
 pub fn read_json(path: &Path) -> Option<Json> {
-    serde_json::from_str(&fs::read_to_string(path).ok()?).ok()
+    serde_json::from_str(&crate::write::read_to_string(path).ok()?).ok()
 }
 
 /// A JSON object file for a command that rewrites it: None when it is missing, an error when
 /// it does not parse or is not an object, so the rewrite does not drop its contents.
 pub fn read_object(path: &Path) -> Result<Option<Json>> {
-    let text = match fs::read_to_string(path) {
+    let text = match crate::write::read_to_string(path) {
         Ok(text) => text,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
         Err(e) => return Err(e).with_context(|| format!("reading {}", path.display())),
@@ -342,33 +342,44 @@ pub fn read_object(path: &Path) -> Result<Option<Json>> {
 }
 
 impl Identity {
+    /// Loads `<root>/<slug>`. In a dry run the files it kept replace or join the files on disk,
+    /// and the folder may be there only in memory.
     pub fn load(root: &Path, slug: &str) -> Result<Self> {
         let dir = root.join(slug);
-        let (manifest, manifest_error) = match fs::read_to_string(dir.join("identity.json")) {
-            Ok(text) => match serde_json::from_str::<Json>(&text) {
-                Ok(v) => (v, None),
-                Err(e) => (Json::Null, Some(e.to_string())),
-            },
-            Err(_) => (Json::Null, None),
-        };
-        let mut entries = vec![];
-        for item in WalkDir::new(&dir).sort_by_file_name() {
-            let item = item
-                .map_err(std::io::Error::from)
-                .with_context(|| format!("walking {}", dir.display()))?;
-            if !item.file_type().is_file()
-                || item.path().extension().and_then(|e| e.to_str()) != Some("md")
-            {
-                continue;
+        let (manifest, manifest_error) =
+            match crate::write::read_to_string(&dir.join("identity.json")) {
+                Ok(text) => match serde_json::from_str::<Json>(&text) {
+                    Ok(v) => (v, None),
+                    Err(e) => (Json::Null, Some(e.to_string())),
+                },
+                Err(_) => (Json::Null, None),
+            };
+        let md = |p: &Path| p.extension().and_then(|e| e.to_str()) == Some("md");
+        // By path relative to the folder, which is the order of a walk that sorts by file name.
+        let mut files = BTreeMap::new();
+        // A dry run may hold the folder only in memory.
+        if !crate::write::dry() || dir.exists() {
+            for item in WalkDir::new(&dir).sort_by_file_name() {
+                let item = item
+                    .map_err(std::io::Error::from)
+                    .with_context(|| format!("walking {}", dir.display()))?;
+                if !item.file_type().is_file() || !md(item.path()) {
+                    continue;
+                }
+                let bytes = fs::read(item.path())
+                    .with_context(|| format!("reading {}", item.path().display()))?;
+                let rel = item.path().strip_prefix(&dir).unwrap_or(item.path());
+                files.insert(rel.to_path_buf(), bytes);
             }
-            let rel = item
-                .path()
-                .strip_prefix(&dir)
-                .unwrap_or(item.path())
-                .to_string_lossy()
-                .replace('\\', "/");
-            let bytes = fs::read(item.path())
-                .with_context(|| format!("reading {}", item.path().display()))?;
+        }
+        files.extend(
+            crate::write::kept_under(&dir)
+                .into_iter()
+                .filter(|(rel, _)| md(rel)),
+        );
+        let mut entries = vec![];
+        for (rel, bytes) in files {
+            let rel = rel.to_string_lossy().replace('\\', "/");
             let (text, lossy) = match String::from_utf8(bytes) {
                 Ok(text) => (text, false),
                 Err(e) => (String::from_utf8_lossy(e.as_bytes()).into_owned(), true),
@@ -528,5 +539,27 @@ mod tests {
         assert_eq!(classify("life/stuff/_index.md"), Kind::Unknown);
         assert_eq!(classify("soul/_index.md"), Kind::Unknown);
         assert_eq!(classify("work/_index.md"), Kind::Generated);
+    }
+
+    #[test]
+    fn a_dry_run_loads_the_files_it_kept() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let soul = tmp.path().join("thea/soul/SOUL.md");
+        let ((), paths) = crate::write::dry_run(|| {
+            crate::write::file(&soul, "# Soul\n").unwrap();
+            let id = Identity::load(tmp.path(), "thea").unwrap();
+            let text = id.entry("soul/SOUL.md").map(|e| e.text.as_str());
+            assert_eq!(text, Some("# Soul\n"));
+        });
+        let thea = tmp.path().join("thea");
+        assert_eq!(
+            paths,
+            [
+                format!("{}/", thea.display()),
+                format!("{}/", thea.join("soul").display()),
+                soul.display().to_string()
+            ]
+        );
+        assert!(!thea.exists());
     }
 }

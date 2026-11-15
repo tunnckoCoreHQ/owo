@@ -17,22 +17,33 @@ pub struct Created {
 
 /// Creates `<root>/<slug>`; error text names the folder under `shown`, the root as the request
 /// gave it. A path already there, even a broken symlink, is an error and is left alone. On a
-/// later error, the folder this call created is removed.
+/// later error, the folder this call created is removed. A dry run makes no folder.
 pub fn new_identity(root: &Path, shown: &Path, name: &str, slug: &str) -> Result<Created> {
     if !crate::slug::is_slug(slug) {
         bail!("invalid slug {slug:?}: use lowercase letters, digits and single hyphens");
     }
     let dir = root.join(slug);
     let shown_dir = shown.join(slug);
-    fs::create_dir_all(root).with_context(|| format!("creating {}", shown.display()))?;
-    match fs::create_dir(&dir) {
-        Err(e) if e.kind() == ErrorKind::AlreadyExists => {
-            bail!("already exists: {}", shown_dir.display())
+    let dry = crate::write::dry();
+    let taken = if dry {
+        fs::symlink_metadata(&dir).is_ok()
+    } else {
+        fs::create_dir_all(root).with_context(|| format!("creating {}", shown.display()))?;
+        match fs::create_dir(&dir) {
+            Err(e) if e.kind() == ErrorKind::AlreadyExists => true,
+            other => {
+                other.with_context(|| format!("creating {}", shown_dir.display()))?;
+                false
+            }
         }
-        other => other.with_context(|| format!("creating {}", shown_dir.display()))?,
+    };
+    if taken {
+        bail!("already exists: {}", shown_dir.display())
     }
     let files = fill(root, &shown_dir, name, slug).inspect_err(|_| {
-        let _ = fs::remove_dir_all(&dir);
+        if !dry {
+            let _ = fs::remove_dir_all(&dir);
+        }
     })?;
     Ok(Created {
         slug: slug.to_string(),

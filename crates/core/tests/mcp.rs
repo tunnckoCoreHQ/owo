@@ -131,3 +131,18 @@ fn mcp_serves_a_reader_and_a_writer() {
     assert_eq!(lines[0], json!({ "jsonrpc": "2.0", "id": 1, "result": {} }));
     assert_eq!(lines[1]["result"]["isError"], false);
 }
+
+#[test]
+fn mcp_dry_run_names_the_file_and_writes_none() {
+    let tmp = root(&["nicole"]);
+    let (sel, env) = (select(tmp.path()), env(tmp.path()));
+    let args =
+        json!({ "identity": "nicole", "kind": "character", "title": "Mara Voss", "dryRun": true });
+    let r = reply(call("add", args), &sel, &env);
+    assert_eq!(r["result"]["isError"], false, "{r}");
+    let text = r["result"]["content"][0]["text"].as_str().unwrap();
+    let envelope: Value = serde_json::from_str(text).unwrap();
+    let file = tmp.path().join("nicole/life/characters/mara-voss.md");
+    assert_eq!(envelope["would_write"], json!([file.display().to_string()]));
+    assert!(!file.exists());
+}
