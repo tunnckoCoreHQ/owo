@@ -11,18 +11,17 @@ pub fn split(text: &str) -> Split<'_> {
     text.strip_prefix("---\n")
         .or_else(|| text.strip_prefix("---\r\n"))
         .and_then(|rest| {
-            let mut offset = 0;
-            rest.split_inclusive('\n').find_map(|line| {
-                let start = offset;
-                offset += line.len();
-                (line.trim_end() == "---").then(|| {
-                    let fm = &rest[..start];
-                    Split {
-                        frontmatter: Some(fm),
-                        body: &rest[offset..],
-                        body_line: 3 + fm.lines().count(),
-                    }
-                })
+            let fm_len: usize = rest
+                .split_inclusive('\n')
+                .take_while(|line| line.trim_end() != "---")
+                .map(str::len)
+                .sum();
+            let (fm, closing) = rest.split_at(fm_len);
+            let delimiter = closing.split_inclusive('\n').next()?;
+            Some(Split {
+                frontmatter: Some(fm),
+                body: &closing[delimiter.len()..],
+                body_line: 3 + fm.lines().count(),
             })
         })
         .unwrap_or(Split {
