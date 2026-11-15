@@ -231,39 +231,27 @@ pub trait Number: Sized {
     fn value(&self) -> Value;
 }
 
-impl Number for usize {
-    fn parse(text: &str) -> Option<Self> {
-        text.parse().ok()
-    }
-    fn value(&self) -> Value {
-        (*self).into()
-    }
+macro_rules! number {
+    ($($t:ty),*) => {$(
+        impl Number for $t {
+            fn parse(text: &str) -> Option<Self> {
+                text.parse().ok()
+            }
+            fn value(&self) -> Value {
+                (*self).into()
+            }
+        }
+    )*};
 }
 
-impl Number for i64 {
-    fn parse(text: &str) -> Option<Self> {
-        text.parse().ok()
-    }
-    fn value(&self) -> Value {
-        (*self).into()
-    }
-}
+number!(usize, i64);
 
-impl Number for Option<usize> {
+impl<N: Number> Number for Option<N> {
     fn parse(text: &str) -> Option<Self> {
-        text.parse().ok().map(Some)
+        N::parse(text).map(Some)
     }
     fn value(&self) -> Value {
-        self.map_or(Value::Null, Value::from)
-    }
-}
-
-impl Number for Option<i64> {
-    fn parse(text: &str) -> Option<Self> {
-        text.parse().ok().map(Some)
-    }
-    fn value(&self) -> Value {
-        self.map_or(Value::Null, Value::from)
+        self.as_ref().map_or(Value::Null, N::value)
     }
 }
 
