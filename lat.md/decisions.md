@@ -64,7 +64,9 @@ Lint's link rules and orphan check call `find::raw_links` and `find::orphans`, s
 
 ## Contributor skills live in .agents
 
-`.agents/skills/` holds the skills that agents use to work on owo, not skills that owo ships. `.agents/` and `AGENTS.md` are the sources; `.claude` and `CLAUDE.md` are symlinks to them, so Claude Code and the other agents read the same files. The skills come from the tckdev set and from the pstack plugin of `cursor/plugins`, and each pstack skill keeps its MIT `LICENSE`.
+The `.agents/skills/` folder holds the skills that agents use to work on owo, not skills that owo ships. `.agents/` and `AGENTS.md` are the sources; `.claude` and `CLAUDE.md` are symlinks to them, so Claude Code and the other agents read the same files. Claude Code's per-user `.claude/settings.local.json` lands in `.agents/` through the link, so `.gitignore` lists it there.
+
+The skills are unchanged copies. Fourteen come from the maintainer's `tckdev` skill set. Seven come from the `pstack` plugin of [cursor/plugins](https://github.com/cursor/plugins) at commit `bf0c7cd`: six of its skills, and its `agents/comment-sicko.md` agent as the `comment-sicko` skill. Each pstack folder has a copy of the plugin's MIT `LICENSE`.
 
 ## Skills live in the repo
 
