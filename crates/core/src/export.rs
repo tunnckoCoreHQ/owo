@@ -7,7 +7,7 @@ use std::fs;
 use std::path::Path;
 
 named! {
-    pub enum Spec {
+    pub enum CardSpec {
         V2 = "v2",
         V3 = "v3",
     }
@@ -113,7 +113,7 @@ fn lore(e: &Entry, n: usize) -> Value {
 
 pub fn card(
     id: &Identity,
-    spec: Spec,
+    spec: CardSpec,
     project: Option<&str>,
     scenario_from: Option<&str>,
 ) -> Result<Value> {
@@ -206,7 +206,7 @@ pub fn card(
             "recursive_scanning": false, "extensions": {}, "entries": entries
         }
     });
-    if spec == Spec::V2 {
+    if spec == CardSpec::V2 {
         return Ok(json!({ "spec": "chara_card_v2", "spec_version": "2.0", "data": data }));
     }
     let now = chrono::Utc::now().timestamp();
@@ -252,7 +252,7 @@ pub fn write_card(
     };
     let avatar = fs::read(png)?;
     let image = if main["spec"] == "chara_card_v3" {
-        let v2 = card(id, Spec::V2, project, scenario)?;
+        let v2 = card(id, CardSpec::V2, project, scenario)?;
         embed_png(&avatar, &[("chara", &v2), ("ccv3", main)])?
     } else {
         embed_png(&avatar, &[("chara", main)])?
@@ -260,12 +260,12 @@ pub fn write_card(
     Writes::default().file(out, shown, image).commit()
 }
 
-pub struct Report {
+pub struct SoulspecReport {
     pub files: Vec<String>,
     pub warnings: Vec<String>,
 }
 
-pub fn soulspec(id: &Identity, dir: &Path, shown: &Path) -> Result<Report> {
+pub fn soulspec(id: &Identity, dir: &Path, shown: &Path) -> Result<SoulspecReport> {
     let soul = id.dir.join("soul");
     let mut manifest = id
         .read_object("soul/soul.json")?
@@ -316,7 +316,7 @@ pub fn soulspec(id: &Identity, dir: &Path, shown: &Path) -> Result<Report> {
     let files = std::iter::once("soul.json".to_string())
         .chain(parts.into_iter().map(|(rel, _)| rel))
         .collect();
-    Ok(Report { files, warnings })
+    Ok(SoulspecReport { files, warnings })
 }
 
 pub fn skill(id: &Identity, dir: &Path) -> Result<()> {

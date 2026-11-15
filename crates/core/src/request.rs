@@ -1,4 +1,4 @@
-use crate::{Error, ErrorKind, Fault, Kind, Result, Rule, Scope, Spec, SyncFormat};
+use crate::{CardSpec, Error, ErrorKind, Fault, Kind, Result, Rule, Scope, SyncFormat};
 use chrono::NaiveDate;
 use serde_json::{Map, Value};
 use std::collections::BTreeMap;
@@ -991,7 +991,7 @@ impl Request for ChangesRequest {
 
 #[derive(Debug, Clone)]
 pub struct CardRequest {
-    pub spec: Spec,
+    pub spec: CardSpec,
     pub project: Option<String>,
     pub scenario: Option<String>,
     pub out: Option<PathBuf>,
@@ -1001,7 +1001,7 @@ pub struct CardRequest {
 impl Default for CardRequest {
     fn default() -> Self {
         Self {
-            spec: Spec::V3,
+            spec: CardSpec::V3,
             project: None,
             scenario: None,
             out: None,

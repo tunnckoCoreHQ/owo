@@ -34,7 +34,7 @@ pub use config::{Origin, Resolved};
 pub use context::{Context, Item as ContextItem};
 pub use create::Created;
 pub use error::{Error, ErrorKind, Fault, Result};
-pub use export::{Report as Soulspec, Spec};
+pub use export::{CardSpec, SoulspecReport};
 pub use find::{Hit, LinkRef};
 pub use identity::{Identity, Kind};
 pub use kb::Kb;
@@ -477,7 +477,7 @@ impl Identity {
         Ok(out.join("SKILL.md").display().to_string())
     }
 
-    pub fn export_soulspec(&self, req: &SoulspecRequest) -> Result<Soulspec> {
+    pub fn export_soulspec(&self, req: &SoulspecRequest) -> Result<SoulspecReport> {
         req.check()?;
         let out = utf8(&req.out);
         Ok(export::soulspec(self, &self.cwd.join(&out), &out)?)

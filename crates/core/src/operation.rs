@@ -430,7 +430,7 @@ pub enum Outcome {
     Skill(String),
     Soulspec {
         dir: PathBuf,
-        report: Soulspec,
+        report: SoulspecReport,
     },
     Templates(Vec<Template>),
     Template {
