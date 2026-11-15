@@ -703,33 +703,26 @@ fn finish(st: &mut State, session: &str, request: &str, error: bool) -> Option<J
 }
 
 fn turns(turn: Turn) -> Vec<crate::Turn> {
-    let mut out = vec![];
-    if !turn.replay {
-        let id = turn
+    let replay = turn.replay;
+    let user = (!replay).then(|| crate::Turn {
+        id: turn
             .agent
             .iter()
             .find_map(|(id, _)| id.as_ref())
             .map(|id| format!("{id}.user"))
-            .unwrap_or_else(clock_id);
-        out.push(crate::Turn {
-            id,
-            role: crate::Role::User,
-            text: turn.user,
-        });
-    }
-    for (id, text) in turn.agent {
-        let id = match id {
-            Some(id) => id,
-            None if !turn.replay => clock_id(),
-            None => continue,
-        };
-        out.push(crate::Turn {
+            .unwrap_or_else(clock_id),
+        role: crate::Role::User,
+        text: turn.user,
+    });
+    let agent = turn.agent.into_iter().filter_map(|(id, text)| {
+        let id = id.or_else(|| (!replay).then(clock_id))?;
+        Some(crate::Turn {
             id,
             role: crate::Role::Assistant,
             text,
-        });
-    }
-    out
+        })
+    });
+    user.into_iter().chain(agent).collect()
 }
 
 fn clock_id() -> String {
