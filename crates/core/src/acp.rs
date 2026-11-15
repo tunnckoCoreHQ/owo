@@ -285,8 +285,14 @@ impl Proxy {
             dry_run: options.dry_run,
             ingest: Ingest::of(&root.config, &options.agent)?.filter(|_| !options.dry_run),
         });
-        let (start, rows) = identity(&owo, &root)?;
-        let identities: Vec<_> = rows.into_iter().map(|r| (r.slug, r.name)).collect();
+        for w in &root.warnings {
+            owo.warn(w);
+        }
+        let start = root.config.identity.clone();
+        if start.is_some() {
+            root.identity()?.working_project()?;
+        }
+        let identities: Vec<_> = root.list().into_iter().map(|r| (r.slug, r.name)).collect();
         let context = options.inject;
         if identities.is_empty() && context {
             return Err(crate::Fault::InjectNeedsIdentity.into());
@@ -403,21 +409,6 @@ impl Proxy {
         let _ = storer.join();
         copied
     }
-}
-
-fn identity(owo: &Owo, root: &crate::Root) -> Result<(Option<String>, Vec<crate::Row>)> {
-    for w in &root.warnings {
-        owo.warn(w);
-    }
-    let start = match &root.config.identity {
-        Some(slug) => {
-            let id = root.identity()?;
-            id.working_project()?;
-            Some(slug.clone())
-        }
-        None => None,
-    };
-    Ok((start, root.list()))
 }
 
 enum Reply {
