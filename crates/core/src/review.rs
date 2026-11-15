@@ -212,18 +212,14 @@ impl SoulChange {
             _ => None,
         };
         let text = |v: Option<Value>| v.and_then(|v| v.as_str().map(str::to_string));
-        let at = text(take("at", Value::is_string));
-        let file = text(take("file", Value::is_string));
-        let change = text(take("change", Value::is_string));
-        let evidence = take("evidence", |v| {
-            v.as_array().is_some_and(|a| a.iter().all(Value::is_string))
-        })
-        .and_then(|v| serde_json::from_value(v).ok());
         Self {
-            at,
-            file,
-            change,
-            evidence,
+            at: text(take("at", Value::is_string)),
+            file: text(take("file", Value::is_string)),
+            change: text(take("change", Value::is_string)),
+            evidence: take("evidence", |v| {
+                v.as_array().is_some_and(|a| a.iter().all(Value::is_string))
+            })
+            .and_then(|v| serde_json::from_value(v).ok()),
             other,
         }
     }
