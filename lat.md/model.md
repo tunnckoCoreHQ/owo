@@ -26,10 +26,10 @@ The rules that shape every format and command.
 
 An identity is created once, then grows through sessions, ingest and review.
 
-1. Create: `owo new`, then owo create (the create part of the `owo` skill) fills the soul files, a first MEMORY and the first entries, and runs `owo review done` to record the first MEMORY hash.
-2. Session: the host loads `owo context` (see [[cli#Context]]); the agent reads more with `resolve`, `show`, `search` and `links`, and writes facts to their homes. The everyday part of the `owo` skill holds the session procedure, and its entry file the checkpoint.
-3. Ingest: owo ingest (the ingest part of the `owo` skill) turns a source file or a sync slice into entries that cite it. See [[cli#Sync]].
-4. Review: when `owo state` shows review is due, owo review (the review part of the `owo` skill) reads `owo review` (see [[cli#Review]]), writes lessons, recompiles MEMORY, closes threads, and changes soul files only past the evidence threshold, recording each change with `owo soul note`.
+1. Create: `owo new`, then owo create (the create path of the `owo` skill) fills the soul files, the work profile and characters when they apply, and a first MEMORY, and runs `owo review done` to record the first MEMORY hash.
+2. Session: the host loads `owo context` (see [[cli#Context]]); the agent embodies the identity and reads more with `resolve`, `show`, `search` and `links`; it writes only when the user asks, because sync and ingest record the session. The embody path of the `owo` skill holds this, and its entry file the checkpoint.
+3. Ingest: owo ingest (the ingest path of the `owo` skill) turns a source file or a sync slice into entries that cite it. See [[cli#Sync]].
+4. Review: when `owo state` shows review is due, owo review (the review path of the `owo` skill) reads `owo review` (see [[cli#Review]]), writes lessons, recompiles MEMORY, closes threads, and changes soul files only past the evidence threshold, recording each change with `owo soul note`.
 
 Conflicts between sources become `life/conflicts/` entries; the rules of the `owo` skill describe how they open and resolve.
 

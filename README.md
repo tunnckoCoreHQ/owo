@@ -18,7 +18,7 @@ owo -i thea index && owo -i thea stamp && owo -i thea lint
 
 ## Skills
 
-The `skills/owo/` folder holds the owo skill. Copy or link it into the host's skills folder, for example `~/.claude/skills/owo` for Claude Code. Its entry file sends the agent to the part for the task: everyday use, owo create, owo ingest or owo review. The four older skills are in `_skills/` for reference.
+The `skills/owo/` folder holds the owo skill. Copy or link it into the host's skills folder, for example `~/.claude/skills/owo` for Claude Code. Its entry file sends the agent to the path for the task: embody, owo create, owo ingest or owo review. The four older skills are in `_skills/` for reference.
 
 ## Sync hook
 

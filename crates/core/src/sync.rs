@@ -497,7 +497,7 @@ fn run(
         let root = fs::canonicalize(req.root).unwrap_or_else(|_| req.root.to_path_buf());
         let quoted = format!("'{}'", root.display().to_string().replace('\'', "'\\''"));
         let text = format!(
-            "Use owo ingest (the ingest part of the owo skill) for identity `{slug}`{proj}.\n\nSource: `{source}` (relative to the identities root `{root}`).{earlier}\n\n1. `{owo} context{project}` and `{owo} state`.\n2. Route each durable fact in the source to its home; add `{cite}#L<a>-L<b>` to each entry's frontmatter `sources`.\n3. Run the checkpoint: `{owo} stamp && {owo} index && {owo} lint --changed`.\n4. Report changed paths or \"no changes\".\n5. When the checkpoint passes, finish the run with `owo --root {quoted} sync done --session {session} --until {until}`.\n",
+            "Use owo ingest (the ingest path of the owo skill) for identity `{slug}`{proj}.\n\nSource: `{source}` (relative to the identities root `{root}`).{earlier}\n\n1. `{owo} context{project}` and `{owo} state`.\n2. Route each durable fact in the source to its home; add `{cite}#L<a>-L<b>` to each entry's frontmatter `sources`.\n3. Run the checkpoint: `{owo} stamp && {owo} index && {owo} lint --changed`.\n4. Report changed paths or \"no changes\".\n5. When the checkpoint passes, finish the run with `owo --root {quoted} sync done --session {session} --until {until}`.\n",
             slug = req.slug,
             earlier = if done == 0 { String::new() } else { format!(" Messages before {done} were ingested in an earlier run; the first part is overlap for context.") },
             root = root.display(),

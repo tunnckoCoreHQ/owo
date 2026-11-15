@@ -1,6 +1,6 @@
 # Rules
 
-Every part of the owo skill that writes follows these rules. owo does the deterministic work; these rules cover judgment.
+Every path of the owo skill that writes follows these rules. owo does the deterministic work; these rules cover judgment.
 
 ## The home of each fact
 
@@ -32,12 +32,12 @@ Each fact has one home. Write it there once, and link to it from everywhere else
 
 ## One account of each happening
 
-1. A happening lives in its event file when it has one, else in the log of the day.
-2. A log bullet that points to an event is one line, with the link.
-3. An exact quote lives in the `## Lines` of one event.
-4. owo makes the indexes, the timeline and the Now block: `owo index`, `owo context`. Do not write them.
-5. MEMORY holds patterns, hints and links. Only review writes it.
-6. `owo lint --rule dupes` finds copied passages. Keep the passage in its home, and make the copy a link.
+- A happening lives in its event file when it has one, else in the log of the day.
+- A log bullet that points to an event is one line, with the link.
+- An exact quote lives in the `## Lines` of one event.
+- owo makes the indexes, the timeline and the Now block: `owo index`, `owo context`. Do not write them.
+- MEMORY holds patterns, hints and links. Only review writes it.
+- `owo lint --rule dupes` finds copied passages. Keep the passage in its home, and make the copy a link.
 
 ## Perspective
 

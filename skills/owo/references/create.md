@@ -1,19 +1,34 @@
 # owo create
 
-Use this part once per identity, to make it from what the person has said about it.
+Create an identity once, from what the user says about it. This thread has two parties, you and the user. You make the identity here. You do not embody it yet.
 
-1. Run `owo new "<Name>"`. It makes `<root>/<slug>/` from the templates and prints that folder. `owo config` shows the root it uses. From here on, pass `-i <slug>` to every command.
-2. Collect what the person has said. When a key choice is missing (the name, the role, the world, the voice), ask about it. Ask one question at a time.
-3. Fill the soul files:
-   - `soul/IDENTITY.md`, in the third person: who the identity is, its roles, its world.
-   - `soul/SOUL.md`, in the first person: beliefs, wants, how it feels things, boundaries.
-   - `soul/VOICE.md`: how it talks and writes.
-   - `soul/LOOK.md`: how it looks, the parts that do not change.
-   - `soul/examples/greetings.md` (one `##` section per greeting), `good.md` and `bad.md`.
-   - `soul/soul.json`: description, tags, category, author, license.
-4. Fill `work/README.md` as a profile: roles, how the identity works, past work, projects.
-5. Add the first characters and places with `owo add character <title>` and `owo add location <title>`. Add each project with `owo add project <title>`, and set `kb:` in its `project.md` to the project's knowledge base.
-6. Write a first `soul/MEMORY.md`: patterns, defining moments, lessons and hints, as links.
-7. Run the checkpoint from the [entry file](../SKILL.md). Then run `owo review done` to record the first MEMORY hash.
+## Make the folder
+
+Run `owo new "<Name>"`. It makes `<root>/<slug>/` from the templates and prints that folder. `owo config` shows which root it uses. Use that slug as the identity in every later call.
+
+## Ask
+
+Take what the user has said about the identity. When a key choice is missing, ask about it, one question at a time. The key choices are the name, the role, the world and the voice.
+
+## Fill the soul
+
+- `soul/IDENTITY.md` says who the identity is, its roles and its world, in the third person.
+- `soul/SOUL.md` holds its beliefs, wants, feelings and boundaries, in the first person.
+- `soul/VOICE.md` says how it talks and writes.
+- `soul/LOOK.md` says how it looks, the parts that do not change.
+- `soul/examples/greetings.md` has one `##` section per greeting. `good.md` and `bad.md` beside it hold examples of good and bad replies.
+- `soul/soul.json` holds the description, tags, category, author and license.
+
+## The rest, when it applies
+
+- When the identity has a work side, fill `work/README.md` with its roles, how it works, its past work and its projects. Add each project with `owo add project <title>`, and set `kb:` in its `project.md` to the knowledge base of the project.
+- When the identity has a relationship with the user, add the user as a character with `owo add character <title>`.
+- When the user names other people or places while defining the identity, add them with `owo add character <title>` or `owo add location <title>`.
+
+Characters and places that come up later, in threads that embody the identity, are for owo ingest.
+
+## Finish
+
+Write a first `soul/MEMORY.md` with patterns, defining moments, lessons and hints, as links. Run the checkpoint. Then run `owo review done` to record the first MEMORY hash.
 
 Follow [rules.md](rules.md) for where each fact goes and for the perspective of each file.

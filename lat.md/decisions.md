@@ -58,7 +58,7 @@ Lint's link rules and orphan check call `find::raw_links` and `find::orphans`, s
 
 ## Skills live in the repo
 
-`skills/owo/` holds the one `owo` skill. Its short entry file `SKILL.md` sends the agent to the part for the task, each in `references/`: `use.md` (everyday use), `create.md`, `ingest.md` and `review.md`. `references/rules.md` is the one rules file that every part that writes follows; each part calls owo for every deterministic step. One skill with parts loads one description into the host and keeps the shared rules beside the parts that use them. The four older skills stay in `_skills/` for reference; nothing links to them.
+`skills/owo/` holds the one `owo` skill. Its short entry file `SKILL.md` sends the agent to the path for the task, each in `references/`: `embody.md`, `create.md`, `ingest.md` and `review.md`. `references/rules.md` is the one rules file that every path that writes follows; each path calls owo for every deterministic step. One skill with paths loads one description into the host and keeps the shared rules beside the paths that use them. The entry file holds the checkpoint under its own heading, so every path names it. The four older skills stay in `_skills/` for reference; nothing links to them.
 
 ## Sync counts user turns
 
