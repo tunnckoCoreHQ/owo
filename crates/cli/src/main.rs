@@ -102,22 +102,10 @@ fn env() -> owo_core::Env {
 
 fn mcp_stdio(global: &Global, env: &owo_core::Env) -> anyhow::Result<()> {
     #[cfg(unix)]
-    {
-        let (input, output) = own_stdio()?;
-        Ok(mcp::serve(
-            std::io::BufReader::new(input),
-            output,
-            &global.select,
-            env,
-        )?)
-    }
+    let (input, output) = own_stdio()?;
     #[cfg(not(unix))]
-    Ok(mcp::serve(
-        std::io::stdin().lock(),
-        std::io::stdout(),
-        &global.select,
-        env,
-    )?)
+    let (input, output) = (std::io::stdin().lock(), std::io::stdout());
+    Ok(mcp::serve(input, output, &global.select, env)?)
 }
 
 fn mcp_http(
@@ -146,12 +134,12 @@ fn detach_stdio() -> std::io::Result<()> {
 }
 
 #[cfg(unix)]
-fn own_stdio() -> std::io::Result<(std::fs::File, std::fs::File)> {
+fn own_stdio() -> std::io::Result<(std::io::BufReader<std::fs::File>, std::fs::File)> {
     use std::os::fd::AsFd;
     let input = std::io::stdin().as_fd().try_clone_to_owned()?;
     let output = std::io::stdout().as_fd().try_clone_to_owned()?;
     detach_stdio()?;
-    Ok((input.into(), output.into()))
+    Ok((std::io::BufReader::new(input.into()), output.into()))
 }
 
 fn acp(global: &Global, env: &owo_core::Env, options: Options) -> anyhow::Result<u8> {
