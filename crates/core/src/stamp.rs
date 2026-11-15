@@ -74,11 +74,7 @@ pub fn run(id: &Identity, check: bool) -> Result<Report> {
             .find(|(s, _)| *s == scope)
             .expect("scope exists")
             .1;
-        let recorded = files_mut(doc)
-            .get(rel)
-            .and_then(|r| r.get("hash"))
-            .and_then(Value::as_str)
-            .map(str::to_string);
+        let recorded = doc["files"][rel]["hash"].as_str().map(str::to_string);
         let current = hash(&e.text);
         if recorded.as_deref() == Some(current.as_str()) {
             continue;
@@ -99,8 +95,7 @@ pub fn run(id: &Identity, check: bool) -> Result<Report> {
                 text = new_text;
             }
         }
-        let files = files_mut(doc);
-        files.insert(
+        files_mut(doc).insert(
             rel.to_string(),
             json!({ "updated": at, "hash": hash(&text) }),
         );
