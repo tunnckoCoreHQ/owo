@@ -283,7 +283,7 @@ impl Text {
                         self.line(format!("  {p}"));
                     }
                 }
-                if self.buf.is_empty() {
+                if c.days.is_empty() && c.pending.is_empty() {
                     self.line("no changes");
                 }
             }
