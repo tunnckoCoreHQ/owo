@@ -1,6 +1,9 @@
 ---
 name: hill-climb
-description: Reach any goal that a command can score (faster, fewer bugs, an audit, "make X stable", a port, a UI, a text) in small steps, keeping wins and undoing losses, across one or many repos. Use for "hill climb", "/hill-climb", "climb this", "keep going until it passes", or to resume or report on a climb.
+description: Reach any goal that a command can score (faster, fewer bugs, an audit, "make X stable", a port, a UI, a text) in small steps, keeping wins and undoing losses, across one or many repos. Use for "hill climb", "climb this", "keep going until it passes", or to resume or report on a climb.
+license: MIT
+metadata:
+  author: Bil0000
 ---
 
 # Hill climb

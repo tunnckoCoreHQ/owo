@@ -62,12 +62,6 @@ Files count as changed when their stamp is newer than `last_reviewed`. Log days,
 
 Lint's link rules and orphan check call `find::raw_links` and `find::orphans`, so `owo links --orphans` and the `orphans` rule always agree.
 
-## Contributor skills live in .agents
-
-The `.agents/skills/` folder holds the skills that agents use to work on owo, not skills that owo ships. `.agents/` and `AGENTS.md` are the sources; `.claude` and `CLAUDE.md` are symlinks to them, so Claude Code and the other agents read the same files. Claude Code's per-user `.claude/settings.local.json` lands in `.agents/` through the link, so `.gitignore` lists it there.
-
-The skills are unchanged copies. Fourteen come from the maintainer's `tckdev` skill set. Seven come from the `pstack` plugin of [cursor/plugins](https://github.com/cursor/plugins) at commit `bf0c7cd`: six of its skills, and its `agents/comment-sicko.md` agent as the `comment-sicko` skill. Each pstack folder has a copy of the plugin's MIT `LICENSE`.
-
 ## Skills live in the repo
 
 `skills/owo/` holds the one `owo` skill. Its short entry file `SKILL.md` sends the agent to the path for the task, each in `references/`: `embody.md`, `create.md`, `ingest.md` and `review.md`. `references/rules.md` is the one rules file that every path that writes follows; each path calls owo for every deterministic step. One skill with paths loads one description into the host and keeps the shared rules beside the paths that use them. The entry file holds the checkpoint under its own heading, so every path names it. The four older skills stay in `_skills/` for reference; nothing links to them.

@@ -1,5 +1,0 @@
-interface:
-  display_name: "Improve Codebase"
-  short_description: "Find and question architecture improvements"
-policy:
-  allow_implicit_invocation: true
