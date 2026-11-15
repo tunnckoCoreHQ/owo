@@ -616,24 +616,17 @@ fn from_agent_line(line: &[u8], state: &Mutex<State>, setup: &Setup) -> Option<A
         let session = msg["params"]["sessionId"].as_str()?.to_string();
         let update = &mut msg["params"]["update"];
         track(&mut st, &session, update);
-        let options = match update["sessionUpdate"].as_str() {
-            Some("config_option_update") => true,
-            Some("available_commands_update") => false,
+        match update["sessionUpdate"].as_str() {
+            Some("config_option_update") => {
+                st.session(&session).options = update["configOptions"].as_array()?.clone();
+                update["configOptions"] = st.options(setup, &session);
+            }
+            Some("available_commands_update") => {
+                st.session(&session).commands = update["availableCommands"].as_array()?.clone();
+                update["availableCommands"] = st.commands(&session);
+            }
             _ => return None,
-        };
-        let field = if options {
-            "configOptions"
-        } else {
-            "availableCommands"
-        };
-        let agent = update[field].as_array()?.clone();
-        update[field] = if options {
-            st.session(&session).options = agent;
-            st.options(setup, &session)
-        } else {
-            st.session(&session).commands = agent;
-            st.commands(&session)
-        };
+        }
         return Some(Agent {
             line: Some(msg),
             ..Agent::default()
