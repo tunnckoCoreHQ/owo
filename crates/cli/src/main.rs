@@ -6,7 +6,7 @@ mod text;
 use clap::ArgMatches;
 use cli::Global;
 use output::Output;
-use owo_core::{mcp, operations, Args, Operation};
+use owo_core::{acp::Options, mcp, operations, Args, Operation};
 use std::io::Write;
 use std::path::PathBuf;
 use std::process::{ExitCode, Stdio};
@@ -38,14 +38,13 @@ fn main() -> ExitCode {
             }
         }
         "acp" => {
-            let agent: Vec<String> = sub.get_many("agent").unwrap().cloned().collect();
-            let options = owo_core::acp::Options {
+            let options = Options {
                 inject: sub.get_flag("inject"),
                 mcp_server,
                 dry_run: sub.get_flag("dry-run"),
-                agent: agent.clone(),
+                agent: sub.get_many("agent").unwrap().cloned().collect(),
             };
-            match acp(&global, &env, &agent, options) {
+            match acp(&global, &env, options) {
                 Ok(code) => return ExitCode::from(code),
                 Err(e) => Output::from(e),
             }
@@ -155,13 +154,9 @@ fn own_stdio() -> std::io::Result<(std::fs::File, std::fs::File)> {
     Ok((input.into(), output.into()))
 }
 
-fn acp(
-    global: &Global,
-    env: &owo_core::Env,
-    agent: &[String],
-    options: owo_core::acp::Options,
-) -> anyhow::Result<u8> {
+fn acp(global: &Global, env: &owo_core::Env, options: Options) -> anyhow::Result<u8> {
     use anyhow::Context;
+    let agent = options.agent.clone();
     let proxy = owo_core::acp::Proxy::new(&global.select, env, options, std::io::stderr())?;
     let mut child = std::process::Command::new(&agent[0])
         .args(&agent[1..])
