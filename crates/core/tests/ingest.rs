@@ -51,6 +51,7 @@ fn options(agent: &[&str]) -> acp::Options {
     acp::Options {
         inject: false,
         mcp_server,
+        dry_run: false,
         agent: agent.iter().map(|s| s.to_string()).collect(),
     }
 }
@@ -77,14 +78,12 @@ struct Client {
 }
 
 fn start(root: &Path) -> Client {
+    start_with(root, options(&["some-agent"]))
+}
+
+fn start_with(root: &Path, options: acp::Options) -> Client {
     let warnings = Shared::default();
-    let proxy = acp::Proxy::new(
-        &select(root),
-        &env(root),
-        options(&["some-agent"]),
-        warnings.clone(),
-    )
-    .unwrap();
+    let proxy = acp::Proxy::new(&select(root), &env(root), options, warnings.clone()).unwrap();
     let (client_in, to_proxy) = std::io::pipe().unwrap();
     let (from_proxy, client_out) = std::io::pipe().unwrap();
     let (agent_in_read, agent_in) = std::io::pipe().unwrap();
@@ -280,6 +279,31 @@ fn a_pending_run_starts_on_a_later_push_that_is_not_due() {
     c.prompt(4);
     c.end();
     assert_eq!(wait_lines(&runs, 2), "run\nrun\n");
+}
+
+#[test]
+fn a_dry_run_starts_no_ingest_of_a_pending_run() {
+    // A real session leaves a run on disk that is still pending.
+    let tmp = root("sync_every = 1\n");
+    let mut c = start(tmp.path());
+    c.prompt(2);
+    c.end();
+    std::fs::write(
+        tmp.path().join(".owo.toml"),
+        "sync_every = 2\nauto_ingest = true\ningest_command = [\"sh\", \"-c\", \"echo x > got.txt\"]\n",
+    )
+    .unwrap();
+    let mut c = start_with(
+        tmp.path(),
+        acp::Options {
+            dry_run: true,
+            ..options(&["some-agent"])
+        },
+    );
+    c.prompt(3);
+    let warnings = c.end();
+    std::thread::sleep(Duration::from_millis(500));
+    assert!(!tmp.path().join("got.txt").exists(), "{warnings}");
 }
 
 #[test]

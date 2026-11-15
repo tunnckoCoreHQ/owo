@@ -570,6 +570,7 @@ fn acp_dry_run_stores_no_turns() {
             inject: false,
             mcp_server,
             dry_run: true,
+            agent: vec![],
         },
         replies,
     );
