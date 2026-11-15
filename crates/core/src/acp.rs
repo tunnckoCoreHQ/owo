@@ -447,6 +447,7 @@ fn from_client(msg: &mut Value, state: &Mutex<State>, setup: &Setup) -> Option<R
             }
             let (params, server) = (params?, setup.server.as_ref()?);
             match params.get_mut("mcpServers").and_then(Value::as_array_mut) {
+                // A server the client already named `owo` stays the only one.
                 Some(servers) if servers.iter().any(|s| s["name"] == "owo") => return None,
                 Some(servers) => servers.push(server.clone()),
                 None => params["mcpServers"] = json!([server]),
@@ -506,6 +507,9 @@ fn from_client(msg: &mut Value, state: &Mutex<State>, setup: &Setup) -> Option<R
     Some(Reply::Changed)
 }
 
+/// The text a person typed, from the text blocks of a prompt. A client such as T3 Code adds its
+/// own instructions as XML-like elements: the content of a `<user_request>` element is the
+/// typed text, and a block made only of other such elements is left out.
 fn typed(prompt: &[Value]) -> impl Iterator<Item = &str> {
     prompt
         .iter()
@@ -519,6 +523,8 @@ fn typed(prompt: &[Value]) -> impl Iterator<Item = &str> {
         })
 }
 
+/// True when the text is one or more `<some_name>...</some_name>` elements and nothing else.
+/// The name has an underscore, so a pasted HTML or XML snippet is not taken for one.
 fn only_elements(text: &str) -> bool {
     let mut rest = text.trim();
     let mut found = false;

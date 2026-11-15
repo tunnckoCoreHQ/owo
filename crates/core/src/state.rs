@@ -20,6 +20,7 @@ pub fn local_today() -> String {
     chrono::Local::now().format("%Y-%m-%d").to_string()
 }
 
+/// The local day `days` ago, as `YYYY-MM-DD`, which Git reads a plain `--since` day in.
 pub fn local_day_ago(days: i64) -> String {
     (chrono::Local::now() - chrono::Duration::days(days))
         .format("%Y-%m-%d")

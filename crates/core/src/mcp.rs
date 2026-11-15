@@ -317,6 +317,10 @@ fn http_request(stream: TcpStream, select: &Select, env: &Env) -> std::io::Resul
         reply.len()
     )?;
     stream.flush()?;
+    // A refused body that was not read (no length, or past a cap) would reset the connection on
+    // close and cut the reply. Send the reply's end first, then discard what the client still
+    // sends: stop after 200ms with nothing arriving, or after 2 seconds, so an idle client
+    // cannot hold this one-at-a-time server.
     if fits.is_none() {
         drain(stream)?;
     }

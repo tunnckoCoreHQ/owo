@@ -122,6 +122,9 @@ fn mcp_http(
     Ok(mcp::serve_http(listener, &global.select, env)?)
 }
 
+/// Points the process's stdin at `/dev/null` and its stdout at stderr. A tool call runs in this
+/// process, so a tool path such as `/dev/stdin` or `/dev/stdout` must not reach the server's
+/// own streams.
 #[cfg(unix)]
 fn detach_stdio() -> std::io::Result<()> {
     use std::os::fd::AsRawFd;
@@ -133,6 +136,8 @@ fn detach_stdio() -> std::io::Result<()> {
     Ok(())
 }
 
+/// The server's own stdin and stdout for the protocol, taken before `detach_stdio`. The copies
+/// are close-on-exec, so a `git` child does not inherit them.
 #[cfg(unix)]
 fn own_stdio() -> std::io::Result<(std::io::BufReader<std::fs::File>, std::fs::File)> {
     use std::os::fd::AsFd;
@@ -157,6 +162,7 @@ fn acp(global: &Global, env: &owo_core::Env, options: Options) -> anyhow::Result
     let agent_out = std::io::BufReader::new(child.stdout.take().expect("piped stdout"));
     let client_in = std::io::BufReader::new(std::io::stdin());
     let copied = proxy.run(client_in, std::io::stdout(), agent_in, agent_out);
+    // A client that closed its stdout ends the session: stop the agent.
     if copied.is_err() {
         let _ = child.kill();
     }

@@ -71,6 +71,7 @@ pub fn changes(id: &Identity, since: Option<&str>) -> anyhow::Result<Changes> {
             pending: crate::git::dirty(&id.dir).unwrap_or_default(),
         });
     }
+    // Outside Git only a day compares; `git log --since` words such as "yesterday" do not.
     let since = since_day(since)?;
     let mut stamped: Vec<(String, String)> = crate::state::tracked(id)
         .filter_map(|e| {
