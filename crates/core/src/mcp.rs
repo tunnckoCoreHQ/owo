@@ -32,22 +32,14 @@ fn schema(op: &Operation) -> Value {
     for f in &op.fields {
         let kind = schema_type(f);
         let mut s = json!({ "type": kind, "description": f.help });
-        let values = match &f.ty {
-            Type::Choice(v) => Some(json!(v)),
-            _ => None,
+        let at = if kind == "array" {
+            s["items"] = json!({ "type": if f.ty == Type::Json { "object" } else { "string" } });
+            &mut s["items"]
+        } else {
+            &mut s
         };
-        if kind == "array" {
-            let item = if f.ty == Type::Json {
-                "object"
-            } else {
-                "string"
-            };
-            s["items"] = json!({ "type": item });
-            if let Some(v) = values {
-                s["items"]["enum"] = v;
-            }
-        } else if let Some(v) = values {
-            s["enum"] = v;
+        if let Type::Choice(v) = &f.ty {
+            at["enum"] = json!(v);
         }
         props[f.name] = s;
     }
