@@ -29,6 +29,6 @@ Characters and places that come up later, in threads that embody the identity, a
 
 ## Finish
 
-Write a first `soul/MEMORY.md` with patterns, defining moments, lessons and hints, as links. Run the checkpoint. Then run `owo review done` to record the first MEMORY hash.
+Write a first `soul/MEMORY.md` with patterns, defining moments, lessons and hints, as links. Run the [checkpoint](../SKILL.md#checkpoint), which stamps, indexes and lints the changes. Then run `owo review done` to record the first MEMORY hash.
 
 Follow [rules.md](rules.md) for where each fact goes and for the perspective of each file.
