@@ -1,6 +1,6 @@
 //! `owo context`: the tiered load set for an identity.
-//! Core (always): IDENTITY, SOUL, MEMORY and the generated "Now" block.
-//! Voice: VOICE.md. Look: LOOK.md. Project: work README, project.md, recent notes, KB pointer.
+//! Core (always): IDENTITY, SOUL, MEMORY. Voice: VOICE.md. Look: LOOK.md.
+//! Project: work README, project.md, recent notes, KB pointer. The generated "Now" block is last.
 
 use crate::identity::Identity;
 use crate::status;
@@ -28,20 +28,12 @@ pub struct Context {
 }
 
 impl Context {
-    /// The file list of the load set: one `tier path (reason)` line per file, with the Now block
-    /// after the core files, then the KB pointer.
+    /// The file list of the load set: one `tier path (reason)` line per file, then the KB pointer,
+    /// then the Now block, last as in the text.
     pub fn paths_text(&self) -> String {
         let mut out = String::new();
-        // The Now block follows the core files, as in the text.
-        let core = self.items.iter().take_while(|it| it.tier == "core").count();
-        for (n, it) in self.items.iter().enumerate() {
-            if n == core {
-                out.push_str("now      (generated block)\n");
-            }
+        for it in &self.items {
             out.push_str(&format!("{:<8} {}  ({})\n", it.tier, it.path, it.reason));
-        }
-        if core == self.items.len() {
-            out.push_str("now      (generated block)\n");
         }
         if let Some(kb) = &self.kb {
             out.push_str(&format!(
@@ -50,6 +42,7 @@ impl Context {
                 if kb.exists { "" } else { "  (missing)" }
             ));
         }
+        out.push_str("now      (generated block)\n");
         out
     }
 }
@@ -122,12 +115,7 @@ pub fn build(id: &Identity, req: &Request, project: Option<&str>) -> Result<Cont
 
 pub fn render_text(id: &Identity, c: &Context) -> String {
     let mut out = String::new();
-    let mut now_done = false;
     for it in &c.items {
-        if it.tier != "core" && !now_done {
-            out.push_str(&format!("<!-- owo: now -->\n{}\n", c.now));
-            now_done = true;
-        }
         let text = fs::read_to_string(id.dir.join(&it.path)).unwrap_or_default();
         out.push_str(&format!(
             "<!-- owo: {} ({}) -->\n{}\n",
@@ -137,9 +125,6 @@ pub fn render_text(id: &Identity, c: &Context) -> String {
         ));
         out.push('\n');
     }
-    if !now_done {
-        out.push_str(&format!("<!-- owo: now -->\n{}\n", c.now));
-    }
     if let Some(kb) = &c.kb {
         let note = if kb.exists {
             kb.entry.clone().unwrap_or_else(|| kb.path.clone())
@@ -147,8 +132,10 @@ pub fn render_text(id: &Identity, c: &Context) -> String {
             format!("{} (not found)", kb.path)
         };
         out.push_str(&format!(
-            "<!-- owo: project kb -->\nProject knowledge base: {note}\n"
+            "<!-- owo: project kb -->\nProject knowledge base: {note}\n\n"
         ));
     }
+    // The Now block is always the last section.
+    out.push_str(&format!("<!-- owo: now -->\n{}\n", c.now));
     out
 }
