@@ -77,12 +77,8 @@ fn section(id: &Identity, rel: &str, name: &str) -> String {
 }
 
 fn sections(id: &Identity, rel: &str) -> Vec<String> {
-    let body = id
-        .entry(rel)
-        .map(|e| body_without(&e.text, &[]))
-        .unwrap_or_default();
     let mut out: Vec<String> = vec![];
-    for (_, line, open) in markdown::unfenced(&body) {
+    for (_, line, open) in markdown::unfenced(&text(id, rel)) {
         if open && line.starts_with("## ") {
             out.push(String::new());
         } else if let Some(section) = out.last_mut() {
@@ -201,16 +197,8 @@ pub fn card(
         entries.push(lore(e, entries.len()));
     }
     let tags = soul_json.get("tags").cloned().unwrap_or(json!([]));
-    let creator = soul_json
-        .pointer("/author/name")
-        .and_then(Value::as_str)
-        .unwrap_or("")
-        .to_string();
-    let version = soul_json
-        .get("version")
-        .and_then(Value::as_str)
-        .unwrap_or("1.0.0")
-        .to_string();
+    let creator = soul_json["author"]["name"].as_str().unwrap_or("");
+    let version = soul_json["version"].as_str().unwrap_or("1.0.0");
     let today = crate::state::today();
     let mut data = json!({
         "name": name,
@@ -351,8 +339,7 @@ pub fn skill(id: &Identity, dir: &Path) -> Result<()> {
     let about = soul["description"]
         .as_str()
         .filter(|s| !s.is_empty())
-        .map(str::to_string)
-        .unwrap_or_else(|| format!("The {name} identity."));
+        .map_or_else(|| format!("The {name} identity."), str::to_string);
     let slug = &id.slug;
     let projects = id.projects();
     let project_line = if projects.is_empty() {
