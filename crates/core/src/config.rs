@@ -130,10 +130,11 @@ pub fn resolve(select: &Select, env: &Env) -> Result<Resolved> {
     )
     .or_else(|| only_identity(&root).map(|slug| (slug, Source::OnlyIdentity)))
     .unzip();
+    let [project_file, _user_config] = &configs;
     let project = lookup(
         select.project.clone(),
         env.owo_project.as_ref(),
-        &configs[..1],
+        std::slice::from_ref(project_file),
         |c| c.project.as_ref(),
     )
     .map(|(value, _)| value);
