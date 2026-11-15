@@ -231,7 +231,8 @@ fn pr10_multi_value_array_names_the_field_type() {
     assert!(text.contains("paths, text"), "{text}");
 }
 
-// macOS file systems refuse a name that is not UTF-8, so the bytes cannot reach owo there.
+// macOS file systems refuse a name that is not UTF-8, so the bytes cannot reach owo there. The
+// core reads the bytes as UTF-8 text, so it finds the folder and the file of that name.
 #[cfg(all(unix, not(target_os = "macos")))]
 #[test]
 fn pr10_core_turns_a_non_utf8_path_into_utf8_text() {

@@ -361,6 +361,7 @@ fn recurring_phrases_stay_inside_one_line() {
 #[test]
 fn stamp_writes_the_local_day_like_add() {
     let tmp = TempDir::new().unwrap();
+    // A zone where the local day differs from the UTC day right now.
     let tz = if chrono::Timelike::hour(&chrono::Utc::now()) < 12 {
         "Etc/GMT+12"
     } else {
@@ -443,6 +444,7 @@ fn lint_changed_keeps_a_path_with_a_quote() {
     git(tmp.path(), &["commit", "-q", "-m", "init"], None);
     let file = tmp.path().join("thea/soul/examples/a\"b.md");
     fs::write(&file, "See [[Nobody]].\n").unwrap();
+    // Stamped and its state committed, so only Git can name the file as changed.
     owo(tmp.path())
         .args(["-i", "thea", "stamp"])
         .assert()
@@ -561,6 +563,7 @@ fn code_with_open_stdin(args: &[&str]) -> Option<i32> {
         .stderr(std::process::Stdio::null())
         .spawn()
         .unwrap();
+    // The test keeps stdin open, so a read of it never ends.
     let _open = child.stdin.take();
     let stop = std::time::Instant::now() + std::time::Duration::from_secs(2);
     loop {

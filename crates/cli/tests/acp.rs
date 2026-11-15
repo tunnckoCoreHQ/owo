@@ -587,6 +587,7 @@ fn text_a_client_adds_to_a_prompt_is_not_stored() {
         "s",
         json!([picker("nicole", &["nicole", "reviewer"])]),
     );
+    // T3 Code sends its instructions and the typed text in one block, then its own notes.
     let first = "<t3_code_instructions>\nBe kind.\n</t3_code_instructions>\n\n<user_request>\nhello thea\n</user_request>";
     let notes = "<runtime_info>You run in T3 Code.</runtime_info>\n\n<pull_request_linking>\nLink each PR.\n</pull_request_linking>";
     p.send(

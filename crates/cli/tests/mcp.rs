@@ -205,6 +205,7 @@ fn mcp_remote_serves_http() {
         status("POST /mcp", &format!("{ok}Origin: http://example.com\r\n")),
         status(
             "POST /mcp",
+            // A tunnel forwards its public hostname.
             &format!("Host: example.com:{port}\r\nContent-Type: application/json\r\n"),
         ),
         status("POST /mcp", &format!("Host: localhost:{port}\r\n")),
