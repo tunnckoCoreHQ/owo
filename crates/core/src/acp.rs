@@ -15,7 +15,7 @@ struct Setup {
 }
 
 impl Setup {
-    fn text(&self, id: &str) -> Option<String> {
+    fn identity_block(&self, id: &str) -> Option<String> {
         if !self.context {
             return Some(format!("Your identity is the owo identity \"{id}\". Before you answer, load it with the `context` tool of the owo MCP server, with the argument `identity` set to \"{id}\", and keep to it."));
         }
@@ -73,13 +73,13 @@ struct Turn {
     replay: bool,
     user: String,
     agent: Vec<(Option<String>, String)>,
-    intro: bool,
+    has_identity_block: bool,
     identity: Option<String>,
     update_after_chunk: bool,
 }
 
 impl Turn {
-    fn message_to_join(&mut self, id: &Option<String>) -> Option<&mut String> {
+    fn agent_turn_to_join(&mut self, id: &Option<String>) -> Option<&mut String> {
         let message = match id {
             Some(_) => self.agent.iter_mut().find(|(i, _)| i == id),
             None if self.update_after_chunk => None,
@@ -96,7 +96,7 @@ struct Session {
     commands: Vec<Value>,
 }
 
-struct Job {
+struct Push {
     identity: String,
     session: String,
     turns: Vec<crate::Turn>,
@@ -106,7 +106,7 @@ struct Job {
 struct State {
     start: Option<String>,
     pending: HashMap<String, Pending>,
-    intro_due: HashSet<String>,
+    needs_identity_block: HashSet<String>,
     turns: HashMap<String, VecDeque<Turn>>,
     sessions: HashMap<String, Session>,
 }
@@ -142,18 +142,18 @@ impl State {
         }
         s.identity = to;
         if s.identity.is_some() {
-            self.intro_due.insert(session.into());
+            self.needs_identity_block.insert(session.into());
         } else {
-            self.intro_due.remove(session);
+            self.needs_identity_block.remove(session);
         }
         true
     }
 }
 
-fn job(identity: Option<String>, session: &str, turns: Vec<crate::Turn>) -> Option<Job> {
+fn push_of(identity: Option<String>, session: &str, turns: Vec<crate::Turn>) -> Option<Push> {
     let id = identity?;
     let name = format!("{session}.{id}");
-    (!turns.is_empty()).then_some(Job {
+    (!turns.is_empty()).then_some(Push {
         identity: id,
         session: name,
         turns,
@@ -378,15 +378,15 @@ impl Proxy {
             }
         });
 
-        let (store, jobs) = mpsc::channel::<Job>();
-        let storer = std::thread::spawn(move || store_jobs(&owo, jobs));
+        let (pusher, pushes) = mpsc::channel::<Push>();
+        let pushing = std::thread::spawn(move || run_pushes(&owo, pushes));
 
         // Agent to client. The state changes, and a finished turn goes to the store, before the
         // line is written, so the client's next request already sees them.
         let copied = (|| -> std::io::Result<()> {
             let mut line = vec![];
             while agent_out.read_until(b'\n', &mut line)? > 0 {
-                let act = track_and_store(&line, &state, setup.as_deref(), &store);
+                let act = track_and_push(&line, &state, setup.as_deref(), &pusher);
                 match &act.line {
                     Some(msg) => emit(&client_out, &encode(msg))?,
                     None => emit(&client_out, &line)?,
@@ -402,13 +402,13 @@ impl Proxy {
         let open: Vec<_> = st.turns.drain().collect();
         for (session, open) in open {
             for turn in open {
-                if let Some(job) = job(turn.identity.clone(), &session, turns(turn)) {
-                    let _ = store.send(job);
+                if let Some(push) = push_of(turn.identity.clone(), &session, turns(turn)) {
+                    let _ = pusher.send(push);
                 }
             }
         }
-        drop((st, store));
-        let _ = storer.join();
+        drop((st, pusher));
+        let _ = pushing.join();
         copied
     }
 }
@@ -487,18 +487,18 @@ fn from_client(msg: &mut Value, state: &Mutex<State>, setup: &Setup) -> Option<R
             let user = user.join("\n");
             let identity = st.session(&session).identity.clone();
             let text = st
-                .intro_due
+                .needs_identity_block
                 .remove(&session)
-                .then(|| identity.as_deref().and_then(|i| setup.text(i)))
+                .then(|| identity.as_deref().and_then(|i| setup.identity_block(i)))
                 .flatten();
-            let intro = text.is_some();
+            let has_identity_block = text.is_some();
             st.turns
                 .entry(session.clone())
                 .or_default()
                 .push_back(Turn {
                     request: key.clone(),
                     user,
-                    intro,
+                    has_identity_block,
                     identity,
                     ..Default::default()
                 });
@@ -605,20 +605,20 @@ fn update(session: &str, update: Value) -> Value {
 struct Agent {
     line: Option<Value>,
     after: Option<Value>,
-    store: Option<Job>,
+    push: Option<Push>,
 }
 
-fn track_and_store(
+fn track_and_push(
     line: &[u8],
     state: &Mutex<State>,
     setup: Option<&Setup>,
-    store: &mpsc::Sender<Job>,
+    pusher: &mpsc::Sender<Push>,
 ) -> Agent {
     let mut act = setup
         .and_then(|s| from_agent_line(line, state, s))
         .unwrap_or_default();
-    if let Some(job) = act.store.take() {
-        let _ = store.send(job);
+    if let Some(push) = act.push.take() {
+        let _ = pusher.send(push);
     }
     act
 }
@@ -656,11 +656,11 @@ fn from_agent_line(line: &[u8], state: &Mutex<State>, setup: &Setup) -> Option<A
         Pending::New => (msg["result"]["sessionId"].as_str()?.to_string(), true),
         Pending::Resume(session) => (session, false),
         Pending::Load(session) => {
-            out.store = finish(&mut st, &session, &request, error);
+            out.push = finish(&mut st, &session, &request, error);
             (session, false)
         }
         Pending::Prompt(session) => {
-            out.store = finish(&mut st, &session, &request, error);
+            out.push = finish(&mut st, &session, &request, error);
             return Some(out);
         }
         Pending::Config(session) => {
@@ -675,7 +675,7 @@ fn from_agent_line(line: &[u8], state: &Mutex<State>, setup: &Setup) -> Option<A
         return Some(out);
     }
     if new && st.session(&session).identity.is_some() {
-        st.intro_due.insert(session.clone());
+        st.needs_identity_block.insert(session.clone());
     }
     let agent = msg["result"]["configOptions"].as_array().cloned();
     // A client that gets `configOptions` hides the older `modes` field, so an agent with
@@ -703,7 +703,7 @@ fn track(st: &mut State, session: &str, update: &Value) -> Option<()> {
     }
     let text = update["content"]["text"].as_str()?;
     let id = update["messageId"].as_str().map(String::from);
-    match turn.message_to_join(&id) {
+    match turn.agent_turn_to_join(&id) {
         Some(joined) => joined.push_str(text),
         None => turn.agent.push((id, text.to_string())),
     }
@@ -711,13 +711,13 @@ fn track(st: &mut State, session: &str, update: &Value) -> Option<()> {
     Some(())
 }
 
-fn finish(st: &mut State, session: &str, request: &str, error: bool) -> Option<Job> {
+fn finish(st: &mut State, session: &str, request: &str, error: bool) -> Option<Push> {
     let open = st.turns.get_mut(session)?;
     let turn = open.remove(open.iter().position(|t| t.request == request)?)?;
-    if turn.intro && error {
-        st.intro_due.insert(session.into());
+    if turn.has_identity_block && error {
+        st.needs_identity_block.insert(session.into());
     }
-    job(turn.identity.clone(), session, turns(turn))
+    push_of(turn.identity.clone(), session, turns(turn))
 }
 
 fn turns(turn: Turn) -> Vec<crate::Turn> {
@@ -767,12 +767,12 @@ fn emit(out: &Mutex<impl Write>, bytes: &[u8]) -> std::io::Result<()> {
     out.flush()
 }
 
-fn store_jobs(owo: &Arc<Owo>, jobs: mpsc::Receiver<Job>) {
-    let store_all = || jobs.iter().for_each(|job| push(owo, job));
+fn run_pushes(owo: &Arc<Owo>, pushes: mpsc::Receiver<Push>) {
+    let push_all = || pushes.iter().for_each(|p| push(owo, p));
     if !owo.dry_run {
-        return store_all();
+        return push_all();
     }
-    let ((), paths) = crate::write::dry_run(store_all);
+    let ((), paths) = crate::write::dry_run(push_all);
     for path in paths {
         owo.write(&format!("owo: would write {path}\n"));
     }
@@ -780,11 +780,11 @@ fn store_jobs(owo: &Arc<Owo>, jobs: mpsc::Receiver<Job>) {
 
 fn push(
     owo: &Arc<Owo>,
-    Job {
+    Push {
         identity,
         session,
         turns,
-    }: Job,
+    }: Push,
 ) {
     let run = owo.root(&identity).and_then(|root| {
         root.sync()?

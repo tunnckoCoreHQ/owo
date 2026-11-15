@@ -10,47 +10,52 @@ use walkdir::WalkDir;
 
 pub const SOUL_FILES: &[&str] = &["IDENTITY.md", "SOUL.md", "VOICE.md", "LOOK.md", "MEMORY.md"];
 
-struct Row {
+struct KindRow {
     kind: Kind,
     name: &'static str,
     typed: bool,
-    folder: Option<&'static str>,
+    category: Option<&'static str>,
 }
 
-const fn row(kind: Kind, name: &'static str, typed: bool, folder: Option<&'static str>) -> Row {
-    Row {
+const fn kind_row(
+    kind: Kind,
+    name: &'static str,
+    typed: bool,
+    category: Option<&'static str>,
+) -> KindRow {
+    KindRow {
         kind,
         name,
         typed,
-        folder,
+        category,
     }
 }
 
-const ROWS: [Row; 20] = [
-    row(Kind::Soul, "soul", false, None),
-    row(Kind::Example, "example", false, None),
-    row(Kind::Character, "character", true, Some("characters")),
-    row(Kind::Location, "location", true, Some("locations")),
-    row(Kind::LocationDetail, "location-detail", true, None),
-    row(Kind::Culture, "culture", true, Some("cultures")),
-    row(Kind::Faction, "faction", true, Some("factions")),
-    row(Kind::Event, "event", true, Some("events")),
-    row(Kind::Era, "era", true, Some("eras")),
-    row(Kind::Thread, "thread", true, Some("threads")),
-    row(Kind::Conflict, "conflict", true, Some("conflicts")),
-    row(Kind::Lesson, "lesson", true, Some("lessons")),
-    row(Kind::Writing, "writing", true, Some("writing")),
-    row(Kind::Log, "log", true, Some("log")),
-    row(Kind::Journal, "journal", true, Some("journal")),
-    row(Kind::Project, "project", true, None),
-    row(Kind::Note, "note", true, None),
-    row(Kind::WorkReadme, "work-readme", false, None),
-    row(Kind::Generated, "generated", false, None),
-    row(Kind::Unknown, "unknown", false, None),
+const KIND_ROWS: [KindRow; 20] = [
+    kind_row(Kind::Soul, "soul", false, None),
+    kind_row(Kind::Example, "example", false, None),
+    kind_row(Kind::Character, "character", true, Some("characters")),
+    kind_row(Kind::Location, "location", true, Some("locations")),
+    kind_row(Kind::LocationDetail, "location-detail", true, None),
+    kind_row(Kind::Culture, "culture", true, Some("cultures")),
+    kind_row(Kind::Faction, "faction", true, Some("factions")),
+    kind_row(Kind::Event, "event", true, Some("events")),
+    kind_row(Kind::Era, "era", true, Some("eras")),
+    kind_row(Kind::Thread, "thread", true, Some("threads")),
+    kind_row(Kind::Conflict, "conflict", true, Some("conflicts")),
+    kind_row(Kind::Lesson, "lesson", true, Some("lessons")),
+    kind_row(Kind::Writing, "writing", true, Some("writing")),
+    kind_row(Kind::Log, "log", true, Some("log")),
+    kind_row(Kind::Journal, "journal", true, Some("journal")),
+    kind_row(Kind::Project, "project", true, None),
+    kind_row(Kind::Note, "note", true, None),
+    kind_row(Kind::WorkReadme, "work-readme", false, None),
+    kind_row(Kind::Generated, "generated", false, None),
+    kind_row(Kind::Unknown, "unknown", false, None),
 ];
 
 pub fn life_categories() -> impl Iterator<Item = (&'static str, Kind)> {
-    ROWS.iter().filter_map(|r| Some((r.folder?, r.kind)))
+    KIND_ROWS.iter().filter_map(|r| Some((r.category?, r.kind)))
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -79,30 +84,32 @@ pub enum Kind {
 
 impl crate::Named for Kind {
     fn rows() -> impl Iterator<Item = (Kind, &'static str)> {
-        ROWS.iter().map(|r| (r.kind, r.name))
+        KIND_ROWS.iter().map(|r| (r.kind, r.name))
     }
 }
 
 impl Kind {
-    fn row(self) -> &'static Row {
-        ROWS.iter()
+    fn kind_row(self) -> &'static KindRow {
+        KIND_ROWS
+            .iter()
             .find(|r| r.kind == self)
             .expect("every kind has a row")
     }
 
     pub fn from_type(name: &str) -> Option<Kind> {
-        ROWS.iter()
+        KIND_ROWS
+            .iter()
             .find(|r| r.typed && r.name == name)
             .map(|r| r.kind)
     }
 
     pub fn type_name(self) -> Option<&'static str> {
-        let r = self.row();
+        let r = self.kind_row();
         r.typed.then_some(r.name)
     }
 
     pub fn has_frontmatter(self) -> bool {
-        self.row().typed
+        self.kind_row().typed
     }
 
     pub fn dated(self) -> Option<bool> {
@@ -127,7 +134,7 @@ impl Kind {
             Kind::Note => format!("work/projects/{}/notes/{date}_{slug}.md", project?),
             Kind::Log => format!("life/log/{date}.md"),
             _ => {
-                let dir = self.row().folder?;
+                let dir = self.kind_row().category?;
                 match self.dated() {
                     Some(true) => format!("life/{dir}/{date}_{slug}.md"),
                     _ => format!("life/{dir}/{slug}.md"),
