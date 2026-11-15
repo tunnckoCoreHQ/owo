@@ -60,11 +60,11 @@ fn sync(s: &SyncRun) -> String {
 
 impl Text {
     fn say(&mut self, text: impl AsRef<str>) {
-        self.keep(false, text);
+        self.result_line_if(false, text);
     }
 
-    fn keep(&mut self, result: bool, text: impl AsRef<str>) {
-        if result || !self.quiet {
+    fn result_line_if(&mut self, is_result: bool, text: impl AsRef<str>) {
+        if is_result || !self.quiet {
             self.line(text);
         }
     }
@@ -115,7 +115,7 @@ impl Text {
                 let count = |level: Level| found.iter().filter(|d| d.level == level).count();
                 let (errors, warnings) = (count(Level::Error), count(Level::Warning));
                 for d in found {
-                    self.keep(d.level == Level::Error, diagnostic(d));
+                    self.result_line_if(d.level == Level::Error, diagnostic(d));
                 }
                 self.say(format!("{identity}: {errors} errors, {warnings} warnings"));
             }
@@ -128,7 +128,7 @@ impl Text {
                 if *created {
                     self.say(path);
                 } else {
-                    self.keep(*kind != Kind::Log, format!("exists {path}"));
+                    self.result_line_if(*kind != Kind::Log, format!("exists {path}"));
                 }
             }
             Outcome::Stamp { report, .. } => {
@@ -215,7 +215,7 @@ impl Text {
                 if let Some(n) = s.added {
                     self.say(format!("added {n}"));
                 }
-                self.keep(s.source.is_some(), sync(s));
+                self.result_line_if(s.source.is_some(), sync(s));
             }
             Outcome::SyncDone { session, until, .. } => {
                 self.say(format!("session {session} synced until {until}"))
