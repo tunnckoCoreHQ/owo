@@ -101,6 +101,17 @@ fn templates(_: (), s: &mut Call) -> Result<Outcome> {
     Ok(Outcome::Templates(s.root()?.templates()))
 }
 
+fn push_turns(checked: &SessionSync, r: SyncPushRequest, s: &mut Call) -> Result<Outcome> {
+    let text = match r.turns {
+        Some(t) => t,
+        None => s.input()?,
+    };
+    let turns = parse_turns(&text)?;
+    Ok(Outcome::Synced(
+        checked.push(&r.session, &turns, &r.options)?,
+    ))
+}
+
 pub fn operations() -> Vec<Operation> {
     vec![
         write_op::<NewRequest>(
@@ -317,13 +328,7 @@ pub fn operations() -> Vec<Operation> {
             "Store turns sent by the host, then run sync start on them (for hosts without a local transcript)",
             |r, s| {
                 let root = s.root()?;
-                let sync = root.sync()?;
-                let turns = match r.turns {
-                    Some(t) => t,
-                    None => s.input()?,
-                };
-                let turns = parse_turns(&turns)?;
-                Ok(Outcome::Synced(sync.push(&r.session, &turns, &r.options)?))
+                push_turns(&root.sync()?, r, s)
             },
         ),
         write_op::<SyncDoneRequest>(
