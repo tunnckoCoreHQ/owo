@@ -285,9 +285,7 @@ impl Proxy {
             dry_run: options.dry_run,
             ingest: Ingest::of(&root.config, &options.agent)?.filter(|_| !options.dry_run),
         });
-        for w in &root.warnings {
-            owo.warn(w);
-        }
+        root.warnings.iter().for_each(|w| owo.warn(w));
         let start = root.config.identity.clone();
         if start.is_some() {
             root.identity()?.working_project()?;
@@ -361,11 +359,7 @@ impl Proxy {
 
         let (store, jobs) = mpsc::channel::<Job>();
         let storer = std::thread::spawn(move || {
-            let store_all = || {
-                for (identity, session, turns) in jobs {
-                    push(&owo, &identity, &session, turns);
-                }
-            };
+            let store_all = || jobs.iter().for_each(|job| push(&owo, job));
             if !owo.dry_run {
                 return store_all();
             }
@@ -745,10 +739,10 @@ fn emit(out: &Mutex<impl Write>, bytes: &[u8]) -> std::io::Result<()> {
     out.flush()
 }
 
-fn push(owo: &Arc<Owo>, identity: &str, session: &str, turns: Vec<crate::Turn>) {
-    let run = owo.root(identity).and_then(|root| {
+fn push(owo: &Arc<Owo>, (identity, session, turns): Job) {
+    let run = owo.root(&identity).and_then(|root| {
         root.sync()?
-            .push(session, &turns, &crate::SyncOptions::default())
+            .push(&session, &turns, &crate::SyncOptions::default())
     });
     match run {
         Ok(run) => {
