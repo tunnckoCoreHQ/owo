@@ -13,23 +13,20 @@ pub fn add(id: &Identity, req: &Request, project: Option<&str>) -> Result<(Strin
         .kind
         .type_name()
         .expect("`Identity::add` takes only entry types");
-    if req.parent.is_some() && req.kind != Kind::LocationDetail {
-        return Err(Fault::OnlyFor {
-            field: "parent",
-            noun: "parent",
-            kind: Kind::LocationDetail,
-            given: req.kind,
+    let (parent, kb) = (req.parent.is_some(), req.kb.is_some());
+    for (set, field, noun, kind) in [
+        (parent, "parent", "parent", Kind::LocationDetail),
+        (kb, "kb", "KB", Kind::Project),
+    ] {
+        if set && req.kind != kind {
+            return Err(Fault::OnlyFor {
+                field,
+                noun,
+                kind,
+                given: req.kind,
+            }
+            .into());
         }
-        .into());
-    }
-    if req.kb.is_some() && req.kind != Kind::Project {
-        return Err(Fault::OnlyFor {
-            field: "kb",
-            noun: "KB",
-            kind: Kind::Project,
-            given: req.kind,
-        }
-        .into());
     }
     let today = crate::state::local_today();
     let date = req
@@ -105,33 +102,33 @@ pub fn add(id: &Identity, req: &Request, project: Option<&str>) -> Result<(Strin
         &templates::get(root, &format!("{name}.md"), builtin),
         &values,
     );
-    if !req.aliases.is_empty() {
-        if !text.contains("\naliases: []") {
+    let fill_line = |text: &str, from: &'static str, to: &str, field| {
+        if !text.contains(from) {
+            let line = from.trim_start_matches('\n');
             return Err(Fault::TemplateLacks {
                 template: name.into(),
-                line: "aliases: []",
-                field: "alias",
-            }
-            .into());
+                line,
+                field,
+            });
         }
+        Ok(text.replacen(from, to, 1))
+    };
+    if !req.aliases.is_empty() {
         let list = req
             .aliases
             .iter()
             .map(|a| format!("\n  - \"{}\"", templates::yaml_escape(a)))
             .collect::<String>();
-        text = text.replacen("\naliases: []", &format!("\naliases:{list}"), 1);
+        text = fill_line(
+            &text,
+            "\naliases: []",
+            &format!("\naliases:{list}"),
+            "alias",
+        )?;
     }
     if let (Some(kb), Kind::Project) = (req.kb.as_deref(), req.kind) {
-        if !text.contains("kb: \"\"") {
-            return Err(Fault::TemplateLacks {
-                template: "project".into(),
-                line: "kb: \"\"",
-                field: "kb",
-            }
-            .into());
-        }
-        let kb = templates::yaml_escape(kb);
-        text = text.replacen("kb: \"\"", &format!("kb: \"{kb}\""), 1);
+        let to = format!("kb: \"{}\"", templates::yaml_escape(kb));
+        text = fill_line(&text, "kb: \"\"", &to, "kb")?;
     }
     let notes = path.with_file_name("notes");
     let writes = Writes::new().file(&path, &path, text);
