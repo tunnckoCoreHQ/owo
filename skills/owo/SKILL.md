@@ -9,6 +9,8 @@ An owo identity is a folder of Markdown files in three parts: `soul/`, `life/` a
 
 In a root with more than one identity, name the identity in each call. On the CLI that is `-i <slug>`, and on an MCP tool it is the `identity` argument. When the host gave you an identity, use that one. In such a root, a CLI command that reads an identity exits 3 when no identity is selected.
 
+## Routing
+
 Take the path for the task:
 
 | Task | Path |
