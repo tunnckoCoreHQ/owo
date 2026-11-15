@@ -53,7 +53,7 @@ const KIND_ROWS: [KindRow; Kind::Unknown as usize + 1] = [
     typed(Kind::Journal, "journal", Some("journal")),
     typed(Kind::Project, "project", None),
     typed(Kind::Note, "note", None),
-    untyped(Kind::WorkReadme, "work-readme"),
+    untyped(Kind::Profile, "profile"),
     untyped(Kind::Generated, "generated"),
     untyped(Kind::Unknown, "unknown"),
 ];
@@ -92,7 +92,7 @@ pub enum Kind {
     Journal,
     Project,
     Note,
-    WorkReadme,
+    Profile,
     Generated,
     Unknown,
 }
@@ -229,7 +229,7 @@ pub fn classify(rel: &str) -> Kind {
         }
         ["soul", file] if SOUL_FILES.contains(file) => Kind::Soul,
         ["soul", "examples", _] => Kind::Example,
-        ["work", "README.md"] => Kind::WorkReadme,
+        ["work", "README.md"] => Kind::Profile,
         ["work", "projects", _, "project.md"] => Kind::Project,
         ["work", "projects", _, "notes", _] => Kind::Note,
         ["life", "locations", _, "overview.md"] => Kind::Location,
@@ -458,7 +458,7 @@ mod tests {
         assert_eq!(classify("life/log/2026-11-01.md"), Kind::Log);
         assert_eq!(classify("life/events/_index.md"), Kind::Generated);
         assert_eq!(classify("life/timeline.md"), Kind::Generated);
-        assert_eq!(classify("work/README.md"), Kind::WorkReadme);
+        assert_eq!(classify("work/README.md"), Kind::Profile);
         assert_eq!(classify("work/projects/api/project.md"), Kind::Project);
         assert_eq!(
             classify("work/projects/api/notes/2026-11-01_x.md"),
