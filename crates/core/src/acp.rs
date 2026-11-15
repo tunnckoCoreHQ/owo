@@ -381,19 +381,12 @@ impl Proxy {
         let (pusher, pushes) = mpsc::channel::<Push>();
         let pushing = std::thread::spawn(move || run_pushes(&owo, pushes));
 
-        // Agent to client. The state changes, and a finished turn goes to the store, before the
+        // Agent to client. The state changes, and a finished turn is pushed, before the
         // line is written, so the client's next request already sees them.
         let copied = (|| -> std::io::Result<()> {
             let mut line = vec![];
             while agent_out.read_until(b'\n', &mut line)? > 0 {
-                let act = track_and_push(&line, &state, setup.as_deref(), &pusher);
-                match &act.line {
-                    Some(msg) => emit(&client_out, &encode(msg))?,
-                    None => emit(&client_out, &line)?,
-                }
-                if let Some(msg) = &act.after {
-                    emit(&client_out, &encode(msg))?;
-                }
+                track_push_then_write(&line, &state, setup.as_deref(), &pusher, &client_out)?;
                 line.clear();
             }
             Ok(())
@@ -608,19 +601,31 @@ struct Agent {
     push: Option<Push>,
 }
 
-fn track_and_push(
+fn track_push_then_write(
     line: &[u8],
     state: &Mutex<State>,
     setup: Option<&Setup>,
     pusher: &mpsc::Sender<Push>,
-) -> Agent {
-    let mut act = setup
+    client_out: &Mutex<impl Write>,
+) -> std::io::Result<()> {
+    let Agent {
+        line: changed,
+        after,
+        push,
+    } = setup
         .and_then(|s| from_agent_line(line, state, s))
         .unwrap_or_default();
-    if let Some(push) = act.push.take() {
+    if let Some(push) = push {
         let _ = pusher.send(push);
     }
-    act
+    match &changed {
+        Some(msg) => emit(client_out, &encode(msg))?,
+        None => emit(client_out, line)?,
+    }
+    if let Some(msg) = &after {
+        emit(client_out, &encode(msg))?;
+    }
+    Ok(())
 }
 
 fn from_agent_line(line: &[u8], state: &Mutex<State>, setup: &Setup) -> Option<Agent> {
