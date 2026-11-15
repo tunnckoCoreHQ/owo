@@ -129,17 +129,11 @@ fn link_re() -> &'static Regex {
 
 pub fn links(text: &str) -> Vec<Link> {
     let mut out = vec![];
-    for (i, line, open) in unfenced(text) {
-        if !open {
-            continue;
-        }
-        let cleaned = strip_inline_code(line);
-        for cap in link_re().captures_iter(&cleaned) {
-            let target = cap[1].trim().to_string();
-            let section = cap.get(2).map(|m| m.as_str().trim().to_string());
+    for (i, line, _) in unfenced(text).filter(|(_, _, open)| *open) {
+        for cap in link_re().captures_iter(&strip_inline_code(line)) {
             out.push(Link {
-                target,
-                section,
+                target: cap[1].trim().to_string(),
+                section: cap.get(2).map(|m| m.as_str().trim().to_string()),
                 line: i,
             });
         }
