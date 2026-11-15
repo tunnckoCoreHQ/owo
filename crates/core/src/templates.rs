@@ -4,102 +4,38 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
+macro_rules! t {
+    ($f:expr) => {
+        include_str!(concat!("../../../templates/", $f))
+    };
+}
+
 pub const IDENTITY_FILES: &[(&str, &str)] = &[
-    (
-        "identity.json",
-        include_str!("../../../templates/identity.json"),
-    ),
-    (
-        "soul/soul.json",
-        include_str!("../../../templates/soul/soul.json"),
-    ),
-    (
-        "soul/IDENTITY.md",
-        include_str!("../../../templates/soul/IDENTITY.md"),
-    ),
-    (
-        "soul/SOUL.md",
-        include_str!("../../../templates/soul/SOUL.md"),
-    ),
-    (
-        "soul/VOICE.md",
-        include_str!("../../../templates/soul/VOICE.md"),
-    ),
-    (
-        "soul/LOOK.md",
-        include_str!("../../../templates/soul/LOOK.md"),
-    ),
-    (
-        "soul/MEMORY.md",
-        include_str!("../../../templates/soul/MEMORY.md"),
-    ),
-    (
-        "soul/examples/good.md",
-        include_str!("../../../templates/soul/examples-good.md"),
-    ),
-    (
-        "soul/examples/bad.md",
-        include_str!("../../../templates/soul/examples-bad.md"),
-    ),
+    ("identity.json", t!("identity.json")),
+    ("soul/soul.json", t!("soul/soul.json")),
+    ("soul/IDENTITY.md", t!("soul/IDENTITY.md")),
+    ("soul/SOUL.md", t!("soul/SOUL.md")),
+    ("soul/VOICE.md", t!("soul/VOICE.md")),
+    ("soul/LOOK.md", t!("soul/LOOK.md")),
+    ("soul/MEMORY.md", t!("soul/MEMORY.md")),
+    ("soul/examples/good.md", t!("soul/examples-good.md")),
+    ("soul/examples/bad.md", t!("soul/examples-bad.md")),
     (
         "soul/examples/greetings.md",
-        include_str!("../../../templates/soul/examples-greetings.md"),
+        t!("soul/examples-greetings.md"),
     ),
-    (
-        "work/README.md",
-        include_str!("../../../templates/work-README.md"),
-    ),
+    ("work/README.md", t!("work-README.md")),
 ];
 
-pub const ENTRY_TEMPLATES: &[(&str, &str)] = &[
-    (
-        "character",
-        include_str!("../../../templates/entries/character.md"),
-    ),
-    (
-        "location",
-        include_str!("../../../templates/entries/location.md"),
-    ),
-    (
-        "location-detail",
-        include_str!("../../../templates/entries/location-detail.md"),
-    ),
-    (
-        "culture",
-        include_str!("../../../templates/entries/culture.md"),
-    ),
-    (
-        "faction",
-        include_str!("../../../templates/entries/faction.md"),
-    ),
-    ("era", include_str!("../../../templates/entries/era.md")),
-    ("event", include_str!("../../../templates/entries/event.md")),
-    (
-        "thread",
-        include_str!("../../../templates/entries/thread.md"),
-    ),
-    (
-        "conflict",
-        include_str!("../../../templates/entries/conflict.md"),
-    ),
-    (
-        "lesson",
-        include_str!("../../../templates/entries/lesson.md"),
-    ),
-    (
-        "writing",
-        include_str!("../../../templates/entries/writing.md"),
-    ),
-    ("log", include_str!("../../../templates/entries/log.md")),
-    (
-        "journal",
-        include_str!("../../../templates/entries/journal.md"),
-    ),
-    (
-        "project",
-        include_str!("../../../templates/entries/project.md"),
-    ),
-    ("note", include_str!("../../../templates/entries/note.md")),
+macro_rules! entries {
+    ($($n:literal)*) => {
+        &[$(($n, t!(concat!("entries/", $n, ".md")))),*]
+    };
+}
+
+pub const ENTRY_TEMPLATES: &[(&str, &str)] = entries![
+    "character" "location" "location-detail" "culture" "faction" "era" "event" "thread" "conflict"
+    "lesson" "writing" "log" "journal" "project" "note"
 ];
 
 pub fn all() -> Vec<(&'static str, String, &'static str)> {
