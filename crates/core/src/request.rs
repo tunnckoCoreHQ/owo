@@ -560,7 +560,7 @@ impl<R: Request> Request for DryRun<R> {
         Self {
             req: R::read(r, b.req),
             dry_run: r.flag(
-                Field::switch("dry-run", "Report the files it would write, and write none"),
+                Field::switch("dryRun", "Report the files it would write, and write none"),
                 b.dry_run,
             ),
         }

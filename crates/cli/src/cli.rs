@@ -173,11 +173,24 @@ fn help(op: &Operation, f: &Field) -> &'static str {
     }
 }
 
+/// The flag of a field name: each capital letter becomes `-` and its small letter, so the
+/// field `dryRun` is the flag `--dry-run`.
+fn flag(name: &str) -> String {
+    let mut flag = String::new();
+    for c in name.chars() {
+        if c.is_ascii_uppercase() {
+            flag.push('-');
+        }
+        flag.push(c.to_ascii_lowercase());
+    }
+    flag
+}
+
 /// The flag or positional argument of one field of `op`.
 fn arg(op: &Operation, f: &Field) -> Arg {
     let mut a = Arg::new(f.name).help(help(op, f));
     if !f.positional {
-        a = a.long(f.name);
+        a = a.long(flag(f.name));
     }
     if f.ty == Type::Switch {
         return a.action(ArgAction::SetTrue);

@@ -137,7 +137,7 @@ fn mcp_dry_run_names_the_file_and_writes_none() {
     let tmp = root(&["nicole"]);
     let (sel, env) = (select(tmp.path()), env(tmp.path()));
     let args =
-        json!({ "identity": "nicole", "kind": "character", "title": "Mara Voss", "dry-run": true });
+        json!({ "identity": "nicole", "kind": "character", "title": "Mara Voss", "dryRun": true });
     let r = reply(call("add", args), &sel, &env);
     assert_eq!(r["result"]["isError"], false, "{r}");
     let text = r["result"]["content"][0]["text"].as_str().unwrap();
