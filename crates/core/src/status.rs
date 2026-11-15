@@ -109,18 +109,12 @@ fn scope_activity(id: &Identity) -> Vec<(String, String)> {
 fn project_stamps(id: &Identity) -> std::collections::BTreeMap<String, String> {
     let mut out = std::collections::BTreeMap::<String, String>::new();
     for (scope, rel, at) in crate::state::stamps(id) {
-        if scope != "work" {
-            continue;
-        }
-        let Some((p, _)) = rel
+        let project = rel
             .strip_prefix("projects/")
-            .and_then(|rest| rest.split_once('/'))
-        else {
-            continue;
-        };
-        let newest = out.entry(p.to_string()).or_default();
-        if at > newest.as_str() {
-            *newest = at.to_string();
+            .and_then(|r| r.split_once('/'));
+        if let Some((p, _)) = project.filter(|_| scope == "work") {
+            let newest = out.entry(p.to_string()).or_default();
+            *newest = at.max(newest.as_str()).to_string();
         }
     }
     out
