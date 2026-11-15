@@ -219,6 +219,8 @@ impl Ingest {
         }))
     }
 
+    /// Starts the agent for the run whose prompt file is `prompt`, unless an agent runs. Its
+    /// output goes nowhere, so the client never sees it. A failure is one warning line.
     fn start(&self, prompt: &str, owo: &Arc<Owo>) {
         if self.busy.swap(true, Ordering::SeqCst) {
             return;
@@ -379,6 +381,8 @@ impl Proxy {
         let (store, jobs) = mpsc::channel::<Job>();
         let storer = std::thread::spawn(move || store_jobs(&owo, jobs));
 
+        // Agent to client. The state changes, and a finished turn goes to the store, before the
+        // line is written, so the client's next request already sees them.
         let copied = (|| -> std::io::Result<()> {
             let mut line = vec![];
             while agent_out.read_until(b'\n', &mut line)? > 0 {
