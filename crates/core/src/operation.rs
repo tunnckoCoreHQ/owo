@@ -67,25 +67,17 @@ impl Operation {
     }
 }
 
-fn build<Q: Request + 'static>(
+fn op<R: Request + 'static>(
     path: &'static [&'static str],
     about: &'static str,
-    run: impl Fn(Q, &mut Call) -> Result<Result<Outcome>> + Send + Sync + 'static,
+    call: impl Fn(R, &mut Call) -> Result<Outcome> + Send + Sync + 'static,
 ) -> Operation {
     Operation {
         path,
         about,
-        fields: Q::fields(),
-        run: Box::new(move |args, s| run(Q::from_args(args)?, s)),
+        fields: R::fields(),
+        run: Box::new(move |args, s| Ok(call(R::from_args(args)?, s))),
     }
-}
-
-fn op<R: Request + 'static>(
-    path: &'static [&'static str],
-    about: &'static str,
-    call: fn(R, &mut Call) -> Result<Outcome>,
-) -> Operation {
-    build::<R>(path, about, move |req, s| Ok(call(req, s)))
 }
 
 fn write_op<R: Request + 'static>(
@@ -93,15 +85,15 @@ fn write_op<R: Request + 'static>(
     about: &'static str,
     call: fn(R, &mut Call) -> Result<Outcome>,
 ) -> Operation {
-    build::<DryRun<R>>(path, about, move |DryRun { req, dry_run }, s| {
+    op::<DryRun<R>>(path, about, move |DryRun { req, dry_run }, s| {
         if !dry_run {
-            return Ok(call(req, s));
+            return call(req, s);
         }
         let (result, writes) = crate::write::dry_run(|| call(req, s));
-        Ok(result.map(|outcome| Outcome::DryRun {
+        result.map(|outcome| Outcome::DryRun {
             outcome: Box::new(outcome),
             writes,
-        }))
+        })
     })
 }
 
