@@ -1,6 +1,3 @@
-//! One test per finding of the PR #10 bug hunts. Each test starts in a process folder of its
-//! own, apart from `Env.cwd`, so a path that resolves against the process folder shows.
-
 mod common;
 
 use chrono::NaiveDate;
@@ -15,14 +12,12 @@ use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
 use tempfile::TempDir;
 
-/// The process folder of every test here: a folder of its own, never deleted.
 static PROCESS: LazyLock<PathBuf> = LazyLock::new(|| {
     let dir = TempDir::new().unwrap().keep();
     std::env::set_current_dir(&dir).unwrap();
     dir
 });
 
-/// None of `names` written into the process folder.
 fn process_untouched(names: &[&str]) {
     for name in names {
         assert!(
@@ -32,7 +27,6 @@ fn process_untouched(names: &[&str]) {
     }
 }
 
-/// A folder holding `ids/nicole` and `work/`, the caller's folder.
 fn setup() -> TempDir {
     LazyLock::force(&PROCESS);
     let tmp = TempDir::new().unwrap();
@@ -63,7 +57,6 @@ fn identity(tmp: &Path) -> Identity {
         .unwrap()
 }
 
-/// The tool result of one MCP call: (text, isError).
 fn call(name: &str, arguments: Value, sel: &Select, env: &Env) -> (String, bool) {
     let msg = json!({ "jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": { "name": name, "arguments": arguments } });
     let r = mcp::reply(msg.to_string().as_bytes(), sel, env).unwrap();
@@ -190,7 +183,6 @@ fn pr10_date_outside_four_digit_years_is_a_usage_error() {
     assert_eq!(fs::read_to_string(&state).unwrap(), before);
 }
 
-/// A root set by `.owo.toml` in the parent of the caller's folder.
 fn parent_root() -> (TempDir, Select, Env) {
     let tmp = setup();
     fs::write(
@@ -239,8 +231,7 @@ fn pr10_multi_value_array_names_the_field_type() {
     assert!(text.contains("paths, text"), "{text}");
 }
 
-// macOS file systems refuse a name that is not UTF-8, so the bytes cannot reach owo there. The
-// core reads the bytes as UTF-8 text, so it finds the folder and the file of that name.
+// macOS file systems refuse a name that is not UTF-8, so the bytes cannot reach owo there.
 #[cfg(all(unix, not(target_os = "macos")))]
 #[test]
 fn pr10_core_turns_a_non_utf8_path_into_utf8_text() {
@@ -285,7 +276,6 @@ fn pr10_core_turns_a_non_utf8_path_into_utf8_text() {
     );
 }
 
-/// The stderr of a failed `owo` run in `work`, the caller's folder.
 fn cli_error(tmp: &Path, args: &[&str]) -> String {
     let out = owo(&tmp.join("ids"))
         .current_dir(tmp.join("work"))
@@ -296,7 +286,6 @@ fn cli_error(tmp: &Path, args: &[&str]) -> String {
     String::from_utf8_lossy(&out.stderr).into_owned()
 }
 
-/// A read-only folder `ro` in `work`.
 #[cfg(unix)]
 fn read_only(tmp: &Path) {
     use std::os::unix::fs::PermissionsExt;

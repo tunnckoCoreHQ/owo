@@ -1,5 +1,3 @@
-//! End-to-end test for `owo migrate v1`.
-
 mod common;
 
 use assert_cmd::Command;

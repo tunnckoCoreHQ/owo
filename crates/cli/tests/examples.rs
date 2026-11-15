@@ -1,6 +1,3 @@
-//! End-to-end tests against the committed identities in `examples/`.
-//! Read-only commands run in place; commands that write run on a copy.
-
 mod common;
 
 use assert_cmd::Command;
@@ -701,7 +698,6 @@ fn card_png_and_scenario() {
         })
         .collect();
     assert_eq!(names, ["IHDR", "IDAT", "tEXt:chara", "tEXt:ccv3", "IEND"]);
-    // embedding again replaces the chunks
     owo(&root)
         .args(["-i", "nicole", "export", "card", "--spec", "v2", "--png"])
         .arg(&out)

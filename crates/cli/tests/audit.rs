@@ -1,5 +1,3 @@
-//! One test per open finding from the full review. Each fails until its bug is fixed.
-
 mod common;
 
 use common::acp::{
@@ -363,7 +361,6 @@ fn recurring_phrases_stay_inside_one_line() {
 #[test]
 fn stamp_writes_the_local_day_like_add() {
     let tmp = TempDir::new().unwrap();
-    // A zone where the local day differs from the UTC day right now.
     let tz = if chrono::Timelike::hour(&chrono::Utc::now()) < 12 {
         "Etc/GMT+12"
     } else {
@@ -446,7 +443,6 @@ fn lint_changed_keeps_a_path_with_a_quote() {
     git(tmp.path(), &["commit", "-q", "-m", "init"], None);
     let file = tmp.path().join("thea/soul/examples/a\"b.md");
     fs::write(&file, "See [[Nobody]].\n").unwrap();
-    // Stamped and its state committed, so only Git can name the file as changed.
     owo(tmp.path())
         .args(["-i", "thea", "stamp"])
         .assert()
@@ -459,8 +455,6 @@ fn lint_changed_keeps_a_path_with_a_quote() {
     let out = stdout(tmp.path(), &["changes"]);
     assert!(out.contains("soul/examples/a\"b.md"), "{out}");
 }
-
-// Findings from the review of the library core, the in-process MCP calls and `owo acp`.
 
 fn call(id: u64, tool: &str, arguments: Value) -> Value {
     json!({ "jsonrpc": "2.0", "id": id, "method": "tools/call", "params": { "name": tool, "arguments": arguments } })
@@ -483,7 +477,6 @@ fn mcp_tool_does_not_read_the_servers_stdin() {
         "sync_start",
         json!({ "session": "s1", "transcript": "/dev/stdin", "now": true }),
     );
-    // The second request arrives while the first tool call runs.
     let mut stdin = child.stdin.take().unwrap();
     stdin.write_all(format!("{start}\n").as_bytes()).unwrap();
     std::thread::sleep(std::time::Duration::from_millis(300));
@@ -557,8 +550,6 @@ fn mcp_refuses_a_nul_in_an_argument() {
     assert!(!tmp.path().join("thea/life/characters/nul.md").exists());
 }
 
-/// The exit code of `owo <args>` on an empty root while the test keeps stdin open; None when
-/// owo is still running after two seconds.
 fn code_with_open_stdin(args: &[&str]) -> Option<i32> {
     let tmp = TempDir::new().unwrap();
     let mut child = std::process::Command::new(assert_cmd::cargo::cargo_bin("owo"))
@@ -570,7 +561,6 @@ fn code_with_open_stdin(args: &[&str]) -> Option<i32> {
         .stderr(std::process::Stdio::null())
         .spawn()
         .unwrap();
-    // The test keeps stdin open, so a read of it never ends.
     let _open = child.stdin.take();
     let stop = std::time::Instant::now() + std::time::Duration::from_secs(2);
     loop {
@@ -610,7 +600,6 @@ fn help_into_a_closed_pipe_exits_zero() {
     assert_eq!(status.code(), Some(0));
 }
 
-/// A proxy on `root` with a new session `s1`.
 fn acp_session(root: &Path, flags: &[&str]) -> Proxy {
     let mut p = start(root, flags, 0);
     p.send(&init(), &[init_reply(json!({}))]);

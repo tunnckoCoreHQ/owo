@@ -1,5 +1,3 @@
-//! End-to-end test for `owo mcp`: JSON-RPC over stdin and stdout.
-
 mod common;
 
 use common::{copy_example, examples, owo};
@@ -207,7 +205,6 @@ fn mcp_remote_serves_http() {
         status("POST /mcp", &format!("{ok}Origin: http://example.com\r\n")),
         status(
             "POST /mcp",
-            // A tunnel forwards its public hostname.
             &format!("Host: example.com:{port}\r\nContent-Type: application/json\r\n"),
         ),
         status("POST /mcp", &format!("Host: localhost:{port}\r\n")),
@@ -235,7 +232,6 @@ fn mcp_remote_serves_http() {
     );
 }
 
-/// The CLI's output joined as a tool result: stdout, or stderr when stdout is blank, or both.
 fn cli_result(root: &Path, args: &[&str], stdin: &str) -> (String, bool) {
     let out = owo(root)
         .args(["-i", "nicole"])
@@ -328,8 +324,6 @@ fn mcp_tool_results_equal_the_cli_output() {
         errors += failed as usize;
     }
     assert_eq!(errors, 1, "the failing call");
-    // A bad argument is refused before the library call, with its own text, and a library
-    // rule gives the library's usage error.
     let bad = [
         call(0, "search", json!({ "query": "kiln", "limit": "many" })),
         call(1, "changes", json!({ "since": "2026-01-01", "days": 3 })),

@@ -1,5 +1,3 @@
-//! End-to-end tests for `owo sync`.
-
 mod common;
 
 use common::{copy_example, copy_tree, examples, json, owo};

@@ -1,5 +1,3 @@
-//! End-to-end tests: run the built `owo` binary against temporary roots.
-
 mod common;
 
 use common::{copy_example, copy_tree, examples, json, owo};
@@ -8,7 +6,6 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use tempfile::TempDir;
 
-/// A fresh "Aria" identity with the fixture entries copied in and indexes regenerated.
 fn aria() -> (TempDir, PathBuf) {
     let tmp = TempDir::new().unwrap();
     owo(tmp.path()).args(["new", "Aria"]).assert().success();
@@ -143,20 +140,15 @@ fn broken_entries_are_reported() {
         fs::create_dir_all(p.parent().unwrap()).unwrap();
         fs::write(p, text).unwrap();
     };
-    // links + journal + identifiers
     w(
         "life/events/storm.md",
         "---\ntype: event\ntitle: Storm\nsummary: A storm.\nstatus: disputed\ncreated: 2026-10-01\nupdated: 2026-10-01\ndate: 2026-07-01\n---\n\n# Storm\n\nSee [[Nowhere]] and [[Salt]]. Sam was born 1990-04-12.\n",
     );
-    // schema: bad type, bad status, bad date filename
     w("life/characters/bad.md", "---\ntype: event\ntitle: Bad\nsummary: x\nstatus: maybe\ncreated: 2026-13-01\nupdated: 2026-10-01\n---\n# Bad\n");
     w("life/log/2026-07-02.md", "---\ntype: log\ntitle: Day\nstatus: canon\ncreated: 2026-07-02\nupdated: 2026-07-02\ndate: 2026-07-03\n---\n- x\n");
-    // unique: alias collides with a title
     w("life/characters/samuel-two.md", "---\ntype: character\ntitle: Sam Two\naliases: [Samuel]\nsummary: x\nstatus: canon\ncreated: 2026-10-01\nupdated: 2026-10-01\n---\n# Sam Two\n");
-    // tree: stray file and location without overview
     w("life/notes.md", "# stray\n");
     w("life/locations/empty-place/detail.md", "---\ntype: location-detail\ntitle: Detail\nsummary: x\nstatus: canon\ncreated: 2026-10-01\nupdated: 2026-10-01\nparent: \"[[Harbor House]]\"\n---\n# Detail\n");
-    // soul-plain and supersede
     w("soul/LOOK.md", "---\nupdated: 2026-10-01\n---\n# Look\n");
     w("life/lessons/old.md", "---\ntype: lesson\ntitle: Old\nsummary: x\nstatus: superseded\ncreated: 2026-10-01\nupdated: 2026-10-01\n---\n# Old\n");
 
@@ -529,7 +521,6 @@ fn soul_prints_identity_and_soul_or_the_flagged_files() {
     owo(tmp.path()).args(["soul", "history"]).assert().success();
 }
 
-/// `owo` run from `cwd` with no `--root` and the user config folders inside `home`.
 fn owo_in(cwd: &Path, home: &Path) -> assert_cmd::Command {
     let mut cmd = assert_cmd::Command::cargo_bin("owo").unwrap();
     cmd.current_dir(cwd)

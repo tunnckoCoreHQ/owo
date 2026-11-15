@@ -1,5 +1,3 @@
-//! Every write is all or nothing: a file is replaced through a temporary file and a rename, no
-//! temporary file stays, and a command that writes several files leaves all of them or none.
 #![cfg(unix)]
 
 mod common;
@@ -11,7 +9,6 @@ use std::os::unix::fs::{MetadataExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 use tempfile::TempDir;
 
-/// A folder holding `ids/nicole` and `work/`, the caller's folder.
 fn setup() -> TempDir {
     let tmp = TempDir::new().unwrap();
     copy_tree(&examples().join("nicole"), &tmp.path().join("ids/nicole"));
@@ -23,7 +20,6 @@ fn nicole(tmp: &Path) -> PathBuf {
     tmp.join("ids/nicole")
 }
 
-/// Runs `owo` in `work` with `args`; returns whether it succeeded.
 fn run(tmp: &Path, args: &[&str]) -> bool {
     owo(&tmp.join("ids"))
         .current_dir(tmp.join("work"))
@@ -34,7 +30,6 @@ fn run(tmp: &Path, args: &[&str]) -> bool {
         .success()
 }
 
-/// Every path under `dir` with its bytes (None for a folder).
 fn snapshot(dir: &Path) -> BTreeMap<PathBuf, Option<Vec<u8>>> {
     walkdir::WalkDir::new(dir)
         .into_iter()
@@ -61,14 +56,12 @@ fn ino(path: &Path) -> u64 {
     fs::metadata(path).unwrap().ino()
 }
 
-/// Runs `f` with `dir` read-only, then makes it writable again.
 fn read_only(dir: &Path, f: impl FnOnce()) {
     fs::set_permissions(dir, fs::Permissions::from_mode(0o555)).unwrap();
     f();
     fs::set_permissions(dir, fs::Permissions::from_mode(0o755)).unwrap();
 }
 
-/// A non-empty folder at `path`, so a rename onto it fails.
 fn block(path: &Path) {
     fs::create_dir_all(path.join("x")).unwrap();
 }

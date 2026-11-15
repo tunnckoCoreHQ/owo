@@ -1,6 +1,3 @@
-//! The ingest prompt and the auto-ingest of the ACP proxy: a due or pending run of a push
-//! starts a background agent with the run's prompt, one at a time.
-
 use owo_core::{acp, Env, ErrorKind, Fault, Role, Root, Select, SyncOptions, Turn};
 use serde_json::json;
 use std::io::{BufRead, BufReader, Write};
@@ -8,7 +5,6 @@ use std::path::Path;
 use std::time::{Duration, Instant};
 use tempfile::TempDir;
 
-/// A root with the example identity `nicole` and `config` as its `.owo.toml`.
 fn root(config: &str) -> TempDir {
     let tmp = TempDir::new().unwrap();
     let from = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/nicole");
@@ -56,7 +52,6 @@ fn options(agent: &[&str]) -> acp::Options {
     }
 }
 
-/// A writer into a shared buffer, for the warning lines.
 #[derive(Clone, Default)]
 struct Shared(std::sync::Arc<std::sync::Mutex<Vec<u8>>>);
 
@@ -69,7 +64,6 @@ impl Write for Shared {
     }
 }
 
-/// A proxy whose agent answers each prompt with one message and the end of the turn.
 struct Client {
     to_proxy: std::io::PipeWriter,
     from_proxy: BufReader<std::io::PipeReader>,
@@ -137,8 +131,6 @@ impl Client {
         line
     }
 
-    /// Sends a prompt and reads the two lines that answer it: the message and the end of the
-    /// turn. The client sees nothing else.
     fn prompt(&mut self, id: u64) {
         self.send(&json!({ "jsonrpc": "2.0", "id": id, "method": "session/prompt", "params": { "sessionId": "s1", "prompt": [{ "type": "text", "text": format!("turn {id}") }] } }));
         assert!(self.read().contains("agent_message_chunk"));
@@ -161,7 +153,6 @@ impl Client {
     }
 }
 
-/// Waits up to 10 seconds for `path` to hold `lines` lines, and returns its text.
 fn wait_lines(path: &Path, lines: usize) -> String {
     let until = Instant::now() + Duration::from_secs(10);
     loop {
@@ -250,13 +241,11 @@ fn one_ingest_runs_at_a_time_and_a_skipped_run_starts_later() {
     let mut c = start(tmp.path());
     c.prompt(2);
     wait_lines(&runs, 1);
-    // A due run while one ingest runs starts no other.
     c.prompt(3);
     std::thread::sleep(Duration::from_millis(200));
     assert_eq!(std::fs::read_to_string(&runs).unwrap(), "start\n");
     wait_lines(&runs, 2);
     std::thread::sleep(Duration::from_millis(300));
-    // The run stays pending, so the next push starts it.
     c.prompt(4);
     let warnings = c.end();
     assert_eq!(warnings, "", "no warnings");
@@ -275,7 +264,6 @@ fn a_pending_run_starts_on_a_later_push_that_is_not_due() {
     c.prompt(3);
     wait_lines(&runs, 1);
     std::thread::sleep(Duration::from_millis(300));
-    // One new user turn is not due, but the run is still pending.
     c.prompt(4);
     c.end();
     assert_eq!(wait_lines(&runs, 2), "run\nrun\n");
@@ -283,7 +271,6 @@ fn a_pending_run_starts_on_a_later_push_that_is_not_due() {
 
 #[test]
 fn a_dry_run_starts_no_ingest_of_a_pending_run() {
-    // A real session leaves a run on disk that is still pending.
     let tmp = root("sync_every = 1\n");
     let mut c = start(tmp.path());
     c.prompt(2);
