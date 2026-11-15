@@ -69,9 +69,9 @@ fn resolve_show_links() {
 
 #[test]
 fn resolve_without_a_name_is_a_usage_error() {
-    let one = copy_example("nicole");
+    let one_identity = copy_example("nicole");
     for mut cmd in [
-        owo(one.path()),
+        owo(one_identity.path()),
         owo(&examples()),
         owo_as(&examples(), "nicole"),
     ] {
@@ -79,6 +79,14 @@ fn resolve_without_a_name_is_a_usage_error() {
         assert_eq!(out.status.code(), Some(2));
         assert!(out.stdout.is_empty());
         assert!(String::from_utf8_lossy(&out.stderr).contains("required arguments"));
+    }
+    for name in ["", " "] {
+        owo(one_identity.path())
+            .args(["resolve", name])
+            .assert()
+            .code(1)
+            .stdout("")
+            .stderr(format!("owo: {name:?} does not resolve to one entry\n"));
     }
 }
 

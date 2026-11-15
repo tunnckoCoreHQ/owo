@@ -72,6 +72,10 @@ pub fn resolve(id: &Identity, name: &str, kind: Option<Kind>) -> Resolution {
         1 => Resolution::Found(hits[0]),
         0 => {
             let needle = name.trim().to_lowercase();
+            // An empty needle is in every key, so it has no candidates.
+            if needle.is_empty() {
+                return Resolution::Missing(vec![]);
+            }
             let mut scored: Vec<(usize, usize)> = id
                 .keys
                 .iter()
