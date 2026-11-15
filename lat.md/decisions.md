@@ -148,7 +148,7 @@ A dry run (`Options::dry_run`, `owo acp --dry-run`) starts no ingest agent, beca
 
 One agent runs at a time in a proxy: while one runs, a push starts no other. The run of that push stays pending, so a later push of the session reports it and starts it then. A run whose agent ended without `sync done` stays pending too, and the next push of the session starts it again.
 
-The command is `ingest_command` from the config. Without it, the proxy takes the ingest command from the ACP agent command (`Options::agent`), by the name of an argument without its folder and its `@version`, so a path and an `npx` package name work too. `harness_command` in `acp.rs` holds the table:
+The command is `ingest_command` from the config. Without it, the proxy takes the ingest command from the ACP agent command (`Options::agent`), by the name of an argument without its folder and its `@version`, so a path and an `npx` package name work too. `ingest_command_for` in `acp.rs` holds the table:
 
 | Agent command | Ingest command |
 | :- | :- |

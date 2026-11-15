@@ -330,7 +330,7 @@ fn an_unknown_adapter_needs_ingest_command() {
 fn the_ingest_command_comes_from_the_adapter() {
     let of = |agent: &[&str]| {
         let agent: Vec<String> = agent.iter().map(|s| s.to_string()).collect();
-        acp::harness_command(&agent)
+        acp::ingest_command_for(&agent)
     };
     let first = |agent: &[&str]| of(agent).map(|c| c[..2].join(" "));
     assert_eq!(

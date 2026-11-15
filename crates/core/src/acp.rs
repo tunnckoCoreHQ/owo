@@ -68,7 +68,7 @@ enum Pending {
 }
 
 #[derive(Default)]
-struct Turn {
+struct Prompt {
     request: String,
     replay: bool,
     user: String,
@@ -78,8 +78,8 @@ struct Turn {
     update_after_chunk: bool,
 }
 
-impl Turn {
-    fn agent_turn_to_join(&mut self, id: &Option<String>) -> Option<&mut String> {
+impl Prompt {
+    fn assistant_turn_to_join(&mut self, id: &Option<String>) -> Option<&mut String> {
         let message = match id {
             Some(_) => self.agent.iter_mut().find(|(i, _)| i == id),
             None if self.update_after_chunk => None,
@@ -107,7 +107,7 @@ struct State {
     start: Option<String>,
     pending: HashMap<String, Pending>,
     needs_identity_block: HashSet<String>,
-    turns: HashMap<String, VecDeque<Turn>>,
+    prompts: HashMap<String, VecDeque<Prompt>>,
     sessions: HashMap<String, Session>,
 }
 
@@ -168,7 +168,7 @@ pub struct Options {
     pub agent: Vec<String>,
 }
 
-pub fn harness_command(agent: &[String]) -> Option<Vec<String>> {
+pub fn ingest_command_for(agent: &[String]) -> Option<Vec<String>> {
     let command: &[&str] = agent.iter().find_map(|arg| {
         // A path, or a package such as `@zed-industries/claude-agent-acp@0.5.0`.
         let name = arg.rsplit('/').next()?.split('@').next()?;
@@ -210,7 +210,7 @@ impl Ingest {
             .ingest_command
             .clone()
             .filter(|c| !c.is_empty())
-            .or_else(|| harness_command(agent))
+            .or_else(|| ingest_command_for(agent))
             .ok_or_else(|| crate::Fault::NoIngestCommand(agent.join(" ")))?;
         Ok(Some(Ingest {
             command,
@@ -390,10 +390,10 @@ impl Proxy {
             Ok(())
         })();
         let mut st = state.lock().unwrap();
-        let open: Vec<_> = st.turns.drain().collect();
+        let open: Vec<_> = st.prompts.drain().collect();
         for (session, open) in open {
-            for turn in open {
-                if let Some(push) = push_of(turn.identity.clone(), &session, turns(turn)) {
+            for prompt in open {
+                if let Some(push) = push_of(prompt.identity.clone(), &session, turns(prompt)) {
                     let _ = pusher.send(push);
                 }
             }
@@ -434,7 +434,7 @@ fn from_client(msg: &mut Value, state: &Mutex<State>, setup: &Setup) -> Option<R
                 }
                 ("session/load", Some(s)) => {
                     let identity = st.session(s).identity.clone();
-                    st.turns.entry(s.clone()).or_default().push_back(Turn {
+                    st.prompts.entry(s.clone()).or_default().push_back(Prompt {
                         request: key.clone(),
                         replay: true,
                         identity,
@@ -490,10 +490,10 @@ fn from_client(msg: &mut Value, state: &Mutex<State>, setup: &Setup) -> Option<R
                 .then(|| identity.as_deref().and_then(|i| setup.identity_block(i)))
                 .flatten();
             let has_identity_block = text.is_some();
-            st.turns
+            st.prompts
                 .entry(session.clone())
                 .or_default()
-                .push_back(Turn {
+                .push_back(Prompt {
                     request: key.clone(),
                     user,
                     has_identity_block,
@@ -706,43 +706,43 @@ fn from_agent_line(line: &[u8], state: &Mutex<State>, setup: &Setup) -> Option<A
 }
 
 fn track(st: &mut State, session: &str, update: &Value) -> Option<()> {
-    let turn = st.turns.get_mut(session)?.front_mut()?;
+    let prompt = st.prompts.get_mut(session)?.front_mut()?;
     if update["sessionUpdate"] != "agent_message_chunk" || update["content"]["type"] != "text" {
-        turn.update_after_chunk = true;
+        prompt.update_after_chunk = true;
         return None;
     }
     let text = update["content"]["text"].as_str()?;
     let id = update["messageId"].as_str().map(String::from);
-    match turn.agent_turn_to_join(&id) {
+    match prompt.assistant_turn_to_join(&id) {
         Some(joined) => joined.push_str(text),
-        None => turn.agent.push((id, text.to_string())),
+        None => prompt.agent.push((id, text.to_string())),
     }
-    turn.update_after_chunk = false;
+    prompt.update_after_chunk = false;
     Some(())
 }
 
 fn finish(st: &mut State, session: &str, request: &str, error: bool) -> Option<Push> {
-    let open = st.turns.get_mut(session)?;
-    let turn = open.remove(open.iter().position(|t| t.request == request)?)?;
-    if turn.has_identity_block && error {
+    let open = st.prompts.get_mut(session)?;
+    let prompt = open.remove(open.iter().position(|t| t.request == request)?)?;
+    if prompt.has_identity_block && error {
         st.needs_identity_block.insert(session.into());
     }
-    push_of(turn.identity.clone(), session, turns(turn))
+    push_of(prompt.identity.clone(), session, turns(prompt))
 }
 
-fn turns(turn: Turn) -> Vec<crate::Turn> {
-    let replay = turn.replay;
+fn turns(prompt: Prompt) -> Vec<crate::Turn> {
+    let replay = prompt.replay;
     let user = (!replay).then(|| crate::Turn {
-        id: turn
+        id: prompt
             .agent
             .iter()
             .find_map(|(id, _)| id.as_ref())
             .map(|id| format!("{id}.user"))
             .unwrap_or_else(clock_id),
         role: crate::Role::User,
-        text: turn.user,
+        text: prompt.user,
     });
-    let agent = turn.agent.into_iter().filter_map(|(id, text)| {
+    let agent = prompt.agent.into_iter().filter_map(|(id, text)| {
         let id = match id {
             Some(id) => id,
             None if !replay => clock_id(),
