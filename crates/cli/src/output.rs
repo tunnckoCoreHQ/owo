@@ -148,5 +148,6 @@ fn says(fault: &Fault) -> String {
         }
         // Clap refuses these before the call, with its own text.
         Fault::OutOfRange { .. } | Fault::Conflict(..) | Fault::Needs(..) => fault.to_string(),
+        Fault::NoIngestCommand(_) => format!("{fault} (set it in .owo.toml or the user config)"),
     }
 }

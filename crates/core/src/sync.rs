@@ -1,7 +1,7 @@
 //! `owo sync start` / `owo sync done`: host-agnostic session sync.
 //! The host calls `start` after each turn; when enough new user turns exist, owo writes the
 //! slice to `<root>/sources/<slug>/` and an ingest prompt to `<root>/.owo/sessions/`.
-//! The host runs the ingest agent and then calls `done --until <n>` to move the bookmark.
+//! The host runs the ingest agent, whose last step is `done --until <n>`, which moves the bookmark.
 
 use crate::identity::read_object;
 use crate::write::Writes;
@@ -497,7 +497,7 @@ fn run(
         let root = fs::canonicalize(req.root).unwrap_or_else(|_| req.root.to_path_buf());
         let quoted = format!("'{}'", root.display().to_string().replace('\'', "'\\''"));
         let text = format!(
-            "Use the identity-ingest skill for identity `{slug}`{proj}.\n\nSource: `{source}` (relative to the identities root `{root}`).{earlier}\n\n1. `{owo} context{project}` and `{owo} state`.\n2. Route each durable fact in the source to its home; add `{cite}#L<a>-L<b>` to each entry's frontmatter `sources`.\n3. Finish with `{owo} stamp && {owo} index && {owo} lint --changed`.\n4. Report changed paths or \"no changes\".\n\nWhen it succeeds the host runs `owo --root {quoted} sync done --session {session} --until {until}`.\n",
+            "Use owo ingest (the ingest part of the owo skill) for identity `{slug}`{proj}.\n\nSource: `{source}` (relative to the identities root `{root}`).{earlier}\n\n1. `{owo} context{project}` and `{owo} state`.\n2. Route each durable fact in the source to its home; add `{cite}#L<a>-L<b>` to each entry's frontmatter `sources`.\n3. Run the checkpoint: `{owo} stamp && {owo} index && {owo} lint --changed`.\n4. Report changed paths or \"no changes\".\n5. When the checkpoint passes, finish the run with `owo --root {quoted} sync done --session {session} --until {until}`.\n",
             slug = req.slug,
             earlier = if done == 0 { String::new() } else { format!(" Messages before {done} were ingested in an earlier run; the first part is overlap for context.") },
             root = root.display(),

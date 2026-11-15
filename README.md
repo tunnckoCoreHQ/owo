@@ -18,7 +18,7 @@ owo -i thea index && owo -i thea stamp && owo -i thea lint
 
 ## Skills
 
-The `skills/` folder holds four skills: `identity`, `identity-create`, `identity-ingest` and `identity-review`. Copy or link each folder into the host's skills folder, for example `~/.claude/skills/` for Claude Code. Keep the four side by side, because the other three link to `identity/references/rules.md`.
+The `skills/owo/` folder holds the owo skill. Copy or link it into the host's skills folder, for example `~/.claude/skills/owo` for Claude Code. Its entry file sends the agent to the part for the task: everyday use, owo create, owo ingest or owo review. The four older skills are in `_skills/` for reference.
 
 ## Sync hook
 
@@ -34,6 +34,6 @@ A host with no local transcript, such as a hosted chat over MCP, sends its recen
 owo -i thea sync push --session <session_id> --json < turns.json
 ```
 
-When the reply has `due: true`, run a background agent with the prompt it names and the `identity-ingest` skill, then call `owo -i thea sync done --session <session_id> --until <until>`. For Claude Code, put the `sync start` line in a `Stop` hook.
+When the reply has `due: true`, run a background agent with the prompt it names. The prompt is the whole task: it asks for owo ingest, and its last step is `owo sync done` for that run. With `owo acp`, set `auto_ingest = true` and the proxy runs that agent itself. For Claude Code, put the `sync start` line in a `Stop` hook.
 
 More: [lat.md/](lat.md/lat.md).
