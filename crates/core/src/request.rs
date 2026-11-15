@@ -371,6 +371,10 @@ impl<'a> Reader<'a> {
         })
     }
 
+    pub fn int_or<T: FromStr + Into<Value> + Copy>(&mut self, f: Field, base: T) -> T {
+        self.int(f, Some(base)).unwrap_or(base)
+    }
+
     pub fn day(&mut self, f: Field, base: Option<NaiveDate>) -> Option<NaiveDate> {
         let name = f.name;
         let Some((name, a)) = self.declare(f, Type::Day, given(base.is_some())) else {
@@ -786,12 +790,10 @@ impl Request for ContextRequest {
                 Field::new("with", "Add a resolvable entry (repeatable)"),
                 b.with,
             ),
-            notes: r
-                .int(
-                    Field::new("notes", "Recent project notes to include").default(d.notes),
-                    Some(b.notes),
-                )
-                .unwrap_or(b.notes),
+            notes: r.int_or(
+                Field::new("notes", "Recent project notes to include").default(d.notes),
+                b.notes,
+            ),
             paths: r.pick(
                 Field::new(
                     "format",
@@ -821,14 +823,12 @@ impl Request for StateRequest {
     fn read(r: &mut Reader, b: Self) -> Self {
         let d = Self::default();
         Self {
-            days: r
-                .int(
-                    Field::new("days", "Window for recent events")
-                        .default(d.days)
-                        .range(0, MAX_DAYS),
-                    Some(b.days),
-                )
-                .unwrap_or(b.days),
+            days: r.int_or(
+                Field::new("days", "Window for recent events")
+                    .default(d.days)
+                    .range(0, MAX_DAYS),
+                b.days,
+            ),
         }
     }
 }
@@ -874,12 +874,10 @@ impl Request for SearchRequest {
                 ),
                 b.since,
             ),
-            limit: r
-                .int(
-                    Field::new("limit", "Most hits to print").default(d.limit),
-                    Some(b.limit),
-                )
-                .unwrap_or(b.limit),
+            limit: r.int_or(
+                Field::new("limit", "Most hits to print").default(d.limit),
+                b.limit,
+            ),
         }
     }
 }
@@ -1173,16 +1171,14 @@ impl Request for SyncDoneRequest {
                 session_field("Session id given to sync start or sync push"),
                 b.session,
             ),
-            until: r
-                .int(
-                    Field::new(
-                        "until",
-                        "Message index the ingest run reached (the until from sync start)",
-                    )
-                    .required(),
-                    Some(b.until),
+            until: r.int_or(
+                Field::new(
+                    "until",
+                    "Message index the ingest run reached (the until from sync start)",
                 )
-                .unwrap_or(b.until),
+                .required(),
+                b.until,
+            ),
         }
     }
 }
