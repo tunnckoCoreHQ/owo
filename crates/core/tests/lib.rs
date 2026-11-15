@@ -425,6 +425,7 @@ fn acp_proxy_runs_on_given_streams() {
             inject: false,
             mcp_server,
             dry_run: false,
+            agent: vec![],
         },
         vec![
             vec![new_reply()],
@@ -509,6 +510,7 @@ fn acp_inject_puts_the_context_in_the_first_prompt() {
             inject: true,
             mcp_server,
             dry_run: false,
+            agent: vec![],
         },
         vec![vec![new_reply()], vec![end(2)], vec![end(3)]],
     );
@@ -537,6 +539,7 @@ fn acp_push_writes_the_run_when_due() {
             inject: false,
             mcp_server,
             dry_run: false,
+            agent: vec![],
         },
         replies,
     );
@@ -567,6 +570,7 @@ fn acp_dry_run_stores_no_turns() {
             inject: false,
             mcp_server,
             dry_run: true,
+            agent: vec![],
         },
         replies,
     );

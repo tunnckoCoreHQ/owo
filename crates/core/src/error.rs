@@ -92,6 +92,8 @@ pub enum Fault {
     Needs(&'static str, &'static str),
     /// The proxy option `inject` in a root with no identity.
     InjectNeedsIdentity,
+    /// `auto_ingest` on, with no `ingest_command` and an ACP agent command owo does not know.
+    NoIngestCommand(String),
 }
 
 impl Fault {
@@ -105,7 +107,8 @@ impl Fault {
             Fault::NoRoot
             | Fault::NoIdentity(_)
             | Fault::NoIdentityFolder(_)
-            | Fault::NoProject(_) => ErrorKind::Config,
+            | Fault::NoProject(_)
+            | Fault::NoIngestCommand(_) => ErrorKind::Config,
             _ => ErrorKind::Failed,
         }
     }
@@ -193,6 +196,10 @@ impl std::fmt::Display for Fault {
             Fault::Conflict(a, b) => write!(f, "{a} and {b} cannot be used together"),
             Fault::Needs(a, b) => write!(f, "{a} needs {b}"),
             Fault::InjectNeedsIdentity => f.write_str("inject needs an identity in the root"),
+            Fault::NoIngestCommand(agent) => write!(
+                f,
+                "auto_ingest needs ingest_command: owo knows no ingest command for the agent {agent:?}"
+            ),
         }
     }
 }

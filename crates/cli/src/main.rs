@@ -49,6 +49,7 @@ fn main() -> ExitCode {
                 inject: sub.get_flag("inject"),
                 mcp_server,
                 dry_run: sub.get_flag("dry-run"),
+                agent: agent.clone(),
             };
             match acp(&global, &env, &agent, options) {
                 Ok(code) => return ExitCode::from(code),

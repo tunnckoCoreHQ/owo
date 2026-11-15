@@ -18,6 +18,10 @@ pub struct FileConfig {
     pub project: Option<String>,
     /// New user turns per sync run.
     pub sync_every: Option<usize>,
+    /// The ACP proxy runs each due or pending run of a push as a background agent.
+    pub auto_ingest: Option<bool>,
+    /// The command of that agent; the proxy adds the run's prompt as its last argument.
+    pub ingest_command: Option<Vec<String>>,
 }
 
 /// Where a resolved value came from, reported by `owo config`.
@@ -41,6 +45,10 @@ pub struct Resolved {
     pub project: Option<String>,
     /// `sync_every` from `.owo.toml`, else from the user config.
     pub sync_every: Option<usize>,
+    /// `auto_ingest` from `.owo.toml`, else from the user config, else false.
+    pub auto_ingest: bool,
+    /// `ingest_command` from `.owo.toml`, else from the user config.
+    pub ingest_command: Option<Vec<String>>,
 }
 
 /// Inputs to resolution, so tests can run without touching the real environment.
@@ -190,9 +198,7 @@ pub fn resolve(inputs: &Inputs) -> Result<Resolved> {
         .clone()
         .or_else(|| inputs.env_project.clone())
         .or_else(|| project_cfg.as_ref().and_then(|(_, c)| c.project.clone()));
-    let sync_every = [&project_cfg, &user_cfg]
-        .into_iter()
-        .find_map(|cfg| cfg.as_ref().and_then(|(_, c)| c.sync_every));
+    let configs = [&project_cfg, &user_cfg];
 
     Ok(Resolved {
         root,
@@ -200,8 +206,20 @@ pub fn resolve(inputs: &Inputs) -> Result<Resolved> {
         identity,
         identity_source,
         project,
-        sync_every,
+        sync_every: first(configs, |c| c.sync_every),
+        auto_ingest: first(configs, |c| c.auto_ingest).unwrap_or(false),
+        ingest_command: first(configs, |c| c.ingest_command.clone()),
     })
+}
+
+/// A field set in `.owo.toml`, else in the user config.
+fn first<T>(
+    configs: [&Option<(PathBuf, FileConfig)>; 2],
+    field: impl Fn(&FileConfig) -> Option<T>,
+) -> Option<T> {
+    configs
+        .into_iter()
+        .find_map(|cfg| cfg.as_ref().and_then(|(_, c)| field(c)))
 }
 
 /// Lists identity folders: direct children of the root that hold `identity.json`.

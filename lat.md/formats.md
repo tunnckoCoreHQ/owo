@@ -111,6 +111,8 @@ When the root comes from a `.owo.toml` in a parent of the working folder, owo pr
 
 Identity resolves from `-i`, `OWO_IDENTITY`, `.owo.toml`, user config, then the only identity in the root. Project resolves from `--project`, `OWO_PROJECT`, `.owo.toml`; see [[decisions#Working project versus project filter]]. A relative `root` value resolves against the config file's folder; `~/` expands to `$HOME`. The run size of `sync` (`sync_every`, a number) resolves from `.owo.toml`, then the user config, then 6; an explicit `every` wins over it.
 
+Two fields set the auto-ingest of `owo acp`, and each resolves from `.owo.toml`, then the user config: `auto_ingest` (true or false, false by default) turns it on, and `ingest_command` (an array of strings, such as `["claude", "-p"]`) is the command of the background agent, which gets the prompt as its last argument. Without `ingest_command` the proxy takes the command from the ACP agent command; see [[decisions#ACP proxy runs the ingest in the background]].
+
 ## Templates
 
 Templates are embedded in the binary. `<root>/.templates/<name>` overrides one, where `<name>` is the identity-relative path for identity files (`soul/IDENTITY.md`, `work/README.md`) and `<type>.md` for entries (`character.md`).

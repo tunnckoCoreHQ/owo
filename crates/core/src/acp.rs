@@ -9,7 +9,7 @@ use crate::Result;
 use serde_json::{json, Value};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::io::{BufRead, Write};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{mpsc, Arc, Mutex};
 
 /// The picker value for no identity.
@@ -178,16 +178,116 @@ fn job(identity: Option<String>, session: &str, turns: Vec<crate::Turn>) -> Opti
 }
 
 /// What the proxy does beside the injection.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct Options {
     /// Put the text of the identity's load set in the prompt, and add no owo MCP server.
     pub inject: bool,
     /// The command and arguments that start the owo MCP server the proxy adds to each session,
     /// for the identity resolved at start.
     pub mcp_server: fn(Option<&str>) -> (String, Vec<String>),
-    /// Store no turns. When the stores end, write one `owo: would write <path>` line to the
-    /// warnings writer for each path the stores would write.
+    /// Store no turns and start no ingest. When the stores end, write one
+    /// `owo: would write <path>` line to the warnings writer for each path the stores would
+    /// write.
     pub dry_run: bool,
+    /// The command and arguments of the ACP agent. With `auto_ingest`, it names the harness
+    /// whose non-interactive command runs the ingest.
+    pub agent: Vec<String>,
+}
+
+/// The non-interactive command of the harness that an ACP agent command runs, for the ACP
+/// adapters owo knows; the run's prompt goes after it. None for any other agent.
+pub fn harness_command(agent: &[String]) -> Option<Vec<String>> {
+    let command: &[&str] = agent.iter().find_map(|arg| {
+        // A path, or a package such as `@zed-industries/claude-agent-acp@0.5.0`.
+        let name = arg.rsplit('/').next()?.split('@').next()?;
+        Some(match name {
+            "claude-agent-acp" | "claude-code-acp" => &[
+                "claude",
+                "--permission-mode",
+                "acceptEdits",
+                "--allowedTools",
+                "Bash(owo:*)",
+                "-p",
+            ][..],
+            "codex-acp" => &[
+                "codex",
+                "exec",
+                "--sandbox",
+                "workspace-write",
+                "--skip-git-repo-check",
+            ],
+            "opencode" => &["opencode", "run"],
+            _ => return None,
+        })
+    })?;
+    Some(command.iter().map(|s| s.to_string()).collect())
+}
+
+/// The background agent that runs the ingest prompt of a sync run, one at a time.
+struct Ingest {
+    /// The command; the prompt text is its last argument.
+    command: Vec<String>,
+    /// The root, which the prompt paths are relative to, and where the agent runs.
+    root: std::path::PathBuf,
+    /// True while an agent runs.
+    busy: Arc<AtomicBool>,
+}
+
+impl Ingest {
+    /// The ingest of the config: None when `auto_ingest` is off. The command is
+    /// `ingest_command`, else the one of the agent's harness; a config error when owo knows
+    /// neither.
+    fn of(config: &crate::Resolved, agent: &[String]) -> Result<Option<Ingest>> {
+        if !config.auto_ingest {
+            return Ok(None);
+        }
+        let command = config
+            .ingest_command
+            .clone()
+            .filter(|c| !c.is_empty())
+            .or_else(|| harness_command(agent))
+            .ok_or_else(|| crate::Fault::NoIngestCommand(agent.join(" ")))?;
+        Ok(Some(Ingest {
+            command,
+            root: config.root.clone(),
+            busy: Arc::default(),
+        }))
+    }
+
+    /// Starts the agent for the run whose prompt file is `prompt`, unless an agent runs. Its
+    /// output goes nowhere, so the client never sees it. A failure is one warning line.
+    fn start(&self, prompt: &str, owo: &Arc<Owo>) {
+        if self.busy.swap(true, Ordering::SeqCst) {
+            return;
+        }
+        let started = std::fs::read_to_string(self.root.join(prompt)).and_then(|text| {
+            std::process::Command::new(&self.command[0])
+                .args(&self.command[1..])
+                .arg(text)
+                .current_dir(&self.root)
+                .stdin(std::process::Stdio::null())
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .spawn()
+        });
+        let mut child = match started {
+            Ok(child) => child,
+            Err(e) => {
+                owo.warn(&format!("the ingest of {prompt} did not start: {e}"));
+                self.busy.store(false, Ordering::SeqCst);
+                return;
+            }
+        };
+        let (busy, owo, prompt) = (self.busy.clone(), owo.clone(), prompt.to_string());
+        std::thread::spawn(move || {
+            match child.wait() {
+                Ok(status) if status.success() => {}
+                Ok(status) => owo.warn(&format!("the ingest of {prompt} failed: {status}")),
+                Err(e) => owo.warn(&format!("the ingest of {prompt} failed: {e}")),
+            }
+            busy.store(false, Ordering::SeqCst);
+        });
+    }
 }
 
 /// Calls the library for a session's identity, and writes warning lines.
@@ -197,6 +297,8 @@ struct Owo {
     select: crate::Select,
     warnings: Mutex<Box<dyn Write + Send>>,
     dry_run: bool,
+    /// None when `auto_ingest` is off, or in a dry run.
+    ingest: Option<Ingest>,
 }
 
 impl Owo {
@@ -218,11 +320,15 @@ impl Owo {
 
     /// Stores `turns` for `identity` in `session`, with the default run size, so a due push
     /// writes the slice and the prompt.
-    fn push(&self, identity: &str, session: &str, turns: Vec<crate::Turn>) -> crate::Result<()> {
+    fn push(
+        &self,
+        identity: &str,
+        session: &str,
+        turns: Vec<crate::Turn>,
+    ) -> crate::Result<crate::SyncRun> {
         self.root(identity)?
             .sync()?
-            .push(session, &turns, &crate::SyncOptions::default())?;
-        Ok(())
+            .push(session, &turns, &crate::SyncOptions::default())
     }
 
     /// Writes `text` to the warnings writer. A failed write is ignored.
@@ -257,6 +363,7 @@ impl Proxy {
         options: Options,
         warnings: impl Write + Send + 'static,
     ) -> Result<Self> {
+        let root = crate::Root::open(select, env)?;
         let owo = Arc::new(Owo {
             env: env.clone(),
             select: crate::Select {
@@ -265,8 +372,10 @@ impl Proxy {
             },
             warnings: Mutex::new(Box::new(warnings)),
             dry_run: options.dry_run,
+            // An ingest agent edits the root, which a dry run must not do.
+            ingest: Ingest::of(&root.config, &options.agent)?.filter(|_| !options.dry_run),
         });
-        let (start, rows) = identity(&owo, select)?;
+        let (start, rows) = identity(&owo, &root)?;
         let identities: Vec<_> = rows.into_iter().map(|r| (r.slug, r.name)).collect();
         let context = options.inject;
         if identities.is_empty() && context {
@@ -400,11 +509,10 @@ impl Proxy {
     }
 }
 
-/// The identity the library resolves from `select`, `OWO_IDENTITY` and the config, and the
-/// row of each identity in the root. An identity with no folder, or a project that
-/// is not found, is a config error here, before the agent starts.
-fn identity(owo: &Owo, select: &crate::Select) -> Result<(Option<String>, Vec<crate::Row>)> {
-    let root = crate::Root::open(select, &owo.env)?;
+/// The identity the library resolved for `root` from the selection, `OWO_IDENTITY` and the
+/// config, and the row of each identity in the root. An identity with no folder, or a project
+/// that is not found, is a config error here, before the agent starts.
+fn identity(owo: &Owo, root: &crate::Root) -> Result<(Option<String>, Vec<crate::Row>)> {
     for w in &root.warnings {
         owo.warn(w);
     }
@@ -807,9 +915,15 @@ fn emit(out: &Mutex<impl Write>, bytes: &[u8]) -> std::io::Result<()> {
     out.flush()
 }
 
-/// Stores the turns for `identity`. A failure is one warning line.
-fn push(owo: &Owo, identity: &str, session: &str, turns: Vec<crate::Turn>) {
-    if let Err(e) = owo.push(identity, session, turns) {
-        owo.warn(&e.to_string());
+/// Stores the turns for `identity`, and with `auto_ingest` starts the ingest of the run the
+/// push reports due or pending. A failure is one warning line.
+fn push(owo: &Arc<Owo>, identity: &str, session: &str, turns: Vec<crate::Turn>) {
+    match owo.push(identity, session, turns) {
+        Ok(run) => {
+            if let Some((ingest, prompt)) = owo.ingest.as_ref().zip(run.prompt.or(run.pending)) {
+                ingest.start(&prompt, owo);
+            }
+        }
+        Err(e) => owo.warn(&e.to_string()),
     }
 }
