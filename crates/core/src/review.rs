@@ -146,7 +146,7 @@ pub fn packet(id: &Identity) -> Packet {
         open_threads: open_links(id, Kind::Thread),
         open_conflicts: open_links(id, Kind::Conflict),
         recurring: recurring(&days),
-        last_soul_change: last_soul_change(id),
+        last_soul_change: soul_history(id, None).pop(),
         unreviewed_days: days,
         changed,
         last_reviewed: last,
@@ -228,14 +228,6 @@ impl SoulChange {
     }
 }
 
-fn soul_changes(id: &Identity) -> impl Iterator<Item = SoulChange> + '_ {
-    crate::state::history(id).iter().map(SoulChange::of)
-}
-
-pub fn last_soul_change(id: &Identity) -> Option<SoulChange> {
-    soul_changes(id).last()
-}
-
 pub struct Note {
     pub record: SoulChange,
     pub warning: Option<String>,
@@ -295,7 +287,9 @@ pub fn soul_note(id: &Identity, file: &str, change: &str, evidence: &[String]) -
 
 pub fn soul_history(id: &Identity, file: Option<&str>) -> Vec<SoulChange> {
     let file = file.map(|f| f.trim_start_matches("soul/"));
-    soul_changes(id)
+    crate::state::history(id)
+        .iter()
+        .map(SoulChange::of)
         .filter(|r| file.is_none_or(|f| r.file.as_deref() == Some(f)))
         .collect()
 }

@@ -177,7 +177,7 @@ pub fn compute(id: &Identity, days: i64, logs: usize) -> State {
             .collect(),
         open_threads: open_links(id, Kind::Thread),
         open_conflicts: open_links(id, Kind::Conflict),
-        last_soul_change: crate::review::last_soul_change(id),
+        last_soul_change: crate::review::soul_history(id, None).pop(),
         review: Review {
             last_reviewed: review.last_reviewed,
             days_since: review.days_since,
