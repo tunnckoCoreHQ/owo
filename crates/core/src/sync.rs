@@ -368,14 +368,11 @@ fn run(
         .filter(|m| m.role == "user")
         .count();
     let due = new_user > 0 && (req.now || new_user >= req.every);
-    let mut from = done;
-    let mut seen = 0;
-    while from > 0 && seen < OVERLAP_TURNS {
-        from -= 1;
-        if messages[from].role == "user" {
-            seen += 1;
-        }
-    }
+    let from = (0..done)
+        .rev()
+        .filter(|&i| messages[i].role == "user")
+        .nth(OVERLAP_TURNS - 1)
+        .unwrap_or(0);
     let mut out = Start {
         due,
         identity: req.slug.into(),
