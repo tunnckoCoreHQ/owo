@@ -159,12 +159,7 @@ impl Entry {
     }
 
     pub fn field_str(&self, key: &str) -> Option<String> {
-        match self.field(key)? {
-            Json::String(s) => Some(s.clone()),
-            Json::Number(n) => Some(n.to_string()),
-            Json::Bool(b) => Some(b.to_string()),
-            _ => None,
-        }
+        self.field(key).and_then(crate::request::scalar)
     }
 
     pub fn label(&self) -> String {
