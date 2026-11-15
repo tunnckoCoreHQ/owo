@@ -221,5 +221,17 @@ fn write(t: &mut Text, outcome: &Outcome) {
             }
         }
         Outcome::Template { text, .. } => t.push(text),
+        Outcome::DryRun { outcome, writes } => {
+            // The confirmation lines would name writes that did not happen.
+            let quiet = std::mem::replace(&mut t.quiet, true);
+            write(t, outcome);
+            t.quiet = quiet;
+            for w in writes {
+                t.line(format!("would write {w}"));
+            }
+            if writes.is_empty() {
+                t.line("would write nothing");
+            }
+        }
     }
 }

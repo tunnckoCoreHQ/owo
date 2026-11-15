@@ -4,7 +4,7 @@
 //! the typed `Outcome`. `Outcome::envelope` is the `{ ok, data, warnings, errors }` JSON of a
 //! result, which the CLI prints with `--json` and the MCP server returns.
 
-use crate::request::{Args, Field, Request};
+use crate::request::{Args, DryRun, Field, Request};
 use crate::*;
 use serde::Serialize;
 use serde_json::json;
@@ -104,6 +104,31 @@ fn op<R: Request + 'static>(
     }
 }
 
+/// The operation `path` of a call that writes files: `op` with the `dry-run` field, which runs
+/// the call with its writes kept in memory and gives `Outcome::DryRun`.
+fn writes<R: Request + 'static>(
+    path: &'static [&'static str],
+    about: &'static str,
+    call: fn(R, &mut Call) -> Result<Outcome>,
+) -> Operation {
+    Operation {
+        path,
+        about,
+        fields: DryRun::<R>::fields(),
+        run: Box::new(move |args, s| {
+            let DryRun { req, dry_run } = DryRun::<R>::from_args(args)?;
+            if !dry_run {
+                return Ok(call(req, s));
+            }
+            let (result, writes) = crate::write::dry_run(|| call(req, s));
+            Ok(result.map(|outcome| Outcome::DryRun {
+                outcome: Box::new(outcome),
+                writes,
+            }))
+        }),
+    }
+}
+
 /// The call of `templates` and `templates list`.
 fn templates(_: (), s: &mut Call) -> Result<Outcome> {
     Ok(Outcome::Templates(s.root()?.templates()))
@@ -112,7 +137,7 @@ fn templates(_: (), s: &mut Call) -> Result<Outcome> {
 /// Every operation, in the order the CLI lists them.
 pub fn operations() -> Vec<Operation> {
     vec![
-        op::<NewRequest>(
+        writes::<NewRequest>(
             &["new"],
             "Create a new identity from the built-in templates",
             |r, s| Ok(Outcome::Created(s.root()?.create(&r)?)),
@@ -124,7 +149,7 @@ pub fn operations() -> Vec<Operation> {
                 rows: root.list(),
             })
         }),
-        op::<WriteRequest>(
+        writes::<WriteRequest>(
             &["write"],
             "Write the full text of one identity file (create or replace)",
             |mut r, s| {
@@ -139,7 +164,7 @@ pub fn operations() -> Vec<Operation> {
                 })
             },
         ),
-        op::<AddRequest>(
+        writes::<AddRequest>(
             &["add"],
             "Create an entry from its template at its deterministic path",
             |r, s| {
@@ -151,7 +176,7 @@ pub fn operations() -> Vec<Operation> {
                 })
             },
         ),
-        op::<StampRequest>(
+        writes::<StampRequest>(
             &["stamp"],
             "Refresh state.json files from content hashes",
             |r, s| {
@@ -168,7 +193,7 @@ pub fn operations() -> Vec<Operation> {
                 identity: id.slug,
             })
         }),
-        op::<IndexRequest>(
+        writes::<IndexRequest>(
             &["index"],
             "Regenerate _index.md files and life/timeline.md",
             |r, s| {
@@ -262,12 +287,12 @@ pub fn operations() -> Vec<Operation> {
             "Print the review packet, or record a finished review with `done`",
             |_, s| Ok(Outcome::Review(s.identity()?.review())),
         ),
-        op::<ReviewDoneRequest>(
+        writes::<ReviewDoneRequest>(
             &["review", "done"],
             "Record a finished review (dates and the MEMORY.md hash)",
             |r, s| Ok(Outcome::ReviewDone(s.identity()?.review_done(&r)?)),
         ),
-        op::<SoulNoteRequest>(
+        writes::<SoulNoteRequest>(
             &["soul", "note"],
             "Append a soul change with its evidence",
             |r, s| Ok(Outcome::SoulNote(s.identity()?.soul_note(&r)?)),
@@ -282,7 +307,7 @@ pub fn operations() -> Vec<Operation> {
             "What changed, grouped by day (Git history, else state stamps)",
             |r, s| Ok(Outcome::Changes(s.identity()?.changes(&r)?)),
         ),
-        op::<CardRequest>(
+        writes::<CardRequest>(
             &["export", "card"],
             "Character Card JSON (V3 with V2-compatible fields, or V2)",
             |mut r, s| {
@@ -292,12 +317,12 @@ pub fn operations() -> Vec<Operation> {
                 Ok(Outcome::Card { card, out: r.out })
             },
         ),
-        op::<SkillRequest>(
+        writes::<SkillRequest>(
             &["export", "skill"],
             "SKILL.md wrapper that loads the identity with owo",
             |r, s| Ok(Outcome::Skill(s.identity()?.export_skill(&r)?)),
         ),
-        op::<SoulspecRequest>(
+        writes::<SoulspecRequest>(
             &["export", "soulspec"],
             "SoulSpec v0.5 package folder",
             |r, s| {
@@ -305,12 +330,12 @@ pub fn operations() -> Vec<Operation> {
                 Ok(Outcome::Soulspec { dir: r.out, report })
             },
         ),
-        op::<SyncStartRequest>(
+        writes::<SyncStartRequest>(
             &["sync", "start"],
             "Read the transcript and, when a run is due, write the slice and the ingest prompt",
             |r, s| Ok(Outcome::Synced(s.root()?.sync()?.start(&r)?)),
         ),
-        op::<SyncPushRequest>(
+        writes::<SyncPushRequest>(
             &["sync", "push"],
             "Store turns sent by the host, then run sync start on them (for hosts without a local transcript)",
             |r, s| {
@@ -327,7 +352,7 @@ pub fn operations() -> Vec<Operation> {
                 Ok(Outcome::Synced(sync.push(&r.session, &turns, &r.options)?))
             },
         ),
-        op::<SyncDoneRequest>(
+        writes::<SyncDoneRequest>(
             &["sync", "done"],
             "Move the bookmark after a successful ingest run",
             |r, s| {
@@ -344,7 +369,7 @@ pub fn operations() -> Vec<Operation> {
             "List the sessions in the root that have a pending run",
             |_, s| Ok(Outcome::SyncDue(s.root()?.sync_due()?)),
         ),
-        op::<MigrateRequest>(
+        writes::<MigrateRequest>(
             &["migrate", "v1"],
             "v1 identity folder (with references/) into <out> = <root>/<slug>",
             |r, s| Ok(Outcome::Migrate(migrate_v1(&r, &s.env.cwd)?)),
@@ -434,6 +459,12 @@ pub enum Outcome {
     Template {
         template: Template,
         text: String,
+    },
+    /// A dry run: the outcome of the call, which wrote nothing, and the files and folders it
+    /// would write, a folder ending in `/`.
+    DryRun {
+        outcome: Box<Outcome>,
+        writes: Vec<String>,
     },
 }
 
@@ -581,6 +612,13 @@ impl Outcome {
             Outcome::Template { template, text } => Envelope::ok(
                 json!({ "name": template.name, "override": template.override_path, "text": text }),
             ),
+            Outcome::DryRun { outcome, writes } => {
+                let mut envelope = outcome.envelope();
+                if let Value::Object(data) = &mut envelope.data {
+                    data.insert("would_write".into(), json!(writes));
+                }
+                envelope
+            }
         }
     }
 }

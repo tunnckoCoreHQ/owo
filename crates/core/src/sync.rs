@@ -222,7 +222,11 @@ impl Drop for Made {
 }
 
 impl Lock {
-    fn take(root: &Path, session: &str) -> Result<Lock> {
+    /// None in a dry run, which writes no bookmark to guard.
+    fn take(root: &Path, session: &str) -> Result<Option<Lock>> {
+        if crate::write::dry() {
+            return Ok(None);
+        }
         let path = root.join(".owo/sessions").join(format!("{session}.lock"));
         let dir = path.parent().expect("has parent");
         let made = Made(crate::write::missing(dir));
@@ -233,7 +237,7 @@ impl Lock {
                 .create_new(true)
                 .open(&path)
             {
-                Ok(_) => return Ok(Lock { path, _made: made }),
+                Ok(_) => return Ok(Some(Lock { path, _made: made })),
                 Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
                     // A lock older than a minute belongs to a process that ended without cleanup.
                     let stale = fs::metadata(&path)
@@ -400,8 +404,8 @@ pub fn push(req: &StartRequest, turns: &[Turn]) -> Result<Start> {
         .commit()?;
     out.added = Some(added);
     if let (Some(source), Some(prompt)) = (&out.source, &out.prompt) {
-        out.source_text = Some(fs::read_to_string(req.root.join(source))?);
-        out.prompt_text = Some(fs::read_to_string(req.root.join(prompt))?);
+        out.source_text = Some(crate::write::read_to_string(&req.root.join(source))?);
+        out.prompt_text = Some(crate::write::read_to_string(&req.root.join(prompt))?);
     }
     Ok(out)
 }

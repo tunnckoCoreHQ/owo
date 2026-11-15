@@ -548,6 +548,25 @@ impl Request for () {
     fn read(_: &mut Reader, _: Self) -> Self {}
 }
 
+/// The request of an operation that writes files, with the switch that makes it write none.
+#[derive(Debug, Clone, Default)]
+pub(crate) struct DryRun<R> {
+    pub req: R,
+    pub dry_run: bool,
+}
+
+impl<R: Request> Request for DryRun<R> {
+    fn read(r: &mut Reader, b: Self) -> Self {
+        Self {
+            req: R::read(r, b.req),
+            dry_run: r.flag(
+                Field::switch("dry-run", "Report the files it would write, and write none"),
+                b.dry_run,
+            ),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct NewRequest {
     /// The display name.

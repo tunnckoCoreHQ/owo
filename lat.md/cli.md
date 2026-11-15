@@ -10,6 +10,16 @@ With `--quiet` commands drop their confirmation lines: the path `add` and `write
 
 Exit codes: 0 success, 1 problems found (lint errors, exists, unknown template, stale check), 2 usage error (clap, including a date that is not YYYY-MM-DD), 3 config error (no identity selected, identity folder missing, project that is not a slug or has no `project.md`), 4 I/O error. A closed stdout (`owo search x | head`) ends the process quietly, except in `owo mcp` and `owo acp`, where a closed pipe is a write error.
 
+## Dry run
+
+Each command that writes files takes `--dry-run`, and its MCP tool takes `dry-run`: `new`, `write`, `add`, `stamp`, `index`, `review done`, `soul note`, `export card`, `export skill`, `export soulspec`, `sync start`, `sync push`, `sync done` and `migrate v1`. The command runs as usual, writes nothing, and reports what it would write. See [[decisions#Dry run keeps writes in memory]].
+
+- With `--json` the envelope is the one of the real run, and `data` gets `would_write`: each file and folder the command would write, once, in write order, as the path joined onto the root or the working folder. A folder ends in `/`. The other fields of `data` tell what the command would do.
+- The text drops the confirmation lines, as `--quiet` does, then prints `would write <path>` for each path, or `would write nothing`.
+- The errors and the exit code are the ones of the real run, so `owo new <name> --dry-run` for an identity that exists exits 1.
+
+A dry run does not try the writes, so a write that would fail, such as one into a read-only folder, is still in the list. It takes no sync lock. `owo mcp` and `owo acp` take no `--dry-run`.
+
 ## Commands
 
 Each command with its flags and exit behavior.

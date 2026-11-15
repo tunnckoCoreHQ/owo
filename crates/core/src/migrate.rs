@@ -224,7 +224,7 @@ fn migrate_locations(
             return anyhow::Ok(());
         }
         let target = dir.join(&to);
-        if target.exists() {
+        if crate::write::exists(&target) {
             r.skipped
                 .push(format!("{} (target {to} exists; merge by hand)", rel(from)));
             return anyhow::Ok(());
@@ -337,6 +337,10 @@ pub fn v1(cwd: &Path, src: &Path, out: &Path) -> Result<Report> {
     let had_sources = sources.exists();
     crate::create::new_identity(root, shown, &name, &slug)?;
     let mut report = fill(src, &refs, root, &slug, &manifest).inspect_err(|_| {
+        // A dry run made nothing to remove.
+        if crate::write::dry() {
+            return;
+        }
         let _ = fs::remove_dir_all(root.join(&slug));
         if !had_sources {
             let _ = fs::remove_dir_all(&sources);
@@ -369,7 +373,7 @@ fn fill(src: &Path, refs: &Path, root: &Path, slug: &str, manifest: &Value) -> R
         .and_then(|t| serde_json::from_str::<Value>(&t).ok())
     {
         let path = dir.join("soul/state.json");
-        let mut doc: Value = serde_json::from_str(&fs::read_to_string(&path)?)?;
+        let mut doc: Value = serde_json::from_str(&crate::write::read_to_string(&path)?)?;
         if let Some(h) = old.get("history").filter(|h| h.is_array()) {
             doc["history"] = h.clone();
         }
@@ -381,7 +385,7 @@ fn fill(src: &Path, refs: &Path, root: &Path, slug: &str, manifest: &Value) -> R
     }
     {
         let path = dir.join("identity.json");
-        let mut doc: Value = serde_json::from_str(&fs::read_to_string(&path)?)?;
+        let mut doc: Value = serde_json::from_str(&crate::write::read_to_string(&path)?)?;
         if let Some(acc) = manifest
             .get("accounts")
             .filter(|a| a.is_array() || a.is_object())
@@ -466,7 +470,7 @@ fn fill(src: &Path, refs: &Path, root: &Path, slug: &str, manifest: &Value) -> R
                 _ => format!("{}.md", slugify(&title_of(&text, &label))),
             };
             let target = dir.join(to).join(&name);
-            if target.exists() {
+            if crate::write::exists(&target) {
                 r.skipped.push(format!(
                     "{} (target {to}/{name} exists; merge by hand)",
                     rel(&p)
@@ -501,7 +505,7 @@ fn fill(src: &Path, refs: &Path, root: &Path, slug: &str, manifest: &Value) -> R
                 continue;
             }
             let file = format!("life/conflicts/{name}.md");
-            if dir.join(&file).exists() {
+            if crate::write::exists(&dir.join(&file)) {
                 r.skipped.push(format!(
                     "references/world/meta/conflicts.md ## {} (target {file} exists; merge by hand)",
                     title.trim()
@@ -535,7 +539,7 @@ fn fill(src: &Path, refs: &Path, root: &Path, slug: &str, manifest: &Value) -> R
         let name = e.path().strip_prefix(&from).expect("under sources");
         let name = name.to_string_lossy().replace('\\', "/");
         let target = root.join("sources").join(slug).join(&name);
-        if target.exists() {
+        if crate::write::exists(&target) {
             r.skipped.push(format!(
                 "{} (target <root>/sources/{slug}/{name} exists; merge by hand)",
                 rel(e.path())

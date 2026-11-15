@@ -1,12 +1,91 @@
 //! All-or-nothing writes. Each file goes through a temporary file next to it and a rename, and
-//! the files of one `Writes` land together or not at all, with the folders it made.
+//! the files of one `Writes` land together or not at all, with the folders it made. In a dry
+//! run (`dry_run`) a commit keeps its files in memory instead, and `read` sees them.
 
 use anyhow::{Context, Result};
 use serde_json::Value;
+use std::cell::RefCell;
+use std::collections::BTreeMap;
 use std::ffi::OsString;
 use std::fs::{self, File, Permissions};
 use std::io::{self, ErrorKind, Write as _};
 use std::path::{Path, PathBuf};
+
+thread_local! {
+    /// The targets the commits of the dry run on this thread kept, in commit order; None when
+    /// no dry run runs.
+    static KEPT: RefCell<Option<Vec<Target>>> = const { RefCell::new(None) };
+}
+
+/// Runs `f` with every commit kept in memory instead of written, and `read` seeing the kept
+/// files. Returns what `f` returns and the paths the commits named, each once, in the order
+/// they came; a folder ends in `/`.
+pub fn dry_run<T>(f: impl FnOnce() -> T) -> (T, Vec<String>) {
+    /// Puts back the state before the dry run, also when `f` panics.
+    struct Reset(Option<Vec<Target>>);
+    impl Drop for Reset {
+        fn drop(&mut self) {
+            KEPT.set(self.0.take());
+        }
+    }
+    let reset = Reset(KEPT.replace(Some(vec![])));
+    let out = f();
+    let kept = KEPT.take().unwrap_or_default();
+    drop(reset);
+    let mut paths: Vec<String> = vec![];
+    for t in kept {
+        let mut path = t.path.display().to_string();
+        if t.bytes.is_none() {
+            path.push('/');
+        }
+        if !paths.contains(&path) {
+            paths.push(path);
+        }
+    }
+    (out, paths)
+}
+
+/// True while a dry run runs on this thread.
+pub fn dry() -> bool {
+    KEPT.with_borrow(Option::is_some)
+}
+
+/// The bytes the dry run last kept for the file `path`.
+fn kept(path: &Path) -> Option<Vec<u8>> {
+    KEPT.with_borrow(|kept| {
+        kept.iter()
+            .flatten()
+            .rev()
+            .find(|t| t.bytes.is_some() && t.path == path)
+            .and_then(|t| t.bytes.clone())
+    })
+}
+
+/// The files the dry run kept under `dir`, by their path relative to it, with their last bytes.
+pub fn kept_under(dir: &Path) -> BTreeMap<PathBuf, Vec<u8>> {
+    KEPT.with_borrow(|kept| {
+        kept.iter()
+            .flatten()
+            .filter_map(|t| Some((t.path.strip_prefix(dir).ok()?, t.bytes.as_ref()?)))
+            .map(|(rel, bytes)| (rel.to_path_buf(), bytes.clone()))
+            .collect()
+    })
+}
+
+/// The file at `path`: in a dry run the bytes it kept, else the file on disk.
+pub fn read(path: &Path) -> io::Result<Vec<u8>> {
+    kept(path).map_or_else(|| fs::read(path), Ok)
+}
+
+/// The file at `path` as UTF-8 text, as `read` gives it.
+pub fn read_to_string(path: &Path) -> io::Result<String> {
+    String::from_utf8(read(path)?).map_err(|e| io::Error::new(ErrorKind::InvalidData, e))
+}
+
+/// True when the file `path` is there: kept by the dry run or on disk.
+pub fn exists(path: &Path) -> bool {
+    kept(path).is_some() || path.exists()
+}
 
 /// One target: its path, the path error text names, and its bytes, or none for a folder.
 struct Target {
@@ -67,10 +146,20 @@ impl Writes {
         self
     }
 
-    /// Writes every target, or on an error undoes what it did and returns the error.
+    /// Writes every target, or on an error undoes what it did and returns the error. In a dry
+    /// run it keeps the targets in memory and writes nothing.
     pub fn commit(self) -> Result<()> {
+        let Some(targets) = KEPT.with_borrow_mut(|kept| match kept {
+            Some(kept) => {
+                kept.extend(self.0);
+                None
+            }
+            None => Some(self.0),
+        }) else {
+            return Ok(());
+        };
         let mut undo = Undo::default();
-        let result = apply(self.0, &mut undo);
+        let result = apply(targets, &mut undo);
         if result.is_err() {
             undo.run();
         }
@@ -335,6 +424,16 @@ mod tests {
         );
         assert!(fs::symlink_metadata(&link).unwrap().is_symlink());
         assert!(!tmp.path().join("missing").exists());
+    }
+
+    #[test]
+    fn a_dry_run_ends_when_its_call_panics() {
+        let tmp = TempDir::new().unwrap();
+        let path = tmp.path().join("x");
+        let panicked = std::panic::catch_unwind(|| dry_run::<()>(|| panic!("boom"))).is_err();
+        assert!(panicked && !dry());
+        file(&path, "new").unwrap();
+        assert_eq!(fs::read_to_string(&path).unwrap(), "new");
     }
 
     #[test]
