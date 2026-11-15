@@ -292,6 +292,19 @@ pub fn operations() -> Vec<Operation> {
             "Record a finished review (dates and the MEMORY.md hash)",
             |r, s| Ok(Outcome::ReviewDone(s.identity()?.review_done(&r)?)),
         ),
+        op::<SoulRequest>(
+            &["soul"],
+            "Print soul/IDENTITY.md and soul/SOUL.md, or only the soul files asked for; `note` and `history` keep the soul history",
+            |r, s| {
+                let files = s.identity()?.soul(&r)?;
+                let text = files
+                    .iter()
+                    .map(|(path, text)| format!("<!-- owo: {path} -->\n{}\n", text.trim_end()))
+                    .collect::<Vec<_>>()
+                    .join("\n");
+                Ok(Outcome::Soul { files, text })
+            },
+        ),
         write_op::<SoulNoteRequest>(
             &["soul", "note"],
             "Append a soul change with its evidence",
@@ -442,6 +455,12 @@ pub enum Outcome {
     Migrate(MigrateReport),
     Review(Packet),
     ReviewDone(ReviewRecord),
+    /// The soul files as (path, text), and their text: each file after an
+    /// `<!-- owo: <path> -->` line.
+    Soul {
+        files: Vec<(String, String)>,
+        text: String,
+    },
     SoulNote(SoulNote),
     SoulHistory(Vec<SoulChange>),
     Changes(Changes),
@@ -596,6 +615,13 @@ impl Outcome {
             Outcome::Migrate(r) => Envelope::ok(value(r)),
             Outcome::Review(p) => Envelope::ok(value(p)),
             Outcome::ReviewDone(r) => Envelope::ok(value(r)),
+            Outcome::Soul { files, .. } => {
+                let files: Vec<Value> = files
+                    .iter()
+                    .map(|(path, text)| json!({ "path": path, "text": text }))
+                    .collect();
+                Envelope::ok(json!({ "files": files }))
+            }
             Outcome::SoulNote(note) => {
                 Envelope::ok(value(&note.record)).with_warnings(note.warning.clone())
             }

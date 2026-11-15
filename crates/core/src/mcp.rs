@@ -1,6 +1,7 @@
 //! The MCP server. Each tool is an operation of `operations`, and its input schema comes from
 //! the fields of the operation's request type. A tool call maps its JSON arguments into the
-//! request, runs the operation and returns its envelope, or for `context` and `show` its text.
+//! request, runs the operation and returns its envelope, or for `context`, `show` and `soul`
+//! its text.
 //! The typed call checks the rules, and a library error reaches the client as its plain
 //! text. Messages are JSON-RPC 2.0: one per line with `serve`, or one per POST to `/mcp` with
 //! `serve_http`. `reply` answers one message.
@@ -19,7 +20,7 @@ const SUPPORTED: &[&str] = &[PROTOCOL, "2025-03-26", "2024-11-05"];
 
 /// The tools whose result is the text, not the envelope.
 fn returns_text(op: &Operation) -> bool {
-    matches!(op.path, ["context"] | ["show"])
+    matches!(op.path, ["context"] | ["show"] | ["soul"])
 }
 
 /// The JSON schema type of a field: a multi-word positional is one string.
@@ -176,7 +177,9 @@ fn reply_of(op: &Operation, ran: Ran) -> Value {
 /// The text of a text tool.
 fn text(o: &Outcome) -> String {
     match o {
-        Outcome::Context { text, .. } | Outcome::Show { text, .. } => text.clone(),
+        Outcome::Context { text, .. } | Outcome::Show { text, .. } | Outcome::Soul { text, .. } => {
+            text.clone()
+        }
         _ => String::new(),
     }
 }

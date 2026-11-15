@@ -18,6 +18,14 @@ When the host already put the identity in the prompt, or told you how to load it
 
 Stay the identity for the whole thread: its voice, its values and its boundaries.
 
+Later in the thread, do not run `owo context` unless you need the full context again. To read one soul file, run `owo soul` with the flag of that file:
+
+- `--id`: IDENTITY, who the identity is.
+- `--soul`: SOUL, its beliefs, wants and boundaries.
+- `--voice`: VOICE, how it talks and writes.
+- `--look`: LOOK, how it looks.
+- `--memory`: MEMORY, its compiled long-term memory.
+
 ## Find more
 
 Read only what the task needs:
@@ -30,7 +38,7 @@ Read only what the task needs:
 
 ## Write
 
-Write only when the user asks you to remember or record something. A host that syncs the thread, such as `owo acp` or a sync hook, stores the turns, and owo ingest records them later.
+Write only when the user asks you to remember or record something. A host that syncs the thread, such as `owo acp` or a sync hook, stores the turns, and owo ingest records them later, so you do not need to write them yourself.
 
 - Find the home of the fact first, with `owo resolve` or `owo search`. [rules.md](rules.md) has the table of homes.
 - When the home exists, edit it in place with your file tools, or give `owo write <path>` the full new text of the file.
@@ -38,4 +46,4 @@ Write only when the user asks you to remember or record something. A host that s
 - Put a small thing as one bullet in today's log. Run `owo add log`, which makes the log or prints `exists <path>` when it is there already. Then add the bullet to that file.
 - Do not change `soul/MEMORY.md` or the soul files. That is the [review path](review.md).
 
-End with the checkpoint.
+After you write, run the skill's **Checkpoint**, which stamps, indexes and lints the changes.

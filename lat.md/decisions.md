@@ -34,6 +34,12 @@ Title and aliases count three times, summary twice, body once. A query equal to 
 
 The project KB is a pointer for the agent to follow. `owo context` prints it when the path is missing too, with a warning, so a misconfigured path shows up at load time.
 
+## Soul prints soul files without the load set
+
+An agent loads the identity once, at the start of a thread, with `owo context`. When it needs one soul file later, such as LOOK for an image, `owo soul --look` prints that file alone, so the agent does not load the whole set again. With no flag, `owo soul` prints IDENTITY and SOUL, the two files that say who the identity is.
+
+The flag for IDENTITY is `--id`, not `--identity`. The global `-i/--identity` flag and the MCP `identity` argument already name the selected identity, and clap cannot give one command two `--identity` flags.
+
 ## Examples are built with owo
 
 `examples/nicole` and `examples/reviewer` were scaffolded with `owo new` and `owo add`, filled by hand, then indexed, stamped and reviewed. `crates/cli/tests/examples.rs` checks they stay lint clean and current.
@@ -106,7 +112,7 @@ The tool list and each input schema come from the request types: each field is a
 
 The server refuses an unknown argument, a missing required one, a value outside a fixed list (`invalid value "x" for "type"; possible values: ...`), and a value that is not an integer or a `YYYY-MM-DD` day, with its own text and no envelope. An argument it leaves out takes the library's default, from the request type. The typed call checks the rules of the fields (an empty required path, days outside 0 to 36500, `since` with `days`, `png` without `out`) and gives its usage error, as the library text in a fail envelope, not in clap's usage format. Either error sets `isError`. A string argument takes a number or a boolean as its text, and an integer argument takes a string of digits. A single-value argument also takes an array of one value (`{"scope": ["soul"]}`, `{"limit": [5]}`); an array of more values is an error that names the type of the field, such as `argument "days" must be an integer`. A positional argument of several words is a string, or an array of words joined with spaces. A JSON field, such as `turns`, reaches the request as its JSON text, as the CLI gives it.
 
-Most tools return the envelope followed by the warning lines, such as the one for a root from a `.owo.toml` in a parent folder; `context` and `show` return text, which is what an agent reads, followed by the warning lines, or the warning lines and the error line `owo: <error>` when the call fails. An error text is the core's plain text, with no `owo` command to run; the CLI adds those hints. A failed call or an envelope with `ok` false sets `isError`; an unknown tool name gets a -32602 error. `initialize` answers the client's protocol version when it is one the server speaks (2025-06-18, 2025-03-26, 2024-11-05), else 2025-06-18. A line that is not UTF-8 JSON gets a -32700 parse error and the server goes on.
+Most tools return the envelope followed by the warning lines, such as the one for a root from a `.owo.toml` in a parent folder; `context`, `show` and `soul` return text, which is what an agent reads, followed by the warning lines, or the warning lines and the error line `owo: <error>` when the call fails. An error text is the core's plain text, with no `owo` command to run; the CLI adds those hints. A failed call or an envelope with `ok` false sets `isError`; an unknown tool name gets a -32602 error. `initialize` answers the client's protocol version when it is one the server speaks (2025-06-18, 2025-03-26, 2024-11-05), else 2025-06-18. A line that is not UTF-8 JSON gets a -32700 parse error and the server goes on.
 
 Each tool call runs inside `std::panic::catch_unwind`. A panic gives an `isError` result with the text `owo panicked: <message>`, and the server answers the next request, on stdio and with `--remote`.
 

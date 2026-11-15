@@ -152,7 +152,9 @@ fn write(t: &mut Text, outcome: &Outcome) {
                 t.line(&hit.path);
             }
         }
-        Outcome::Show { text, .. } | Outcome::Context { text, .. } => t.push(text),
+        Outcome::Show { text, .. } | Outcome::Context { text, .. } | Outcome::Soul { text, .. } => {
+            t.push(text)
+        }
         Outcome::Orphans(hits) => {
             for h in hits {
                 t.line(text::hit(h));

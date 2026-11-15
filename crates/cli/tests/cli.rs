@@ -502,6 +502,33 @@ fn write_refuses_empty_text_and_generated_files() {
     );
 }
 
+#[test]
+fn soul_prints_identity_and_soul_or_the_flagged_files() {
+    let tmp = TempDir::new().unwrap();
+    owo(tmp.path()).args(["new", "Thea"]).assert().success();
+    let headers = |args: &[&str]| -> Vec<String> {
+        let out = owo(tmp.path()).args(args).output().unwrap();
+        assert!(out.status.success(), "{args:?}");
+        String::from_utf8(out.stdout)
+            .unwrap()
+            .lines()
+            .filter(|l| l.starts_with("<!-- owo: "))
+            .map(str::to_string)
+            .collect()
+    };
+    let header = |file: &str| format!("<!-- owo: soul/{file} -->");
+    assert_eq!(
+        headers(&["soul"]),
+        [header("IDENTITY.md"), header("SOUL.md")]
+    );
+    assert_eq!(headers(&["soul", "--look"]), [header("LOOK.md")]);
+    assert_eq!(
+        headers(&["-i", "thea", "soul", "--look", "--id"]),
+        [header("IDENTITY.md"), header("LOOK.md")]
+    );
+    owo(tmp.path()).args(["soul", "history"]).assert().success();
+}
+
 /// `owo` run from `cwd` with no `--root` and the user config folders inside `home`.
 fn owo_in(cwd: &Path, home: &Path) -> assert_cmd::Command {
     let mut cmd = assert_cmd::Command::cargo_bin("owo").unwrap();
