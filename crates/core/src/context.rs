@@ -25,19 +25,18 @@ pub struct Context {
 
 impl Context {
     pub fn paths_text(&self) -> String {
-        let mut out = String::new();
-        for it in &self.items {
-            out.push_str(&format!("{:<8} {}  ({})\n", it.tier, it.path, it.reason));
-        }
-        if let Some(kb) = &self.kb {
-            out.push_str(&format!(
-                "kb       {}{}\n",
-                kb.path,
-                if kb.exists { "" } else { "  (missing)" }
-            ));
-        }
-        out.push_str("now      (generated block)\n");
-        out
+        let items = self
+            .items
+            .iter()
+            .map(|it| format!("{:<8} {}  ({})\n", it.tier, it.path, it.reason));
+        let kb = self.kb.iter().map(|kb| {
+            let missing = if kb.exists { "" } else { "  (missing)" };
+            format!("kb       {}{missing}\n", kb.path)
+        });
+        items
+            .chain(kb)
+            .chain(["now      (generated block)\n".to_string()])
+            .collect()
     }
 }
 
@@ -110,12 +109,11 @@ pub fn render_text(id: &Identity, c: &Context) -> String {
     for it in &c.items {
         let text = fs::read_to_string(id.dir.join(&it.path)).unwrap_or_default();
         out.push_str(&format!(
-            "<!-- owo: {} ({}) -->\n{}\n",
+            "<!-- owo: {} ({}) -->\n{}\n\n",
             it.path,
             it.tier,
             text.trim_end()
         ));
-        out.push('\n');
     }
     if let Some(kb) = &c.kb {
         let note = if kb.exists {
