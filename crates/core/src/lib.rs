@@ -331,7 +331,7 @@ impl Identity {
         if req.check {
             return Ok(index::stale(self));
         }
-        Ok(index::write(self)?)
+        Ok(index::write_as(self, &self.dir)?)
     }
 
     pub fn resolve(&self, req: &ResolveRequest) -> Result<Result<Hit, Vec<Hit>>> {

@@ -35,16 +35,12 @@ fn line(e: &Entry) -> String {
 }
 
 fn doc(title: &str, lines: &[String]) -> String {
-    let mut out = format!("{MARKER}\n# {title}\n\n");
-    if lines.is_empty() {
-        out.push_str("Empty.\n");
+    let body: String = if lines.is_empty() {
+        "Empty.\n".into()
     } else {
-        for l in lines {
-            out.push_str(l);
-            out.push('\n');
-        }
-    }
-    out
+        lines.iter().map(|l| format!("{l}\n")).collect()
+    };
+    format!("{MARKER}\n# {title}\n\n{body}")
 }
 
 fn in_folder<'a>(identity: &'a Identity, prefix: &str) -> Vec<&'a Entry> {
@@ -99,7 +95,7 @@ pub fn generate(identity: &Identity) -> BTreeMap<String, String> {
 }
 
 fn timeline(identity: &Identity) -> String {
-    let eras: Vec<&Entry> = identity
+    let mut eras: Vec<&Entry> = identity
         .entries
         .iter()
         .filter(|e| e.kind == Kind::Era)
@@ -134,9 +130,8 @@ fn timeline(identity: &Identity) -> String {
         .collect();
     let mut lines = vec![];
     let mut placed = vec![false; events.len()];
-    let mut sorted_eras = eras.clone();
-    sorted_eras.sort_by_key(|e| (e.field_str("start").unwrap_or_default(), e.rel.clone()));
-    for era in sorted_eras {
+    eras.sort_by_key(|e| (e.field_str("start").unwrap_or_default(), e.rel.clone()));
+    for era in eras {
         let title = era.label();
         lines.push(format!("\n## {title}\n"));
         for (i, ev) in events.iter().enumerate() {
@@ -168,10 +163,6 @@ fn work(identity: &Identity) -> String {
     doc("Work", &lines)
 }
 
-pub fn write(identity: &Identity) -> anyhow::Result<Vec<String>> {
-    write_as(identity, &identity.dir)
-}
-
 pub fn write_as(identity: &Identity, shown: &std::path::Path) -> anyhow::Result<Vec<String>> {
     let stale = differing(identity);
     stale
@@ -180,17 +171,14 @@ pub fn write_as(identity: &Identity, shown: &std::path::Path) -> anyhow::Result<
             w.file(identity.dir.join(rel), shown.join(rel), content.as_str())
         })
         .commit()?;
-    Ok(stale.into_iter().map(|(rel, _)| rel).collect())
+    Ok(stale.into_keys().collect())
 }
 
 pub fn stale(identity: &Identity) -> Vec<String> {
-    differing(identity)
-        .into_iter()
-        .map(|(rel, _)| rel)
-        .collect()
+    differing(identity).into_keys().collect()
 }
 
-fn differing(identity: &Identity) -> Vec<(String, String)> {
+fn differing(identity: &Identity) -> BTreeMap<String, String> {
     generate(identity)
         .into_iter()
         .filter(|(rel, content)| {
