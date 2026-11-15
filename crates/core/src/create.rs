@@ -25,17 +25,20 @@ pub fn new_identity(root: &Path, shown: &Path, name: &str, slug: &str) -> Result
     let dir = root.join(slug);
     let shown_dir = shown.join(slug);
     let dry = crate::write::dry();
-    if dry && fs::symlink_metadata(&dir).is_ok() {
-        bail!("already exists: {}", shown_dir.display())
-    }
-    if !dry {
+    let taken = if dry {
+        fs::symlink_metadata(&dir).is_ok()
+    } else {
         fs::create_dir_all(root).with_context(|| format!("creating {}", shown.display()))?;
         match fs::create_dir(&dir) {
-            Err(e) if e.kind() == ErrorKind::AlreadyExists => {
-                bail!("already exists: {}", shown_dir.display())
+            Err(e) if e.kind() == ErrorKind::AlreadyExists => true,
+            other => {
+                other.with_context(|| format!("creating {}", shown_dir.display()))?;
+                false
             }
-            other => other.with_context(|| format!("creating {}", shown_dir.display()))?,
         }
+    };
+    if taken {
+        bail!("already exists: {}", shown_dir.display())
     }
     let files = fill(root, &shown_dir, name, slug).inspect_err(|_| {
         if !dry {

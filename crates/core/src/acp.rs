@@ -185,6 +185,9 @@ pub struct Options {
     /// The command and arguments that start the owo MCP server the proxy adds to each session,
     /// for the identity resolved at start.
     pub mcp_server: fn(Option<&str>) -> (String, Vec<String>),
+    /// Store no turns, and write one `owo: would write <path>` line to the warnings writer for
+    /// each path a store would write.
+    pub dry_run: bool,
 }
 
 /// Calls the library for a session's identity, and writes warning lines.
@@ -193,6 +196,7 @@ struct Owo {
     /// The root and project of each call; the identity is the session's.
     select: crate::Select,
     warnings: Mutex<Box<dyn Write + Send>>,
+    dry_run: bool,
 }
 
 impl Owo {
@@ -213,12 +217,22 @@ impl Owo {
     }
 
     /// Stores `turns` for `identity` in `session`, with the default run size, so a due push
-    /// writes the slice and the prompt.
+    /// writes the slice and the prompt. A dry run writes a line for each path instead.
     fn push(&self, identity: &str, session: &str, turns: Vec<crate::Turn>) -> crate::Result<()> {
-        self.root(identity)?
-            .sync()?
-            .push(session, &turns, &crate::SyncOptions::default())?;
-        Ok(())
+        let store = || -> crate::Result<()> {
+            self.root(identity)?
+                .sync()?
+                .push(session, &turns, &crate::SyncOptions::default())?;
+            Ok(())
+        };
+        if !self.dry_run {
+            return store();
+        }
+        let (result, paths) = crate::write::dry_run(store);
+        for path in paths {
+            self.write(&format!("owo: would write {path}\n"));
+        }
+        result
     }
 
     /// Writes `text` to the warnings writer. A failed write is ignored.
@@ -260,6 +274,7 @@ impl Proxy {
                 ..select.clone()
             },
             warnings: Mutex::new(Box::new(warnings)),
+            dry_run: options.dry_run,
         });
         let (start, rows) = identity(&owo, select)?;
         let identities: Vec<_> = rows.into_iter().map(|r| (r.slug, r.name)).collect();

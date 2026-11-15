@@ -1,5 +1,5 @@
-//! `--dry-run`: each command that writes files reports the files it would write and writes
-//! none, and the real run then writes those files.
+//! The dry run (`--dry-run`): each command that writes files reports the files it would
+//! write and writes none, and the real run then writes those files.
 
 mod common;
 
@@ -23,8 +23,8 @@ fn snapshot(dir: &Path) -> BTreeMap<PathBuf, Option<Vec<u8>>> {
 }
 
 /// Runs `args` in `<base>/work` with `--dry-run` and checks that nothing under `base` changed,
-/// then runs them for real and checks that every file that changed is in the dry run's list,
-/// and every path in the list is there. Returns the list.
+/// then runs them for real and checks that every file and folder the real run wrote is in the
+/// dry run's list, and every path in the list is there. Returns the list.
 fn check(base: &Path, args: &[&str]) -> Vec<String> {
     let run = || {
         let mut cmd = owo(&base.join("ids"));
@@ -37,9 +37,10 @@ fn check(base: &Path, args: &[&str]) -> Vec<String> {
     assert!(snapshot(base) == before, "{args:?} wrote in a dry run");
     let real = json(&mut run());
     assert_eq!(real["ok"], true, "{args:?}: {real}");
+    assert!(real.get("would_write").is_none(), "{real}");
     let after = snapshot(base);
 
-    let list: Vec<String> = dry["data"]["would_write"]
+    let list: Vec<String> = dry["would_write"]
         .as_array()
         .unwrap_or_else(|| panic!("{args:?}: {dry}"))
         .iter()
@@ -54,13 +55,15 @@ fn check(base: &Path, args: &[&str]) -> Vec<String> {
         })
         .collect();
     for (path, bytes) in &after {
-        if bytes.is_some() && before.get(path) != Some(bytes) {
-            assert!(
-                named.contains(path),
-                "{args:?} wrote {} and its dry run did not name it: {list:?}",
-                path.display()
-            );
-        }
+        let wrote = match bytes {
+            Some(_) => before.get(path) != Some(bytes),
+            None => !before.contains_key(path),
+        };
+        assert!(
+            !wrote || named.contains(path),
+            "{args:?} wrote {} and its dry run did not name it: {list:?}",
+            path.display()
+        );
     }
     for (p, rel) in list.iter().zip(&named) {
         let folder = p.ends_with('/');
@@ -88,6 +91,7 @@ fn dry_run_names_what_each_writing_command_writes() {
     let v1 = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/v1-lumen");
 
     let list = check(&base, &["new", "Thea"]);
+    assert_eq!(list[0], format!("{}/", base.join("ids/thea").display()));
     assert!(list.iter().any(|p| p.ends_with("/thea/soul/SOUL.md")));
     assert!(list.iter().any(|p| p.ends_with("/thea/life/_index.md")));
     assert!(list.iter().any(|p| p.ends_with("/thea/work/projects/")));
@@ -163,7 +167,8 @@ fn dry_run_text_names_the_files_and_keeps_errors() {
         .assert()
         .success()
         .stdout(format!(
-            "would write {}\n",
+            "would write {}/\nwould write {}\n",
+            skill.display(),
             skill.join("SKILL.md").display()
         ));
     owo(&base)

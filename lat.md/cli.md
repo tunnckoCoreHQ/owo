@@ -4,7 +4,7 @@ Every command accepts `--root`, `-i/--identity`, `--project`, `--json` and `--qu
 
 ## Output
 
-With `--json` every command prints `{ "ok", "data", "warnings", "errors" }`; otherwise readable text, with each warning on stderr as `owo: warning: <text>`.
+With `--json` every command prints `{ "ok", "data", "warnings", "errors" }`, and a dry run adds `would_write`; otherwise readable text, with each warning on stderr as `owo: warning: <text>`.
 
 With `--quiet` commands drop their confirmation lines: the path `add` and `write` print, `stamp`, `index`, `lint` and `sync` summaries, `wrote <file>`. Output that is the result itself (`show`, `search`, `context` and the like), warnings and problems still print. Lint also drops its warning diagnostics.
 
@@ -14,11 +14,13 @@ Exit codes: 0 success, 1 problems found (lint errors, exists, unknown template, 
 
 Each command that writes files takes `--dry-run`, and its MCP tool takes `dry-run`: `new`, `write`, `add`, `stamp`, `index`, `review done`, `soul note`, `export card`, `export skill`, `export soulspec`, `sync start`, `sync push`, `sync done` and `migrate v1`. The command runs as usual, writes nothing, and reports what it would write. See [[decisions#Dry run keeps writes in memory]].
 
-- With `--json` the envelope is the one of the real run, and `data` gets `would_write`: each file and folder the command would write, once, in write order, as the path joined onto the root or the working folder. A folder ends in `/`. The other fields of `data` tell what the command would do.
+- The list names each file the command would write, and before it each folder the command would make for it, once each, in write order. A folder ends in `/`. A path is the one the command would write: the request path joined onto the root or the working folder.
+- With `--json` the envelope is the one of the real run, with `would_write` after `errors`: `{ "ok", "data", "warnings", "errors", "would_write" }`.
 - The text drops the confirmation lines, as `--quiet` does, then prints `would write <path>` for each path, or `would write nothing`.
-- The errors and the exit code are the ones of the real run, so `owo new <name> --dry-run` for an identity that exists exits 1.
 
-A dry run does not try the writes, so a write that would fail, such as one into a read-only folder, is still in the list. It takes no sync lock. `owo mcp` and `owo acp` take no `--dry-run`.
+A dry run does not try the writes, so it gives the errors that come before the writes, with their exit codes, and not the errors of a write. For example, `owo new <name> --dry-run` for an identity that exists exits 1, but a file in a read-only folder is still in the list. A dry run takes no sync lock.
+
+The ACP proxy takes `--dry-run` too: `owo acp --dry-run -- <agent command>` stores no turns, and writes `owo: would write <path>` on stderr for each path a store would write. The MCP server that the proxy adds is a separate `owo mcp` process, and its tools write unless a call sets `dry-run`. The `owo mcp` command itself writes no files and takes no `--dry-run`.
 
 ## Commands
 
@@ -43,7 +45,7 @@ Each command with its flags and exit behavior.
 - `owo sync start`, `owo sync push`, `owo sync done` and `owo sync due`; see [[cli#Sync]].
 - `owo migrate v1 <path> --out <root>/<slug>`; see [[decisions#Migrate is mechanical]].
 - `owo mcp [--remote [ADDR]] [--port N]` serves every command as an MCP tool (subcommands as `review_done`, `export_card` and so on). Without `--remote` it speaks over stdio. With `--remote` it listens on ADDR (default `127.0.0.1`), port N or 4224 (else the next free port), prints `http://<addr>:<port>/mcp`, and answers each POST with JSON. `--root`, `-i` and `--project` given to `owo mcp` are the defaults; each tool also takes `identity` and `project`. Paths in tool arguments are paths on the server.
-- `owo acp [--inject] -- <agent command>` runs an ACP agent behind a pass-through proxy that stores the turns and gives the agent the identity; see [[decisions#ACP proxy passes lines through]]. Each session starts with the selected identity, or none, and the client switches it with the `identity` session config option or the `/owo <identity>` command. By default the proxy adds the owo MCP server to each session and tells the agent to load the identity with the `context` tool. With `--inject` it puts the output of `owo context` in the first prompt of a session and in the next prompt after a switch instead, and adds no MCP server; with no identity in the root that is a usage error (exit 2). It exits with the agent's exit code, or 1 when a signal killed the agent. It is not an MCP tool.
+- `owo acp [--inject] [--dry-run] -- <agent command>` runs an ACP agent behind a pass-through proxy that stores the turns and gives the agent the identity; see [[decisions#ACP proxy passes lines through]]. Each session starts with the selected identity, or none, and the client switches it with the `identity` session config option or the `/owo <identity>` command. By default the proxy adds the owo MCP server to each session and tells the agent to load the identity with the `context` tool. With `--inject` it puts the output of `owo context` in the first prompt of a session and in the next prompt after a switch instead, and adds no MCP server; with no identity in the root that is a usage error (exit 2). It exits with the agent's exit code, or 1 when a signal killed the agent. It is not an MCP tool.
 - `owo list` prints slug, name, last activity and projects per identity. Also `owo slug <text>` (exits 1 with a reason when the text has no letters or digits), `owo templates [list | show <name>]` (list marks overrides), `owo config`.
 
 ## Context

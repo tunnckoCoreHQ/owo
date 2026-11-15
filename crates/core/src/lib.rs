@@ -118,14 +118,6 @@ fn utf8(path: &Path) -> PathBuf {
     PathBuf::from(path.to_string_lossy().into_owned())
 }
 
-/// Runs `f`, the typed calls of a dry run, with every write kept in memory: nothing reaches
-/// the disk, and the calls read the kept files as if they were there. Returns what `f`
-/// returns and the files and folders the calls would write, each once, in the order they
-/// came; a folder ends in `/`. The calls of other threads write as usual.
-pub fn dry_run<T>(f: impl FnOnce() -> T) -> (T, Vec<String>) {
-    write::dry_run(f)
-}
-
 /// The names of the entry types `add` creates.
 pub fn entry_types() -> impl Iterator<Item = &'static str> {
     templates::ENTRY_TEMPLATES.iter().map(|(n, _)| *n)

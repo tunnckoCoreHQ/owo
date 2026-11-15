@@ -18,8 +18,8 @@ thread_local! {
 }
 
 /// Runs `f` with every commit kept in memory instead of written, and `read` seeing the kept
-/// files. Returns what `f` returns and the paths the commits named, each once, in the order
-/// they came; a folder ends in `/`.
+/// files. Returns what `f` returns and the paths the commits would write: each folder they
+/// would make, ending in `/`, before the file in it. Each path comes once, in commit order.
 pub fn dry_run<T>(f: impl FnOnce() -> T) -> (T, Vec<String>) {
     /// Puts back the state before the dry run, also when `f` panics.
     struct Reset(Option<Vec<Target>>);
@@ -34,12 +34,19 @@ pub fn dry_run<T>(f: impl FnOnce() -> T) -> (T, Vec<String>) {
     drop(reset);
     let mut paths: Vec<String> = vec![];
     for t in kept {
-        let mut path = t.path.display().to_string();
-        if t.bytes.is_none() {
-            path.push('/');
+        let dir = match t.bytes {
+            Some(_) => t.path.parent(),
+            None => Some(t.path.as_path()),
+        };
+        let folders = dir.map(missing).unwrap_or_default().into_iter().rev();
+        let mut add: Vec<String> = folders.map(|d| format!("{}/", d.display())).collect();
+        if t.bytes.is_some() {
+            add.push(t.path.display().to_string());
         }
-        if !paths.contains(&path) {
-            paths.push(path);
+        for path in add {
+            if !paths.contains(&path) {
+                paths.push(path);
+            }
         }
     }
     (out, paths)
@@ -149,17 +156,12 @@ impl Writes {
     /// Writes every target, or on an error undoes what it did and returns the error. In a dry
     /// run it keeps the targets in memory and writes nothing.
     pub fn commit(self) -> Result<()> {
-        let Some(targets) = KEPT.with_borrow_mut(|kept| match kept {
-            Some(kept) => {
-                kept.extend(self.0);
-                None
-            }
-            None => Some(self.0),
-        }) else {
+        if dry() {
+            KEPT.with_borrow_mut(|kept| kept.as_mut().expect("a dry run").extend(self.0));
             return Ok(());
-        };
+        }
         let mut undo = Undo::default();
-        let result = apply(targets, &mut undo);
+        let result = apply(self.0, &mut undo);
         if result.is_err() {
             undo.run();
         }

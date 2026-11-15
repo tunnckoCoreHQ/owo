@@ -424,6 +424,7 @@ fn acp_proxy_runs_on_given_streams() {
         acp::Options {
             inject: false,
             mcp_server,
+            dry_run: false,
         },
         vec![
             vec![new_reply()],
@@ -507,6 +508,7 @@ fn acp_inject_puts_the_context_in_the_first_prompt() {
         acp::Options {
             inject: true,
             mcp_server,
+            dry_run: false,
         },
         vec![vec![new_reply()], vec![end(2)], vec![end(3)]],
     );
@@ -534,6 +536,7 @@ fn acp_push_writes_the_run_when_due() {
         acp::Options {
             inject: false,
             mcp_server,
+            dry_run: false,
         },
         replies,
     );
@@ -551,4 +554,31 @@ fn acp_push_writes_the_run_when_due() {
     assert_eq!(due[0].session, "s1.nicole");
     assert_eq!((due[0].from, due[0].until), (0, 12));
     assert!(tmp.path().join(&due[0].prompt).is_file());
+}
+
+#[test]
+fn acp_dry_run_stores_no_turns() {
+    let tmp = root(&["nicole"]);
+    let mut p = start(
+        tmp.path(),
+        acp::Options {
+            inject: false,
+            mcp_server,
+            dry_run: true,
+        },
+        vec![vec![new_reply()], vec![chunk("m1", "ok"), end(2)]],
+    );
+    p.send(&new_session());
+    p.read();
+    p.read();
+    p.send(&prompt(2, "hello"));
+    p.read();
+    p.read();
+    let warnings = String::from_utf8(p.end()).unwrap();
+    let store = tmp.path().join(".owo/sessions/s1.nicole.turns.jsonl");
+    assert!(
+        warnings.contains(&format!("owo: would write {}\n", store.display())),
+        "{warnings}"
+    );
+    assert!(!tmp.path().join(".owo").exists());
 }

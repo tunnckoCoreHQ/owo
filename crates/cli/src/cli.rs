@@ -143,6 +143,12 @@ fn acp() -> Command {
                 .help("Put the identity context in the prompt, and add no owo MCP server (needs an identity in the root)"),
         )
         .arg(
+            Arg::new("dry-run")
+                .long("dry-run")
+                .action(ArgAction::SetTrue)
+                .help("Store no turns; print `owo: would write <path>` on stderr for each file a store would write"),
+        )
+        .arg(
             Arg::new("agent")
                 .last(true)
                 .required(true)

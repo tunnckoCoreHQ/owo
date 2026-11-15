@@ -357,19 +357,20 @@ impl Identity {
         let md = |p: &Path| p.extension().and_then(|e| e.to_str()) == Some("md");
         // By path relative to the folder, which is the order of a walk that sorts by file name.
         let mut files = BTreeMap::new();
-        let walk =
-            (!crate::write::dry() || dir.exists()).then(|| WalkDir::new(&dir).sort_by_file_name());
-        for item in walk.into_iter().flatten() {
-            let item = item
-                .map_err(std::io::Error::from)
-                .with_context(|| format!("walking {}", dir.display()))?;
-            if !item.file_type().is_file() || !md(item.path()) {
-                continue;
+        // A dry run may hold the folder only in memory.
+        if !crate::write::dry() || dir.exists() {
+            for item in WalkDir::new(&dir).sort_by_file_name() {
+                let item = item
+                    .map_err(std::io::Error::from)
+                    .with_context(|| format!("walking {}", dir.display()))?;
+                if !item.file_type().is_file() || !md(item.path()) {
+                    continue;
+                }
+                let bytes = fs::read(item.path())
+                    .with_context(|| format!("reading {}", item.path().display()))?;
+                let rel = item.path().strip_prefix(&dir).unwrap_or(item.path());
+                files.insert(rel.to_path_buf(), bytes);
             }
-            let bytes = fs::read(item.path())
-                .with_context(|| format!("reading {}", item.path().display()))?;
-            let rel = item.path().strip_prefix(&dir).unwrap_or(item.path());
-            files.insert(rel.to_path_buf(), bytes);
         }
         files.extend(
             crate::write::kept_under(&dir)
@@ -550,7 +551,15 @@ mod tests {
             let text = id.entry("soul/SOUL.md").map(|e| e.text.as_str());
             assert_eq!(text, Some("# Soul\n"));
         });
-        assert_eq!(paths, [soul.display().to_string()]);
-        assert!(!tmp.path().join("thea").exists());
+        let thea = tmp.path().join("thea");
+        assert_eq!(
+            paths,
+            [
+                format!("{}/", thea.display()),
+                format!("{}/", thea.join("soul").display()),
+                soul.display().to_string()
+            ]
+        );
+        assert!(!thea.exists());
     }
 }

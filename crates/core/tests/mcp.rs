@@ -143,9 +143,6 @@ fn mcp_dry_run_names_the_file_and_writes_none() {
     let text = r["result"]["content"][0]["text"].as_str().unwrap();
     let envelope: Value = serde_json::from_str(text).unwrap();
     let file = tmp.path().join("nicole/life/characters/mara-voss.md");
-    assert_eq!(
-        envelope["data"]["would_write"],
-        json!([file.display().to_string()])
-    );
+    assert_eq!(envelope["would_write"], json!([file.display().to_string()]));
     assert!(!file.exists());
 }

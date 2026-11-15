@@ -181,15 +181,7 @@ pub fn write(identity: &Identity) -> anyhow::Result<Vec<String>> {
 
 /// Like `write`, but error text names the identity folder as `shown`. Writes all files or none.
 pub fn write_as(identity: &Identity, shown: &std::path::Path) -> anyhow::Result<Vec<String>> {
-    let stale: Vec<(String, String)> = generate(identity)
-        .into_iter()
-        .filter(|(rel, content)| {
-            crate::write::read_to_string(&identity.dir.join(rel))
-                .ok()
-                .as_deref()
-                != Some(content.as_str())
-        })
-        .collect();
+    let stale = differing(identity);
     stale
         .iter()
         .fold(crate::write::Writes::new(), |w, (rel, content)| {
@@ -201,6 +193,15 @@ pub fn write_as(identity: &Identity, shown: &std::path::Path) -> anyhow::Result<
 
 /// Generated paths whose file content differs from what `generate` produces.
 pub fn stale(identity: &Identity) -> Vec<String> {
+    differing(identity)
+        .into_iter()
+        .map(|(rel, _)| rel)
+        .collect()
+}
+
+/// The generated files whose file content differs from what `generate` produces, with the
+/// content it produces.
+fn differing(identity: &Identity) -> Vec<(String, String)> {
     generate(identity)
         .into_iter()
         .filter(|(rel, content)| {
@@ -209,6 +210,5 @@ pub fn stale(identity: &Identity) -> Vec<String> {
                 .as_deref()
                 != Some(content.as_str())
         })
-        .map(|(rel, _)| rel)
         .collect()
 }
