@@ -261,20 +261,14 @@ fn lorebook_lists_locations_before_events() {
 }
 
 #[test]
-fn context_paths_put_the_now_block_after_the_core_files() {
+fn context_puts_the_now_block_last() {
     let tmp = thea();
-    let out = owo(tmp.path())
-        .args(["-i", "thea", "context", "--format", "paths", "--voice"])
-        .output()
-        .unwrap();
-    let paths = String::from_utf8(out.stdout).unwrap();
-    let tiers: Vec<&str> = paths
-        .lines()
-        .filter_map(|l| l.split_whitespace().next())
-        .collect();
-    let now = tiers.iter().position(|t| *t == "now").unwrap();
-    assert!(tiers[..now].iter().all(|t| *t == "core"), "{paths}");
-    assert!(now < tiers.len() - 1, "{paths}");
+    let args = ["context", "--voice", "--look"];
+    let text = stdout(tmp.path(), &args);
+    let last = text.lines().rfind(|l| l.starts_with("<!-- owo:")).unwrap();
+    assert_eq!(last, "<!-- owo: now -->", "{text}");
+    let paths = stdout(tmp.path(), &[&args[..], &["--format", "paths"]].concat());
+    assert!(paths.ends_with("now      (generated block)\n"), "{paths}");
 }
 
 fn git(dir: &Path, args: &[&str], date: Option<&str>) {

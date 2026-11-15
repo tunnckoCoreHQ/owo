@@ -40,12 +40,13 @@ Each command with its flags and exit behavior.
 
 `owo context` lists files by tier and adds a generated Now block derived from state files and frontmatter dates.
 
-- core, always: `soul/IDENTITY.md`, `soul/SOUL.md`, `soul/MEMORY.md`, then the Now block (last activity per scope, last project, recent days, recent events (counted back from the newest non-blank log or event date), open threads and conflicts, review status, where to look next).
+- core, always: `soul/IDENTITY.md`, `soul/SOUL.md`, `soul/MEMORY.md`.
 - voice and look: `soul/VOICE.md` and `soul/LOOK.md` with `--voice` and `--look`.
 - project, with `--project <p>`: `work/README.md`, `project.md`, the newest N notes, and the KB pointer.
 - with, for each `--with <name>`: the entry it resolves to, unless the load set already holds that file.
+- now, always: the Now block (last activity per scope, last project, recent days, recent events (counted back from the newest non-blank log or event date), open threads and conflicts, review status, where to look next).
 
-Both formats put the Now block right after the core files.
+Both formats put the Now block last, after the KB pointer.
 
 The KB path comes from `project.md` `kb`, relative to the identity folder, with `~/` as the home folder. See [[decisions#KB pointer is always emitted]]. `owo context` writes nothing; the last project is the one with the newest file stamp under `work/projects/`.
 

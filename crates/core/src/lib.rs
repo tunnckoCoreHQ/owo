@@ -450,8 +450,8 @@ impl Identity {
         Ok(context::build(self, req, project)?)
     }
 
-    /// The text of a load set: each file after an `<!-- owo: ... -->` line, the Now block and the
-    /// KB pointer.
+    /// The text of a load set: each file after an `<!-- owo: ... -->` line, the KB pointer, and
+    /// the Now block last.
     pub fn context_text(&self, ctx: &Context) -> String {
         context::render_text(self, ctx)
     }
