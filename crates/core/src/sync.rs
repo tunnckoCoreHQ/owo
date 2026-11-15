@@ -138,7 +138,7 @@ pub fn parse(raw: &str, format: Format) -> Result<Vec<Message>> {
     Ok(out)
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Default, Serialize)]
 pub struct Start {
     pub due: bool,
     pub identity: String,
@@ -247,11 +247,6 @@ fn bookmark_path(root: &Path, session: &str) -> std::path::PathBuf {
 
 fn read_bookmark(root: &Path, session: &str) -> Result<Value> {
     Ok(read_object(&bookmark_path(root, session))?.unwrap_or_else(|| json!({})))
-}
-
-fn bookmark_writes(root: &Path, session: &str, doc: &Value) -> Result<Writes> {
-    let path = bookmark_path(root, session);
-    Writes::new().json(&path, &path, doc)
 }
 
 fn store(session: &str) -> String {
@@ -419,12 +414,7 @@ fn run(
         every: req.every,
         from,
         until,
-        source: None,
-        prompt: None,
-        pending: None,
-        added: None,
-        source_text: None,
-        prompt_text: None,
+        ..Start::default()
     };
     doc["session"] = json!(req.session);
     doc["transcript"] = json!(transcript.display().to_string());
@@ -476,10 +466,8 @@ fn run(
         out.source = Some(source);
         out.prompt = Some(prompt);
     }
-    Ok((
-        out,
-        writes.and(bookmark_writes(req.root, req.session, &doc)?),
-    ))
+    let path = bookmark_path(req.root, req.session);
+    Ok((out, writes.and(Writes::new().json(&path, &path, &doc)?)))
 }
 
 #[derive(Debug, Serialize)]
@@ -551,6 +539,7 @@ pub fn done(root: &Path, session: &str, until: usize) -> Result<Bookmark> {
     }
     let bookmark = Bookmark::deserialize(&doc)
         .with_context(|| format!("the bookmark of session {session:?} does not parse"))?;
-    bookmark_writes(root, session, &doc)?.commit()?;
+    let path = bookmark_path(root, session);
+    Writes::new().json(&path, &path, &doc)?.commit()?;
     Ok(bookmark)
 }
