@@ -231,7 +231,7 @@ pub fn operations() -> Vec<Operation> {
         ),
         op::<ContextRequest>(
             &["context"],
-            "The tiered load set: core files, the generated Now block, and requested tiers",
+            "The tiered load set: core files, requested tiers, and the generated Now block last",
             |r, s| {
                 let id = s.identity()?;
                 let context = id.context(&r)?;

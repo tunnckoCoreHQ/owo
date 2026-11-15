@@ -135,7 +135,6 @@ pub fn render_text(id: &Identity, c: &Context) -> String {
             "<!-- owo: project kb -->\nProject knowledge base: {note}\n\n"
         ));
     }
-    // The Now block is always the last section.
     out.push_str(&format!("<!-- owo: now -->\n{}\n", c.now));
     out
 }
