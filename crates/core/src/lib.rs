@@ -51,8 +51,8 @@ pub use request::{
 pub use review::{Changed, Day, Note as SoulNote, Packet, ReviewRecord, SoulChange};
 pub use search::{Hit as SearchHit, Scope};
 pub use stamp::Report as StampReport;
-pub use state::parse_day;
-pub use status::{now_block, Link, ProjectState, Review, Row, State};
+pub use state::{day, parse_day};
+pub use status::{join_links, now_block, Link, ProjectState, Review, Row, State};
 pub use sync::{
     parse_turns, Bookmark, Due as SyncDue, Format as SyncFormat, PendingRun, Role,
     Start as SyncRun, Turn,

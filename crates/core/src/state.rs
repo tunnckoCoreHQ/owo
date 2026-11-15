@@ -8,7 +8,7 @@ pub fn hash(text: &str) -> String {
     format!("b3:{}", blake3::hash(text.as_bytes()).to_hex())
 }
 
-pub(crate) fn day(stamp: &str) -> &str {
+pub fn day(stamp: &str) -> &str {
     stamp.get(..10).unwrap_or(stamp)
 }
 

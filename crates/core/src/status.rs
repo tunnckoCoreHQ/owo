@@ -19,13 +19,6 @@ impl Link {
             date: e.field_str("date"),
         }
     }
-
-    pub(crate) fn wiki(&self) -> String {
-        match &self.date {
-            Some(d) if !self.title.starts_with(d.as_str()) => format!("[[{}]] ({d})", self.title),
-            _ => format!("[[{}]]", self.title),
-        }
-    }
 }
 
 #[derive(Debug, Serialize)]
@@ -199,11 +192,14 @@ pub fn compute(id: &Identity, days: i64, logs: usize) -> State {
     }
 }
 
-pub(crate) fn join(links: &[Link]) -> String {
-    if links.is_empty() {
-        "none".into()
-    } else {
-        links.iter().map(Link::wiki).collect::<Vec<_>>().join(", ")
+pub fn join_links(links: &[Link]) -> String {
+    let wiki = |l: &Link| match &l.date {
+        Some(d) if !l.title.starts_with(d.as_str()) => format!("[[{}]] ({d})", l.title),
+        _ => format!("[[{}]]", l.title),
+    };
+    match links {
+        [] => "none".into(),
+        _ => links.iter().map(wiki).collect::<Vec<_>>().join(", "),
     }
 }
 
@@ -225,11 +221,20 @@ pub fn now_block(s: &State, project: Option<&str>) -> String {
     if let Some((p, t)) = &s.last_project {
         out.push_str(&format!("- Last project: {p} ({})\n", crate::state::day(t)));
     }
-    out.push_str(&format!("- Recent days: {}\n", join(&s.recent_logs)));
-    out.push_str(&format!("- Recent events: {}\n", join(&s.recent_events)));
-    out.push_str(&format!("- Open threads: {}\n", join(&s.open_threads)));
+    out.push_str(&format!("- Recent days: {}\n", join_links(&s.recent_logs)));
+    out.push_str(&format!(
+        "- Recent events: {}\n",
+        join_links(&s.recent_events)
+    ));
+    out.push_str(&format!(
+        "- Open threads: {}\n",
+        join_links(&s.open_threads)
+    ));
     if !s.open_conflicts.is_empty() {
-        out.push_str(&format!("- Open conflicts: {}\n", join(&s.open_conflicts)));
+        out.push_str(&format!(
+            "- Open conflicts: {}\n",
+            join_links(&s.open_conflicts)
+        ));
     }
     let r = &s.review;
     let review = match r.days_since {
