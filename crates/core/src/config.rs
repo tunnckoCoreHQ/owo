@@ -92,7 +92,7 @@ pub fn resolve(select: &Select, env: &Env) -> Result<Resolved> {
         load(find_project_file(&env.cwd), Source::ProjectFile)?,
         load(
             xdg(&env.xdg_config_home, ".config")
-                .map(|d| d.join("owo/config.toml"))
+                .map(|d| d.join("owo").join("config.toml"))
                 .filter(|p| p.is_file()),
             Source::UserConfig,
         )?,
