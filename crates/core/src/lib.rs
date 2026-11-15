@@ -135,15 +135,13 @@ pub struct Root {
 
 impl Root {
     pub fn open(select: &Select, env: &Env) -> Result<Root> {
-        let inputs = config::Inputs::new(select, env);
-        let config = config::resolve(&inputs).map_err(|e| {
-            let mut e = Error::from(e);
+        let config = config::resolve(select, env).map_err(|mut e| {
             e.kind = ErrorKind::Config;
             e
         })?;
         let mut warnings = vec![];
         if let Source::ProjectFile(file) = &config.root_source {
-            if file.parent() != Some(inputs.cwd.as_path()) {
+            if file.parent() != Some(env.cwd.as_path()) {
                 warnings.push(format!(
                     "the root comes from {} in a parent folder",
                     file.display()
@@ -281,7 +279,7 @@ impl SessionSync<'_> {
 
 impl Identity {
     pub fn working_project(&self) -> Result<Option<&str>> {
-        Ok(need_project(&self.dir, self.project.as_deref())?)
+        need_project(&self.dir, self.project.as_deref())
     }
 
     pub fn lint(&self, req: &LintRequest) -> Result<Vec<Diagnostic>> {

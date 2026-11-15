@@ -225,9 +225,7 @@ impl From<anyhow::Error> for Error {
         if let Some(fault) = e.downcast_ref::<Fault>() {
             return fault.clone().into();
         }
-        let kind = if e.downcast_ref::<crate::config::ConfigError>().is_some() {
-            ErrorKind::Config
-        } else if e.downcast_ref::<std::io::Error>().is_some() {
+        let kind = if e.downcast_ref::<std::io::Error>().is_some() {
             ErrorKind::Io
         } else {
             ErrorKind::Failed

@@ -1,4 +1,5 @@
-use anyhow::{Context, Result};
+use crate::{Env, Error, ErrorKind, Fault, Result, Select};
+use anyhow::Context;
 use serde::Deserialize;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -38,60 +39,7 @@ pub struct Resolved {
     pub ingest_command: Option<Vec<String>>,
 }
 
-#[derive(Debug, Default)]
-pub struct Inputs {
-    pub select: crate::Select,
-    pub env_root: Option<String>,
-    pub env_identity: Option<String>,
-    pub env_project: Option<String>,
-    pub cwd: PathBuf,
-    pub home: Option<PathBuf>,
-    pub xdg_config: Option<PathBuf>,
-    pub xdg_data: Option<PathBuf>,
-}
-
-impl Inputs {
-    pub fn new(select: &crate::Select, env: &crate::Env) -> Self {
-        Self {
-            select: select.clone(),
-            env_root: env.owo_root.clone(),
-            env_identity: env.owo_identity.clone(),
-            env_project: env.owo_project.clone(),
-            cwd: env.cwd.clone(),
-            home: env
-                .home
-                .clone()
-                .filter(|h| h.to_str().is_some_and(|s| !s.is_empty())),
-            xdg_config: env.xdg_config_home.clone(),
-            xdg_data: env.xdg_data_home.clone(),
-        }
-    }
-
-    fn user_config_path(&self) -> Option<PathBuf> {
-        let base = self
-            .xdg_config
-            .clone()
-            .or_else(|| self.home.as_ref().map(|h| h.join(".config")))?;
-        Some(base.join("owo").join("config.toml"))
-    }
-
-    fn default_root(&self) -> Option<PathBuf> {
-        let base = self
-            .xdg_data
-            .clone()
-            .or_else(|| self.home.as_ref().map(|h| h.join(".local/share")))?;
-        Some(base.join("owo"))
-    }
-
-    fn expand(&self, value: &str, relative_to: &Path) -> PathBuf {
-        let path = expand_home(value, self.home.as_deref());
-        if path.is_absolute() {
-            path
-        } else {
-            relative_to.join(path)
-        }
-    }
-}
+type Loaded = Option<(Source, FileConfig)>;
 
 pub fn expand_home(value: &str, home: Option<&Path>) -> PathBuf {
     match (value.strip_prefix("~/"), home) {
@@ -100,9 +48,13 @@ pub fn expand_home(value: &str, home: Option<&Path>) -> PathBuf {
     }
 }
 
-fn read_config(path: &Path) -> Result<FileConfig> {
-    let text = fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
-    toml::from_str(&text).with_context(|| format!("parsing {}", path.display()))
+fn load(path: Option<PathBuf>, source: fn(PathBuf) -> Source) -> anyhow::Result<Loaded> {
+    let Some(path) = path else {
+        return Ok(None);
+    };
+    let text = fs::read_to_string(&path).with_context(|| format!("reading {}", path.display()))?;
+    let config = toml::from_str(&text).with_context(|| format!("parsing {}", path.display()))?;
+    Ok(Some((source(path), config)))
 }
 
 pub fn find_project_file(start: &Path) -> Option<PathBuf> {
@@ -112,75 +64,79 @@ pub fn find_project_file(start: &Path) -> Option<PathBuf> {
         .find(|p| p.is_file())
 }
 
-pub fn resolve(inputs: &Inputs) -> Result<Resolved> {
-    let project_file = find_project_file(&inputs.cwd);
-    let project_cfg = match &project_file {
-        Some(p) => Some((p.clone(), read_config(p)?)),
-        None => None,
-    };
-    let user_path = inputs.user_config_path().filter(|p| p.is_file());
-    let user_cfg = match &user_path {
-        Some(p) => Some((p.clone(), read_config(p)?)),
-        None => None,
-    };
+fn lookup(
+    flag: Option<String>,
+    env: Option<&String>,
+    files: &[Loaded],
+    field: fn(&FileConfig) -> Option<&String>,
+) -> Option<(String, Source)> {
+    flag.map(|v| (v, Source::Flag))
+        .or_else(|| env.map(|v| (v.clone(), Source::Env)))
+        .or_else(|| {
+            files
+                .iter()
+                .flatten()
+                .find_map(|(source, c)| Some((field(c)?.clone(), source.clone())))
+        })
+}
 
-    let (root, root_source) = if let Some(picked) = &inputs.select.root {
-        (
-            inputs.expand(&picked.to_string_lossy(), &inputs.cwd),
-            Source::Flag,
-        )
-    } else if let Some(value) = &inputs.env_root {
-        (inputs.expand(value, &inputs.cwd), Source::Env)
-    } else if let Some((path, value)) = project_cfg
-        .as_ref()
-        .and_then(|(p, c)| c.root.as_ref().map(|r| (p, r)))
-    {
-        (
-            inputs.expand(value, path.parent().unwrap_or(Path::new("."))),
-            Source::ProjectFile(path.clone()),
-        )
-    } else if let Some((path, value)) = user_cfg
-        .as_ref()
-        .and_then(|(p, c)| c.root.as_ref().map(|r| (p, r)))
-    {
-        (
-            inputs.expand(value, path.parent().unwrap_or(Path::new("."))),
-            Source::UserConfig(path.clone()),
-        )
-    } else if let Some(root) = inputs.default_root() {
-        (root, Source::Default)
-    } else {
-        return Err(crate::Fault::NoRoot.into());
+pub fn resolve(select: &Select, env: &Env) -> Result<Resolved> {
+    let home = env
+        .home
+        .as_deref()
+        .filter(|h| h.to_str().is_some_and(|s| !s.is_empty()));
+    let xdg = |dir: &Option<PathBuf>, under_home: &str| {
+        dir.clone().or_else(|| home.map(|h| h.join(under_home)))
     };
+    let configs = [
+        load(find_project_file(&env.cwd), Source::ProjectFile)?,
+        load(
+            xdg(&env.xdg_config_home, ".config")
+                .map(|d| d.join("owo/config.toml"))
+                .filter(|p| p.is_file()),
+            Source::UserConfig,
+        )?,
+    ];
 
-    let (identity, identity_source) = if let Some(picked) = &inputs.select.identity {
-        (Some(picked.clone()), Some(Source::Flag))
-    } else if let Some(value) = &inputs.env_identity {
-        (Some(value.clone()), Some(Source::Env))
-    } else if let Some((path, value)) = project_cfg
+    let root_flag = select
+        .root
         .as_ref()
-        .and_then(|(p, c)| c.identity.as_ref().map(|v| (p, v)))
-    {
-        (Some(value.clone()), Some(Source::ProjectFile(path.clone())))
-    } else if let Some((path, value)) = user_cfg
-        .as_ref()
-        .and_then(|(p, c)| c.identity.as_ref().map(|v| (p, v)))
-    {
-        (Some(value.clone()), Some(Source::UserConfig(path.clone())))
-    } else {
-        match only_identity(&root) {
-            Some(slug) => (Some(slug), Some(Source::OnlyIdentity)),
-            None => (None, None),
+        .map(|p| p.to_string_lossy().into_owned());
+    let (root, root_source) = match lookup(root_flag, env.owo_root.as_ref(), &configs, |c| {
+        c.root.as_ref()
+    }) {
+        Some((value, source)) => {
+            let base = match &source {
+                Source::ProjectFile(p) | Source::UserConfig(p) => {
+                    p.parent().unwrap_or(Path::new("."))
+                }
+                _ => env.cwd.as_path(),
+            };
+            (base.join(expand_home(&value, home)), source)
         }
+        None => (
+            xdg(&env.xdg_data_home, ".local/share")
+                .ok_or(Fault::NoRoot)?
+                .join("owo"),
+            Source::Default,
+        ),
     };
 
-    let project = inputs
-        .select
-        .project
-        .clone()
-        .or_else(|| inputs.env_project.clone())
-        .or_else(|| project_cfg.as_ref().and_then(|(_, c)| c.project.clone()));
-    let configs = [&project_cfg, &user_cfg];
+    let (identity, identity_source) = lookup(
+        select.identity.clone(),
+        env.owo_identity.as_ref(),
+        &configs,
+        |c| c.identity.as_ref(),
+    )
+    .or_else(|| only_identity(&root).map(|slug| (slug, Source::OnlyIdentity)))
+    .unzip();
+    let project = lookup(
+        select.project.clone(),
+        env.owo_project.as_ref(),
+        &configs[..1],
+        |c| c.project.as_ref(),
+    )
+    .map(|(value, _)| value);
 
     Ok(Resolved {
         root,
@@ -188,19 +144,14 @@ pub fn resolve(inputs: &Inputs) -> Result<Resolved> {
         identity,
         identity_source,
         project,
-        sync_every: first(configs, |c| c.sync_every),
-        auto_ingest: first(configs, |c| c.auto_ingest).unwrap_or(false),
-        ingest_command: first(configs, |c| c.ingest_command.clone()),
+        sync_every: first(&configs, |c| c.sync_every),
+        auto_ingest: first(&configs, |c| c.auto_ingest).unwrap_or(false),
+        ingest_command: first(&configs, |c| c.ingest_command.clone()),
     })
 }
 
-fn first<T>(
-    configs: [&Option<(PathBuf, FileConfig)>; 2],
-    field: impl Fn(&FileConfig) -> Option<T>,
-) -> Option<T> {
-    configs
-        .into_iter()
-        .find_map(|cfg| cfg.as_ref().and_then(|(_, c)| field(c)))
+fn first<T>(configs: &[Loaded], field: impl Fn(&FileConfig) -> Option<T>) -> Option<T> {
+    configs.iter().flatten().find_map(|(_, c)| field(c))
 }
 
 pub fn list_identities(root: &Path) -> Vec<String> {
@@ -225,30 +176,24 @@ fn only_identity(root: &Path) -> Option<String> {
     }
 }
 
-#[derive(Debug)]
-pub struct ConfigError(pub String);
-
-impl std::fmt::Display for ConfigError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.0)
+fn check_slug(noun: &str, value: &str) -> Result<()> {
+    if crate::slug::is_slug(value) {
+        return Ok(());
     }
+    Err(Error::new(
+        ErrorKind::Config,
+        format!("invalid {noun} {value:?}: use lowercase letters, digits and single hyphens"),
+    ))
 }
-
-impl std::error::Error for ConfigError {}
 
 pub fn need_identity(r: &Resolved) -> Result<String> {
     let slug = r
         .identity
         .clone()
-        .ok_or_else(|| crate::Fault::NoIdentity(r.root.clone()))?;
-    if !crate::slug::is_slug(&slug) {
-        return Err(ConfigError(format!(
-            "invalid identity {slug:?}: use lowercase letters, digits and single hyphens"
-        ))
-        .into());
-    }
+        .ok_or_else(|| Fault::NoIdentity(r.root.clone()))?;
+    check_slug("identity", &slug)?;
     if !r.root.join(&slug).is_dir() {
-        return Err(crate::Fault::NoIdentityFolder(r.root.join(&slug)).into());
+        return Err(Fault::NoIdentityFolder(r.root.join(&slug)).into());
     }
     Ok(slug)
 }
@@ -257,14 +202,9 @@ pub fn need_project<'a>(dir: &Path, project: Option<&'a str>) -> Result<Option<&
     let Some(p) = project else {
         return Ok(None);
     };
-    if !crate::slug::is_slug(p) {
-        return Err(ConfigError(format!(
-            "invalid project {p:?}: use lowercase letters, digits and single hyphens"
-        ))
-        .into());
-    }
+    check_slug("project", p)?;
     if !dir.join(format!("work/projects/{p}/project.md")).is_file() {
-        return Err(crate::Fault::NoProject(p.to_string()).into());
+        return Err(Fault::NoProject(p.to_string()).into());
     }
     Ok(Some(p))
 }
@@ -273,8 +213,8 @@ pub fn need_project<'a>(dir: &Path, project: Option<&'a str>) -> Result<Option<&
 mod tests {
     use super::*;
 
-    fn inputs(dir: &Path) -> Inputs {
-        Inputs {
+    fn env(dir: &Path) -> Env {
+        Env {
             cwd: dir.to_path_buf(),
             home: Some(dir.join("home")),
             ..Default::default()
@@ -284,13 +224,16 @@ mod tests {
     #[test]
     fn default_root_uses_xdg_data_home_then_home() {
         let tmp = tempfile::tempdir().unwrap();
-        let mut i = inputs(tmp.path());
+        let mut e = env(tmp.path());
         assert_eq!(
-            resolve(&i).unwrap().root,
+            resolve(&Select::default(), &e).unwrap().root,
             tmp.path().join("home/.local/share/owo")
         );
-        i.xdg_data = Some(tmp.path().join("data"));
-        assert_eq!(resolve(&i).unwrap().root, tmp.path().join("data/owo"));
+        e.xdg_data_home = Some(tmp.path().join("data"));
+        assert_eq!(
+            resolve(&Select::default(), &e).unwrap().root,
+            tmp.path().join("data/owo")
+        );
     }
 
     #[test]
@@ -303,8 +246,9 @@ mod tests {
             "root = \"~/ids\"\nidentity = \"user-pick\"\n",
         )
         .unwrap();
-        let mut i = inputs(tmp.path());
-        let r = resolve(&i).unwrap();
+        let mut s = Select::default();
+        let mut e = env(tmp.path());
+        let r = resolve(&s, &e).unwrap();
         assert_eq!(r.root, tmp.path().join("home/ids"));
         assert_eq!(r.identity.as_deref(), Some("user-pick"));
 
@@ -315,21 +259,21 @@ mod tests {
             "root = \"ids\"\nidentity = \"thea\"\nproject = \"api\"\n",
         )
         .unwrap();
-        i.cwd = proj;
-        let r = resolve(&i).unwrap();
+        e.cwd = proj;
+        let r = resolve(&s, &e).unwrap();
         assert_eq!(r.root, tmp.path().join("proj/ids"));
         assert_eq!(r.identity.as_deref(), Some("thea"));
         assert_eq!(r.project.as_deref(), Some("api"));
 
-        i.env_root = Some("/env/root".into());
-        i.env_identity = Some("env-id".into());
-        let r = resolve(&i).unwrap();
+        e.owo_root = Some("/env/root".into());
+        e.owo_identity = Some("env-id".into());
+        let r = resolve(&s, &e).unwrap();
         assert_eq!(r.root, PathBuf::from("/env/root"));
         assert_eq!(r.identity.as_deref(), Some("env-id"));
 
-        i.select.root = Some(PathBuf::from("/flag/root"));
-        i.select.identity = Some("flag-id".into());
-        let r = resolve(&i).unwrap();
+        s.root = Some(PathBuf::from("/flag/root"));
+        s.identity = Some("flag-id".into());
+        let r = resolve(&s, &e).unwrap();
         assert_eq!(r.root, PathBuf::from("/flag/root"));
         assert_eq!(r.identity.as_deref(), Some("flag-id"));
     }
@@ -339,9 +283,11 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         fs::create_dir_all(tmp.path().join("thea")).unwrap();
         fs::write(tmp.path().join("thea/identity.json"), "{}").unwrap();
-        let mut i = inputs(tmp.path());
-        i.select.root = Some(tmp.path().to_path_buf());
-        let r = resolve(&i).unwrap();
+        let select = Select {
+            root: Some(tmp.path().to_path_buf()),
+            ..Default::default()
+        };
+        let r = resolve(&select, &env(tmp.path())).unwrap();
         assert_eq!(r.identity.as_deref(), Some("thea"));
     }
 }
