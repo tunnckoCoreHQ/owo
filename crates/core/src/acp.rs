@@ -96,7 +96,11 @@ struct Session {
     commands: Vec<Value>,
 }
 
-type Job = (String, String, Vec<crate::Turn>);
+struct Job {
+    identity: String,
+    session: String,
+    turns: Vec<crate::Turn>,
+}
 
 #[derive(Default)]
 struct State {
@@ -149,7 +153,11 @@ impl State {
 fn job(identity: Option<String>, session: &str, turns: Vec<crate::Turn>) -> Option<Job> {
     let id = identity?;
     let name = format!("{session}.{id}");
-    (!turns.is_empty()).then_some((id, name, turns))
+    (!turns.is_empty()).then_some(Job {
+        identity: id,
+        session: name,
+        turns,
+    })
 }
 
 #[derive(Debug, Clone)]
@@ -756,7 +764,14 @@ fn store_jobs(owo: &Arc<Owo>, jobs: mpsc::Receiver<Job>) {
     }
 }
 
-fn push(owo: &Arc<Owo>, (identity, session, turns): Job) {
+fn push(
+    owo: &Arc<Owo>,
+    Job {
+        identity,
+        session,
+        turns,
+    }: Job,
+) {
     let run = owo.root(&identity).and_then(|root| {
         root.sync()?
             .push(&session, &turns, &crate::SyncOptions::default())
