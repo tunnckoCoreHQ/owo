@@ -358,16 +358,7 @@ impl Proxy {
         });
 
         let (store, jobs) = mpsc::channel::<Job>();
-        let storer = std::thread::spawn(move || {
-            let store_all = || jobs.iter().for_each(|job| push(&owo, job));
-            if !owo.dry_run {
-                return store_all();
-            }
-            let ((), paths) = crate::write::dry_run(store_all);
-            for path in paths {
-                owo.write(&format!("owo: would write {path}\n"));
-            }
-        });
+        let storer = std::thread::spawn(move || store_jobs(&owo, jobs));
 
         let copied = (|| -> std::io::Result<()> {
             let mut line = vec![];
@@ -737,6 +728,17 @@ fn emit(out: &Mutex<impl Write>, bytes: &[u8]) -> std::io::Result<()> {
     let mut out = out.lock().unwrap();
     out.write_all(bytes)?;
     out.flush()
+}
+
+fn store_jobs(owo: &Arc<Owo>, jobs: mpsc::Receiver<Job>) {
+    let store_all = || jobs.iter().for_each(|job| push(owo, job));
+    if !owo.dry_run {
+        return store_all();
+    }
+    let ((), paths) = crate::write::dry_run(store_all);
+    for path in paths {
+        owo.write(&format!("owo: would write {path}\n"));
+    }
 }
 
 fn push(owo: &Arc<Owo>, (identity, session, turns): Job) {
