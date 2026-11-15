@@ -263,17 +263,15 @@ fn check_entry_schema(e: &Entry, out: &mut Vec<Diagnostic>) {
                 None => out.push(err(rel, "date is missing or not YYYY-MM-DD")),
                 Some(d) => {
                     let d = d.format("%Y-%m-%d").to_string();
-                    let ok = if with_slug {
-                        file.strip_prefix(&format!("{d}_")).is_some_and(is_slug)
+                    let (ok, want) = if with_slug {
+                        (
+                            file.strip_prefix(&format!("{d}_")).is_some_and(is_slug),
+                            format!("{d}_<slug>.md"),
+                        )
                     } else {
-                        file == d
+                        (file == d, format!("{d}.md"))
                     };
                     if !ok {
-                        let want = if with_slug {
-                            format!("{d}_<slug>.md")
-                        } else {
-                            format!("{d}.md")
-                        };
                         out.push(err(rel, format!("file name must be {want}")));
                     }
                 }
@@ -303,10 +301,10 @@ fn check_entry_schema(e: &Entry, out: &mut Vec<Diagnostic>) {
             {
                 out.push(err(rel, "event date is missing or not YYYY-MM-DD"));
             }
-            if let Some(v) = e.field_str("end_date") {
-                if parse_date(&v).is_none() {
-                    out.push(err(rel, "end_date is not YYYY-MM-DD"));
-                }
+            if e.field_str("end_date")
+                .is_some_and(|v| parse_date(&v).is_none())
+            {
+                out.push(err(rel, "end_date is not YYYY-MM-DD"));
             }
         }
         Kind::Thread => state_field("state", &["open", "closed"], out),
