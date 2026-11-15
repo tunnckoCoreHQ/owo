@@ -40,6 +40,6 @@ A host needs two hooks: one that loads `owo context` into the prompt, and one th
 - A host with a local transcript calls `owo sync start --session <session_id> --transcript <path> --format <fmt>` after each turn, runs a background agent with the ingest prompt when a run is due; the prompt asks for owo ingest and ends with `owo sync done`. For Claude Code this is a `Stop` hook with `--format claude-jsonl`, and a `SessionStart` hook or the exported skill wraps `owo context`.
 - A host with no transcript on this machine, such as a hosted chat over MCP, calls `owo sync push` with its recent turns.
 - MCP hosts run `owo mcp`; see [[decisions#MCP calls the library]].
-- ACP clients run the agent through `owo acp`, which stores the turns with `owo sync push` and gives the agent the identity, and with `auto_ingest` runs the ingest of each due run in the background; see [[decisions#ACP proxy passes lines through]].
+- ACP clients run the agent through `owo acp`, which stores the turns with `owo sync push` and gives the agent the identity, and with `auto_ingest` runs the ingest of each due or pending run in the background; see [[decisions#ACP proxy passes lines through]] and [[decisions#ACP proxy runs the ingest in the background]].
 - Hosts that load skills use `skills/owo/` or the wrapper from `owo export skill`.
 - Character card and SoulSpec hosts take `owo export`; see [[cli#Export]].
