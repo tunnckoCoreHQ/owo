@@ -1,5 +1,5 @@
-use clap::builder::PossibleValuesParser;
-use clap::{value_parser, Arg, ArgAction, ArgMatches, Command};
+use clap::builder::{PossibleValuesParser, Resettable};
+use clap::{value_parser, Arg, ArgAction, ArgMatches, Command, Id};
 use owo_core::{Args, Field, Operation, Select, Type};
 use serde_json::{Map, Value};
 use std::path::PathBuf;
@@ -200,17 +200,12 @@ fn arg(op: &Operation, f: &Field) -> Arg {
     if let Some(d) = &f.default {
         a = a.default_value(d.clone());
     }
-    a = a.value_name(
+    a.value_name(
         f.value_name
             .map_or_else(|| f.name.to_uppercase(), str::to_string),
-    );
-    if let Some(other) = f.conflicts {
-        a = a.conflicts_with(other);
-    }
-    if let Some(other) = f.requires {
-        a = a.requires(other);
-    }
-    a
+    )
+    .conflicts_with(Resettable::from(f.conflicts.map(Id::from)))
+    .requires(Resettable::from(f.requires.map(Id::from)))
 }
 
 pub fn args(op: &Operation, m: &ArgMatches) -> Map<String, Value> {
