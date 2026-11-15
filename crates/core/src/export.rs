@@ -6,24 +6,10 @@ use serde_json::{json, Value};
 use std::fs;
 use std::path::Path;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Spec {
-    V2,
-    V3,
-}
-
-impl Spec {
-    pub const ALL: [Spec; 2] = [Spec::V2, Spec::V3];
-
-    pub fn name(self) -> &'static str {
-        match self {
-            Spec::V2 => "v2",
-            Spec::V3 => "v3",
-        }
-    }
-
-    pub fn from_name(name: &str) -> Option<Spec> {
-        Spec::ALL.into_iter().find(|s| s.name() == name)
+named! {
+    pub enum Spec {
+        V2 = "v2",
+        V3 = "v3",
     }
 }
 

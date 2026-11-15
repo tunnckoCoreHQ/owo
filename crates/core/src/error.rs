@@ -1,4 +1,4 @@
-use crate::identity::Kind;
+use crate::{Kind, Named};
 use std::path::PathBuf;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

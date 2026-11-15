@@ -1,4 +1,5 @@
 use crate::identity::{Entry, Identity};
+use crate::Named;
 use serde::Serialize;
 use std::collections::HashMap;
 
@@ -45,26 +46,11 @@ pub struct Hit {
     exact: bool,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Scope {
-    Soul,
-    Life,
-    Work,
-}
-
-impl Scope {
-    pub const ALL: [Scope; 3] = [Scope::Soul, Scope::Life, Scope::Work];
-
-    pub fn name(self) -> &'static str {
-        match self {
-            Scope::Soul => "soul",
-            Scope::Life => "life",
-            Scope::Work => "work",
-        }
-    }
-
-    pub fn from_name(name: &str) -> Option<Scope> {
-        Scope::ALL.into_iter().find(|s| s.name() == name)
+named! {
+    pub enum Scope {
+        Soul = "soul",
+        Life = "life",
+        Work = "work",
     }
 }
 

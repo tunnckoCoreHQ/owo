@@ -52,9 +52,11 @@ impl Rule {
     pub fn name(self) -> &'static str {
         CHECKS[self.0].0
     }
+}
 
-    pub fn from_name(name: &str) -> Option<Rule> {
-        Rule::all().find(|r| r.name() == name)
+impl crate::Named for Rule {
+    fn rows() -> impl Iterator<Item = (Rule, &'static str)> {
+        CHECKS.iter().enumerate().map(|(i, c)| (Rule(i), c.0))
     }
 }
 

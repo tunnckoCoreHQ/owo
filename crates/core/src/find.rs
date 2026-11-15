@@ -1,5 +1,6 @@
-use crate::identity::{Entry, Identity, Kind};
+use crate::identity::{Entry, Identity};
 use crate::markdown;
+use crate::{Kind, Named};
 use serde::Serialize;
 
 #[derive(Debug, Serialize)]

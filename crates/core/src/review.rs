@@ -1,6 +1,7 @@
-use crate::identity::{Identity, Kind};
+use crate::identity::Identity;
 use crate::state::parse_day;
 use crate::status::{open_links, Link};
+use crate::{Kind, Named};
 use anyhow::{bail, Context, Result};
 use chrono::NaiveDate;
 use serde::{Deserialize, Serialize};

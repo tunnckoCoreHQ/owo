@@ -7,6 +7,37 @@ use std::str::FromStr;
 
 pub const MAX_DAYS: i64 = 36500;
 
+pub trait Named: Copy + PartialEq + 'static {
+    fn rows() -> impl Iterator<Item = (Self, &'static str)>;
+
+    fn name(self) -> &'static str {
+        Self::rows()
+            .find(|r| r.0 == self)
+            .expect("a listed value")
+            .1
+    }
+
+    fn from_name(name: &str) -> Option<Self> {
+        Self::rows().find(|r| r.1 == name).map(|r| r.0)
+    }
+}
+
+macro_rules! named {
+    ($(#[$m:meta])* pub enum $t:ident { $($(#[$a:meta])* $v:ident = $n:literal),+ $(,)? }) => {
+        #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+        $(#[$m])*
+        pub enum $t {
+            $($(#[$a])* $v),+
+        }
+
+        impl $crate::Named for $t {
+            fn rows() -> impl Iterator<Item = (Self, &'static str)> {
+                [$(($t::$v, $n)),+].into_iter()
+            }
+        }
+    };
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Type {
     Switch,
@@ -362,41 +393,37 @@ impl<'a> Reader<'a> {
         }
     }
 
-    pub fn named<T>(
-        &mut self,
-        f: Field,
-        values: impl IntoIterator<Item = &'static str>,
-        from: fn(&str) -> Option<T>,
-        base: Option<T>,
-    ) -> Option<T> {
-        let ty = Type::Choice(values.into_iter().collect());
-        match self.declare(f, ty, given(base.is_some())) {
-            Some((name, a)) => self.one(name, a).and_then(|s| from(&s)).or(base),
-            None => base,
-        }
-    }
-
-    pub fn choice<T: Copy>(
+    pub fn pick<T>(
         &mut self,
         f: Field,
         values: impl IntoIterator<Item = &'static str>,
         from: fn(&str) -> Option<T>,
         base: T,
     ) -> T {
-        self.named(f, values, from, Some(base)).unwrap_or(base)
+        let ty = Type::Choice(values.into_iter().collect());
+        match self.declare(f, ty, given(true)) {
+            Some((name, a)) => self.one(name, a).and_then(|s| from(&s)).unwrap_or(base),
+            None => base,
+        }
     }
 
-    pub fn all_named<T>(
-        &mut self,
-        f: Field,
-        values: impl IntoIterator<Item = &'static str>,
-        from: fn(&str) -> Option<T>,
-        base: Vec<T>,
-    ) -> Vec<T> {
-        let ty = Type::Choice(values.into_iter().collect());
+    pub fn named<T: Named>(&mut self, f: Field, base: Option<T>) -> Option<T> {
+        let ty = Type::Choice(T::rows().map(|r| r.1).collect());
+        match self.declare(f, ty, given(base.is_some())) {
+            Some((name, a)) => self.one(name, a).and_then(|s| T::from_name(&s)).or(base),
+            None => base,
+        }
+    }
+
+    pub fn choice<T: Named>(&mut self, f: Field, base: T) -> T {
+        self.named(f, Some(base)).unwrap_or(base)
+    }
+
+    pub fn all_named<T: Named>(&mut self, f: Field, base: Vec<T>) -> Vec<T> {
+        let ty = Type::Choice(T::rows().map(|r| r.1).collect());
         match self.declare(Field { many: true, ..f }, ty, given(!base.is_empty())) {
             Some((name, a)) if a.get(name).is_some() => {
-                a.strings(name).filter_map(|s| from(&s)).collect()
+                a.strings(name).filter_map(|s| T::from_name(&s)).collect()
             }
             _ => base,
         }
@@ -523,7 +550,7 @@ impl Default for AddRequest {
 impl Request for AddRequest {
     fn read(r: &mut Reader, b: Self) -> Self {
         Self {
-            kind: r.choice(
+            kind: r.pick(
                 Field::positional("kind", "Entry type")
                     .required()
                     .value_name("TYPE"),
@@ -588,8 +615,6 @@ impl Request for LintRequest {
         Self {
             rules: r.all_named(
                 Field::new("rule", "Run only these rules (repeatable)").value_name("RULES"),
-                Rule::all().map(Rule::name),
-                Rule::from_name,
                 b.rules,
             ),
             changed: r.flag(
@@ -663,8 +688,6 @@ impl Request for ResolveRequest {
             ),
             kind: r.named(
                 Field::new("type", "Limit to one entry type").value_name("KIND"),
-                Kind::names(),
-                Kind::from_name,
                 b.kind,
             ),
         }
@@ -769,7 +792,7 @@ impl Request for ContextRequest {
                     Some(b.notes),
                 )
                 .unwrap_or(b.notes),
-            paths: r.choice(
+            paths: r.pick(
                 Field::new(
                     "format",
                     "text: file contents concatenated; paths: the list",
@@ -838,16 +861,9 @@ impl Request for SearchRequest {
         let d = Self::default();
         Self {
             query: r.words(Field::new("query", "Search words"), b.query),
-            scope: r.named(
-                Field::new("scope", "Limit to soul, life or work"),
-                Scope::ALL.map(Scope::name),
-                Scope::from_name,
-                b.scope,
-            ),
+            scope: r.named(Field::new("scope", "Limit to soul, life or work"), b.scope),
             types: r.all_named(
                 Field::new("type", "Limit to entry types (repeatable)").value_name("TYPES"),
-                Kind::names(),
-                Kind::from_name,
                 b.types,
             ),
             project: b.project,
@@ -1012,8 +1028,6 @@ impl Request for CardRequest {
         );
         let spec = r.choice(
             Field::new("spec", "Card spec version").default(d.spec.name()),
-            Spec::ALL.map(Spec::name),
-            Spec::from_name,
             b.spec,
         );
         let out = r.path(
@@ -1115,8 +1129,6 @@ impl Request for SyncStartRequest {
                     "Transcript format; jsonl lines are {\"role\": ..., \"text\": ...} with an optional turn \"id\"",
                 )
                 .default(SyncFormat::default().name()),
-                SyncFormat::ALL.map(SyncFormat::name),
-                SyncFormat::from_name,
                 b.format,
             ),
             options: SyncOptions::read(r, b.options),

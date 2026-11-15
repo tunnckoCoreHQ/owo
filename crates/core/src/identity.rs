@@ -77,6 +77,12 @@ pub enum Kind {
     Unknown,
 }
 
+impl crate::Named for Kind {
+    fn rows() -> impl Iterator<Item = (Kind, &'static str)> {
+        ROWS.iter().map(|r| (r.kind, r.name))
+    }
+}
+
 impl Kind {
     fn row(self) -> &'static Row {
         ROWS.iter()
@@ -93,18 +99,6 @@ impl Kind {
     pub fn type_name(self) -> Option<&'static str> {
         let r = self.row();
         r.typed.then_some(r.name)
-    }
-
-    pub fn name(self) -> &'static str {
-        self.row().name
-    }
-
-    pub fn names() -> impl Iterator<Item = &'static str> {
-        ROWS.iter().map(|r| r.name)
-    }
-
-    pub fn from_name(name: &str) -> Option<Kind> {
-        ROWS.iter().find(|r| r.name == name).map(|r| r.kind)
     }
 
     pub fn has_frontmatter(self) -> bool {

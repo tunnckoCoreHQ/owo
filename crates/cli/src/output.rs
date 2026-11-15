@@ -1,4 +1,4 @@
-use owo_core::{Envelope, ErrorKind, Fault};
+use owo_core::{Envelope, ErrorKind, Fault, Named};
 use serde_json::Value;
 
 pub mod exit {

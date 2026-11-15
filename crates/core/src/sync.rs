@@ -1,6 +1,6 @@
 use crate::identity::read_object;
 use crate::write::Writes;
-use crate::Fault;
+use crate::{Fault, Named};
 use anyhow::{bail, Context, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -9,27 +9,13 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum Format {
-    #[default]
-    Jsonl,
-    ClaudeJsonl,
-    OpencodeJson,
-}
-
-impl Format {
-    pub const ALL: [Format; 3] = [Format::Jsonl, Format::ClaudeJsonl, Format::OpencodeJson];
-
-    pub fn name(self) -> &'static str {
-        match self {
-            Format::Jsonl => "jsonl",
-            Format::ClaudeJsonl => "claude-jsonl",
-            Format::OpencodeJson => "opencode-json",
-        }
-    }
-
-    pub fn from_name(name: &str) -> Option<Format> {
-        Format::ALL.into_iter().find(|f| f.name() == name)
+named! {
+    #[derive(Default)]
+    pub enum Format {
+        #[default]
+        Jsonl = "jsonl",
+        ClaudeJsonl = "claude-jsonl",
+        OpencodeJson = "opencode-json",
     }
 }
 
@@ -275,18 +261,10 @@ pub struct Turn {
     pub text: String,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Role {
-    User,
-    Assistant,
-}
-
-impl Role {
-    pub fn name(self) -> &'static str {
-        match self {
-            Role::User => "user",
-            Role::Assistant => "assistant",
-        }
+named! {
+    pub enum Role {
+        User = "user",
+        Assistant = "assistant",
     }
 }
 
@@ -306,10 +284,8 @@ pub fn parse_turns(json: &str) -> Result<Vec<Turn>> {
     for (n, t) in list.iter().enumerate() {
         let id = id_of(&t["id"]).unwrap_or_default();
         check_turn_id(n, &id)?;
-        let role = match t["role"].as_str() {
-            Some("user") => Role::User,
-            Some("assistant") => Role::Assistant,
-            _ => bail!("turn {n}: role must be user or assistant"),
+        let Some(role) = t["role"].as_str().and_then(Role::from_name) else {
+            bail!("turn {n}: role must be user or assistant");
         };
         let text = t["text"]
             .as_str()

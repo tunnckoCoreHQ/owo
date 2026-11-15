@@ -1,3 +1,5 @@
+#[macro_use]
+mod request;
 pub mod acp;
 mod add;
 mod changes;
@@ -17,7 +19,6 @@ pub mod mcp;
 mod migrate;
 mod operation;
 mod output;
-mod request;
 mod review;
 mod search;
 mod slug;
@@ -43,7 +44,7 @@ pub use operation::{operations, Envelope, Operation, Outcome, Ran};
 pub use output::{warning_line, Diagnostic, Level};
 pub use request::{
     AddRequest, Args, CardRequest, ChangesRequest, ContextRequest, Field, IndexRequest,
-    LinksRequest, LintRequest, MigrateRequest, NewRequest, Reader, Request, ResolveRequest,
+    LinksRequest, LintRequest, MigrateRequest, Named, NewRequest, Reader, Request, ResolveRequest,
     ReviewDoneRequest, SearchRequest, ShowRequest, SkillRequest, SlugRequest, SoulHistoryRequest,
     SoulNoteRequest, SoulRequest, SoulspecRequest, StampRequest, StateRequest, SyncDoneRequest,
     SyncOptions, SyncPushRequest, SyncStartRequest, TemplateRequest, Type, WriteRequest, MAX_DAYS,
