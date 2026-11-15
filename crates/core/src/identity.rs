@@ -17,42 +17,57 @@ struct KindRow {
     category: Option<&'static str>,
 }
 
-const fn kind_row(
-    kind: Kind,
-    name: &'static str,
-    typed: bool,
-    category: Option<&'static str>,
-) -> KindRow {
+const fn typed(kind: Kind, name: &'static str, category: Option<&'static str>) -> KindRow {
     KindRow {
         kind,
         name,
-        typed,
+        typed: true,
         category,
     }
 }
 
-const KIND_ROWS: [KindRow; 20] = [
-    kind_row(Kind::Soul, "soul", false, None),
-    kind_row(Kind::Example, "example", false, None),
-    kind_row(Kind::Character, "character", true, Some("characters")),
-    kind_row(Kind::Location, "location", true, Some("locations")),
-    kind_row(Kind::LocationDetail, "location-detail", true, None),
-    kind_row(Kind::Culture, "culture", true, Some("cultures")),
-    kind_row(Kind::Faction, "faction", true, Some("factions")),
-    kind_row(Kind::Event, "event", true, Some("events")),
-    kind_row(Kind::Era, "era", true, Some("eras")),
-    kind_row(Kind::Thread, "thread", true, Some("threads")),
-    kind_row(Kind::Conflict, "conflict", true, Some("conflicts")),
-    kind_row(Kind::Lesson, "lesson", true, Some("lessons")),
-    kind_row(Kind::Writing, "writing", true, Some("writing")),
-    kind_row(Kind::Log, "log", true, Some("log")),
-    kind_row(Kind::Journal, "journal", true, Some("journal")),
-    kind_row(Kind::Project, "project", true, None),
-    kind_row(Kind::Note, "note", true, None),
-    kind_row(Kind::WorkReadme, "work-readme", false, None),
-    kind_row(Kind::Generated, "generated", false, None),
-    kind_row(Kind::Unknown, "unknown", false, None),
+const fn untyped(kind: Kind, name: &'static str) -> KindRow {
+    KindRow {
+        kind,
+        name,
+        typed: false,
+        category: None,
+    }
+}
+
+const KIND_ROWS: [KindRow; Kind::Unknown as usize + 1] = [
+    untyped(Kind::Soul, "soul"),
+    untyped(Kind::Example, "example"),
+    typed(Kind::Character, "character", Some("characters")),
+    typed(Kind::Location, "location", Some("locations")),
+    typed(Kind::LocationDetail, "location-detail", None),
+    typed(Kind::Culture, "culture", Some("cultures")),
+    typed(Kind::Faction, "faction", Some("factions")),
+    typed(Kind::Event, "event", Some("events")),
+    typed(Kind::Era, "era", Some("eras")),
+    typed(Kind::Thread, "thread", Some("threads")),
+    typed(Kind::Conflict, "conflict", Some("conflicts")),
+    typed(Kind::Lesson, "lesson", Some("lessons")),
+    typed(Kind::Writing, "writing", Some("writing")),
+    typed(Kind::Log, "log", Some("log")),
+    typed(Kind::Journal, "journal", Some("journal")),
+    typed(Kind::Project, "project", None),
+    typed(Kind::Note, "note", None),
+    untyped(Kind::WorkReadme, "work-readme"),
+    untyped(Kind::Generated, "generated"),
+    untyped(Kind::Unknown, "unknown"),
 ];
+
+const _: () = {
+    let mut i = 0;
+    while i < KIND_ROWS.len() {
+        assert!(
+            KIND_ROWS[i].kind as usize == i,
+            "KIND_ROWS is in the order of Kind"
+        );
+        i += 1;
+    }
+};
 
 pub fn life_categories() -> impl Iterator<Item = (&'static str, Kind)> {
     KIND_ROWS.iter().filter_map(|r| Some((r.category?, r.kind)))
@@ -90,10 +105,7 @@ impl crate::Named for Kind {
 
 impl Kind {
     fn kind_row(self) -> &'static KindRow {
-        KIND_ROWS
-            .iter()
-            .find(|r| r.kind == self)
-            .expect("every kind has a row")
+        &KIND_ROWS[self as usize]
     }
 
     pub fn from_type(name: &str) -> Option<Kind> {
