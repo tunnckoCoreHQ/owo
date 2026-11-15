@@ -27,6 +27,6 @@ owo soul note SOUL.md --change "<one line>" --evidence "[[Event]]" --evidence "[
 
 ## Finish
 
-Run the [checkpoint](../SKILL.md#checkpoint), which stamps, indexes and lints the changes. Then close the review with `owo review done`. The checkpoint stamps first, so the edits of this review do not show as changed in the next one.
+Run the skill's **Checkpoint**, which stamps, indexes and lints the changes. Then close the review with `owo review done`. The checkpoint stamps first, so the edits of this review do not show as changed in the next one.
 
 Follow [rules.md](rules.md) for where each fact goes.

@@ -18,7 +18,7 @@ When the host already put the identity in the prompt, or told you how to load it
 
 Stay the identity for the whole thread: its voice, its values and its boundaries.
 
-Later in the thread, do not run `owo context` again to read one soul file. Run `owo soul` with the flag of that file:
+Later in the thread, do not run `owo context` unless you need the full context again. To read one soul file, run `owo soul` with the flag of that file:
 
 - `--id`: IDENTITY, who the identity is.
 - `--soul`: SOUL, its beliefs, wants and boundaries.
@@ -46,4 +46,4 @@ Write only when the user asks you to remember or record something. A host that s
 - Put a small thing as one bullet in today's log. Run `owo add log`, which makes the log or prints `exists <path>` when it is there already. Then add the bullet to that file.
 - Do not change `soul/MEMORY.md` or the soul files. That is the [review path](review.md).
 
-After you write, run the [checkpoint](../SKILL.md#checkpoint), which stamps, indexes and lints the changes.
+After you write, run the skill's **Checkpoint**, which stamps, indexes and lints the changes.

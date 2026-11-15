@@ -24,4 +24,4 @@ Run `owo context` and `owo state` first, so you know the identity and what is op
 
 ## Finish
 
-Run the [checkpoint](../SKILL.md#checkpoint), which stamps, indexes and lints the changes. Report the paths that `owo stamp` lists, or "no changes". For a sync run, run its `owo sync done` command after the checkpoint passes, and not before.
+Run the skill's **Checkpoint**, which stamps, indexes and lints the changes. Report the paths that `owo stamp` lists, or "no changes". For a sync run, run its `owo sync done` command after the checkpoint passes, and not before.
