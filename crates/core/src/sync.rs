@@ -295,6 +295,10 @@ pub fn parse_turns(json: &str) -> Result<Vec<Turn>> {
     Ok(turns)
 }
 
+fn drop_partial_line(bytes: &mut Vec<u8>) {
+    bytes.truncate(bytes.iter().rposition(|b| *b == b'\n').map_or(0, |i| i + 1));
+}
+
 pub fn push(req: &StartRequest, turns: &[Turn]) -> Result<Start> {
     let _lock = Lock::take(req.root, req.session)?;
     let file = req.root.join(store(req.session));
@@ -315,7 +319,7 @@ pub fn push(req: &StartRequest, turns: &[Turn]) -> Result<Start> {
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => vec![],
         Err(e) => return Err(e).with_context(|| format!("reading {}", file.display())),
     };
-    bytes.truncate(bytes.iter().rposition(|b| *b == b'\n').map_or(0, |i| i + 1));
+    drop_partial_line(&mut bytes);
     let mut stored = String::from_utf8(bytes)
         .with_context(|| format!("{} is not UTF-8; fix it by hand", file.display()))?;
     let mut ids: HashSet<String> = parse(&stored, Format::Jsonl)?
