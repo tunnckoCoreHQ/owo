@@ -53,7 +53,7 @@ pub use review::{Changed, Day, Note as SoulNote, Packet, ReviewRecord, SoulChang
 pub use search::{Hit as SearchHit, Scope};
 pub use stamp::Report as StampReport;
 pub use state::{day, parse_day};
-pub use status::{join_links, now_block, Link, ProjectState, Review, Row, State};
+pub use status::{join_links, now_block, Link, ListedIdentity, Now, ProjectState, ReviewStatus};
 pub use sync::{
     parse_turns, Bookmark, Format as SyncFormat, PendingRun, PendingSession, Role, SyncReport, Turn,
 };
@@ -168,7 +168,7 @@ impl Root {
         Ok(id)
     }
 
-    pub fn list(&self) -> Vec<Row> {
+    pub fn list(&self) -> Vec<ListedIdentity> {
         status::list(&self.config.root)
     }
 
@@ -383,7 +383,7 @@ impl Identity {
         context::render_text(self, ctx)
     }
 
-    pub fn state(&self, req: &StateRequest) -> Result<State> {
+    pub fn state(&self, req: &StateRequest) -> Result<Now> {
         req.check()?;
         let mut s = status::compute(self, req.days, 5);
         if let Some(p) = self.working_project()? {

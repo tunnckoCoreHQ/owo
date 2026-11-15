@@ -367,7 +367,7 @@ pub enum Outcome {
     Created(Created),
     List {
         root: PathBuf,
-        rows: Vec<Row>,
+        rows: Vec<ListedIdentity>,
     },
     Lint {
         identity: String,
@@ -404,7 +404,7 @@ pub enum Outcome {
         context: Context,
         text: String,
     },
-    State(State),
+    State(Now),
     Search(Vec<SearchHit>),
     Synced(SyncReport),
     SyncDone {

@@ -22,7 +22,7 @@ impl Link {
 }
 
 #[derive(Debug, Serialize)]
-pub struct Review {
+pub struct ReviewStatus {
     pub last_reviewed: Option<String>,
     pub days_since: Option<i64>,
     pub every_days: i64,
@@ -32,7 +32,7 @@ pub struct Review {
 }
 
 #[derive(Debug, Serialize)]
-pub struct State {
+pub struct Now {
     pub identity: String,
     pub last_activity: Option<String>,
     pub last_activity_by_scope: Vec<(String, String)>,
@@ -41,7 +41,7 @@ pub struct State {
     pub recent_events: Vec<Link>,
     pub open_threads: Vec<Link>,
     pub open_conflicts: Vec<Link>,
-    pub review: Review,
+    pub review: ReviewStatus,
     pub last_soul_change: Option<crate::review::SoulChange>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub project: Option<ProjectState>,
@@ -63,24 +63,24 @@ pub fn project(id: &Identity, slug: &str) -> ProjectState {
 }
 
 #[derive(Debug, Serialize)]
-pub struct Row {
+pub struct ListedIdentity {
     pub slug: String,
     pub name: String,
     pub last_activity: Option<String>,
     pub projects: Vec<String>,
 }
 
-pub fn list(root: &std::path::Path) -> Vec<Row> {
+pub fn list(root: &std::path::Path) -> Vec<ListedIdentity> {
     crate::config::list_identities(root)
         .into_iter()
         .map(|slug| match Identity::load(root, &slug) {
-            Ok(id) => Row {
+            Ok(id) => ListedIdentity {
                 name: id.name().to_string(),
                 last_activity: scope_activity(&id).into_iter().map(|(_, t)| t).max(),
                 projects: id.projects(),
                 slug,
             },
-            Err(_) => Row {
+            Err(_) => ListedIdentity {
                 name: slug.clone(),
                 slug,
                 last_activity: None,
@@ -135,7 +135,7 @@ pub(crate) fn open_links(id: &Identity, kind: Kind) -> Vec<Link> {
         .collect()
 }
 
-pub fn compute(id: &Identity, days: i64, logs: usize) -> State {
+pub fn compute(id: &Identity, days: i64, logs: usize) -> Now {
     let today = Utc::now().date_naive();
     let story_today = id
         .entries
@@ -156,7 +156,7 @@ pub fn compute(id: &Identity, days: i64, logs: usize) -> State {
         .filter(|e| review.unreviewed(e.field_str("date").as_deref()))
         .count();
     let by_scope = scope_activity(id);
-    State {
+    Now {
         identity: id.slug.clone(),
         last_activity: by_scope.iter().map(|(_, t)| t.clone()).max(),
         last_activity_by_scope: by_scope,
@@ -175,7 +175,7 @@ pub fn compute(id: &Identity, days: i64, logs: usize) -> State {
         open_threads: open_links(id, Kind::Thread),
         open_conflicts: open_links(id, Kind::Conflict),
         last_soul_change: crate::review::soul_history(id, None).pop(),
-        review: Review {
+        review: ReviewStatus {
             last_reviewed: review.last_reviewed,
             days_since: review.days_since,
             every_days: review.every_days,
@@ -198,7 +198,7 @@ pub fn join_links(links: &[Link]) -> String {
     }
 }
 
-pub fn now_block(s: &State, project: Option<&str>) -> String {
+pub fn now_block(s: &Now, project: Option<&str>) -> String {
     let scopes: Vec<String> = s
         .last_activity_by_scope
         .iter()
