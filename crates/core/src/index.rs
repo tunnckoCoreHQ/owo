@@ -1,4 +1,4 @@
-use crate::identity::{Entry, Identity, Kind, LIFE_CATEGORIES};
+use crate::identity::{life_categories, Entry, Identity, Kind};
 use std::collections::BTreeMap;
 
 pub const MARKER: &str =
@@ -58,10 +58,10 @@ fn in_folder<'a>(identity: &'a Identity, prefix: &str) -> Vec<&'a Entry> {
 pub fn generate(identity: &Identity) -> BTreeMap<String, String> {
     let mut out = BTreeMap::new();
     let mut top = vec![];
-    for (category, kind) in LIFE_CATEGORIES {
+    for (category, kind) in life_categories() {
         let prefix = format!("life/{category}/");
         let entries = in_folder(identity, &prefix);
-        let lines: Vec<String> = if *kind == Kind::Location {
+        let lines: Vec<String> = if kind == Kind::Location {
             let mut lines = vec![];
             for overview in entries.iter().filter(|e| e.kind == Kind::Location) {
                 lines.push(line(overview));
@@ -77,11 +77,11 @@ pub fn generate(identity: &Identity) -> BTreeMap<String, String> {
         } else {
             entries
                 .iter()
-                .filter(|e| e.kind == *kind)
+                .filter(|e| e.kind == kind)
                 .map(|e| line(e))
                 .collect()
         };
-        let count = entries.iter().filter(|e| e.kind == *kind).count();
+        let count = entries.iter().filter(|e| e.kind == kind).count();
         top.push(format!(
             "- [{}]({category}/_index.md): {count}",
             heading(category)

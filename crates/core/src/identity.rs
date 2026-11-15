@@ -10,20 +10,48 @@ use walkdir::WalkDir;
 
 pub const SOUL_FILES: &[&str] = &["IDENTITY.md", "SOUL.md", "VOICE.md", "LOOK.md", "MEMORY.md"];
 
-pub const LIFE_CATEGORIES: &[(&str, Kind)] = &[
-    ("characters", Kind::Character),
-    ("locations", Kind::Location),
-    ("cultures", Kind::Culture),
-    ("factions", Kind::Faction),
-    ("events", Kind::Event),
-    ("eras", Kind::Era),
-    ("threads", Kind::Thread),
-    ("conflicts", Kind::Conflict),
-    ("lessons", Kind::Lesson),
-    ("writing", Kind::Writing),
-    ("log", Kind::Log),
-    ("journal", Kind::Journal),
+struct Row {
+    kind: Kind,
+    name: &'static str,
+    typed: bool,
+    folder: Option<&'static str>,
+}
+
+const fn row(kind: Kind, name: &'static str, typed: bool, folder: Option<&'static str>) -> Row {
+    Row {
+        kind,
+        name,
+        typed,
+        folder,
+    }
+}
+
+const ROWS: [Row; 20] = [
+    row(Kind::Soul, "soul", false, None),
+    row(Kind::Example, "example", false, None),
+    row(Kind::Character, "character", true, Some("characters")),
+    row(Kind::Location, "location", true, Some("locations")),
+    row(Kind::LocationDetail, "location-detail", true, None),
+    row(Kind::Culture, "culture", true, Some("cultures")),
+    row(Kind::Faction, "faction", true, Some("factions")),
+    row(Kind::Event, "event", true, Some("events")),
+    row(Kind::Era, "era", true, Some("eras")),
+    row(Kind::Thread, "thread", true, Some("threads")),
+    row(Kind::Conflict, "conflict", true, Some("conflicts")),
+    row(Kind::Lesson, "lesson", true, Some("lessons")),
+    row(Kind::Writing, "writing", true, Some("writing")),
+    row(Kind::Log, "log", true, Some("log")),
+    row(Kind::Journal, "journal", true, Some("journal")),
+    row(Kind::Project, "project", true, None),
+    row(Kind::Note, "note", true, None),
+    row(Kind::WorkReadme, "work-readme", false, None),
+    row(Kind::Generated, "generated", false, None),
+    row(Kind::Unknown, "unknown", false, None),
 ];
+
+pub fn life_categories() -> impl Iterator<Item = (&'static str, Kind)> {
+    ROWS.iter().filter_map(|r| Some((r.folder?, r.kind)))
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Kind {
@@ -50,74 +78,37 @@ pub enum Kind {
 }
 
 impl Kind {
-    pub const ALL: [Kind; 20] = [
-        Kind::Soul,
-        Kind::Example,
-        Kind::Character,
-        Kind::Location,
-        Kind::LocationDetail,
-        Kind::Culture,
-        Kind::Faction,
-        Kind::Event,
-        Kind::Era,
-        Kind::Thread,
-        Kind::Conflict,
-        Kind::Lesson,
-        Kind::Writing,
-        Kind::Log,
-        Kind::Journal,
-        Kind::Project,
-        Kind::Note,
-        Kind::WorkReadme,
-        Kind::Generated,
-        Kind::Unknown,
-    ];
+    fn row(self) -> &'static Row {
+        ROWS.iter()
+            .find(|r| r.kind == self)
+            .expect("every kind has a row")
+    }
 
     pub fn from_type(name: &str) -> Option<Kind> {
-        Kind::ALL.into_iter().find(|k| k.type_name() == Some(name))
+        ROWS.iter()
+            .find(|r| r.typed && r.name == name)
+            .map(|r| r.kind)
     }
 
     pub fn type_name(self) -> Option<&'static str> {
-        Some(match self {
-            Kind::Character => "character",
-            Kind::Location => "location",
-            Kind::LocationDetail => "location-detail",
-            Kind::Culture => "culture",
-            Kind::Faction => "faction",
-            Kind::Event => "event",
-            Kind::Era => "era",
-            Kind::Thread => "thread",
-            Kind::Conflict => "conflict",
-            Kind::Lesson => "lesson",
-            Kind::Writing => "writing",
-            Kind::Log => "log",
-            Kind::Journal => "journal",
-            Kind::Project => "project",
-            Kind::Note => "note",
-            _ => return None,
-        })
+        let r = self.row();
+        r.typed.then_some(r.name)
     }
 
     pub fn name(self) -> &'static str {
-        self.type_name().unwrap_or(match self {
-            Kind::Soul => "soul",
-            Kind::Example => "example",
-            Kind::WorkReadme => "work-readme",
-            Kind::Generated => "generated",
-            _ => "unknown",
-        })
+        self.row().name
     }
 
     pub fn names() -> impl Iterator<Item = &'static str> {
-        Kind::ALL.into_iter().map(Kind::name)
+        ROWS.iter().map(|r| r.name)
     }
 
     pub fn from_name(name: &str) -> Option<Kind> {
-        Kind::ALL.into_iter().find(|k| k.name() == name)
+        ROWS.iter().find(|r| r.name == name).map(|r| r.kind)
     }
 
     pub fn has_frontmatter(self) -> bool {
-        self.type_name().is_some()
+        self.row().typed
     }
 
     pub fn dated(self) -> Option<bool> {
@@ -142,7 +133,7 @@ impl Kind {
             Kind::Note => format!("work/projects/{}/notes/{date}_{slug}.md", project?),
             Kind::Log => format!("life/log/{date}.md"),
             _ => {
-                let (dir, _) = LIFE_CATEGORIES.iter().find(|(_, k)| *k == self)?;
+                let dir = self.row().folder?;
                 match self.dated() {
                     Some(true) => format!("life/{dir}/{date}_{slug}.md"),
                     _ => format!("life/{dir}/{slug}.md"),
@@ -235,7 +226,7 @@ pub fn classify(rel: &str) -> Kind {
     let parts: Vec<&str> = rel.split('/').collect();
     match parts.as_slice() {
         ["life" | "work", "_index.md"] | ["life", "timeline.md"] => Kind::Generated,
-        ["life", category, "_index.md"] if LIFE_CATEGORIES.iter().any(|(c, _)| c == category) => {
+        ["life", category, "_index.md"] if life_categories().any(|(c, _)| c == *category) => {
             Kind::Generated
         }
         ["soul", file] if SOUL_FILES.contains(file) => Kind::Soul,
@@ -245,10 +236,9 @@ pub fn classify(rel: &str) -> Kind {
         ["work", "projects", _, "notes", _] => Kind::Note,
         ["life", "locations", _, "overview.md"] => Kind::Location,
         ["life", "locations", _, _] => Kind::LocationDetail,
-        ["life", category, _] => LIFE_CATEGORIES
-            .iter()
+        ["life", category, _] => life_categories()
             .find(|(c, _)| c == category)
-            .map(|(_, k)| *k)
+            .map(|(_, k)| k)
             .filter(|k| *k != Kind::Location)
             .unwrap_or(Kind::Unknown),
         _ => Kind::Unknown,

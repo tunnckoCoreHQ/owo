@@ -1,4 +1,4 @@
-use crate::identity::{Identity, LIFE_CATEGORIES};
+use crate::identity::{life_categories, Identity};
 use crate::write::Writes;
 use crate::{index, state, templates};
 use anyhow::{bail, Context, Result};
@@ -54,8 +54,7 @@ fn fill(root: &Path, shown: &Path, name: &str, slug: &str) -> Result<Vec<String>
     values.insert("slug", slug.to_string());
     values.insert("today", crate::state::today());
 
-    let folders = LIFE_CATEGORIES
-        .iter()
+    let folders = life_categories()
         .map(|(category, _)| format!("life/{category}"))
         .chain(["work/projects".to_string()]);
     let writes = folders.fold(Writes::new(), |w, rel| {

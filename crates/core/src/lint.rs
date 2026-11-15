@@ -1,4 +1,4 @@
-use crate::identity::{Entry, Identity, Kind, LIFE_CATEGORIES, SOUL_FILES};
+use crate::identity::{life_categories, Entry, Identity, Kind, SOUL_FILES};
 use crate::markdown;
 use crate::output::{Diagnostic, Level};
 use crate::slug::is_slug;
@@ -104,8 +104,7 @@ fn tree(id: &Identity, out: &mut Vec<Diagnostic>) {
             out.push(err(rel, "required file is missing"));
         }
     }
-    let mut dirs: Vec<String> = LIFE_CATEGORIES
-        .iter()
+    let mut dirs: Vec<String> = life_categories()
         .map(|(cat, _)| format!("life/{cat}"))
         .collect();
     dirs.push("work/projects".into());
