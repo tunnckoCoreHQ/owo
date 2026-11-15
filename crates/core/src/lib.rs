@@ -58,8 +58,8 @@ pub use request::{
     AddRequest, Args, CardRequest, ChangesRequest, ContextRequest, Field, IndexRequest,
     LinksRequest, LintRequest, MigrateRequest, NewRequest, Reader, Request, ResolveRequest,
     ReviewDoneRequest, SearchRequest, ShowRequest, SkillRequest, SlugRequest, SoulHistoryRequest,
-    SoulNoteRequest, SoulspecRequest, StampRequest, StateRequest, SyncDoneRequest, SyncOptions,
-    SyncPushRequest, SyncStartRequest, TemplateRequest, Type, WriteRequest, MAX_DAYS,
+    SoulNoteRequest, SoulRequest, SoulspecRequest, StampRequest, StateRequest, SyncDoneRequest,
+    SyncOptions, SyncPushRequest, SyncStartRequest, TemplateRequest, Type, WriteRequest, MAX_DAYS,
 };
 pub use review::{Changed, Day, Note as SoulNote, Packet, ReviewRecord, SoulChange};
 pub use search::{Hit as SearchHit, Scope};
@@ -494,6 +494,27 @@ impl Identity {
             &req.change,
             &req.evidence,
         )?)
+    }
+
+    /// The soul files the request names, else IDENTITY.md and SOUL.md, as (path, text) in the
+    /// order of `SOUL_FILES`.
+    pub fn soul(&self, req: &SoulRequest) -> Result<Vec<(String, String)>> {
+        req.check()?;
+        let named = [req.identity, req.soul, req.voice, req.look, req.memory];
+        let asked = if named.contains(&true) {
+            named
+        } else {
+            [true, true, false, false, false]
+        };
+        let mut files = vec![];
+        for (file, _) in identity::SOUL_FILES.iter().zip(asked).filter(|(_, on)| *on) {
+            let path = format!("soul/{file}");
+            let Some(e) = self.entries.iter().find(|e| e.rel == path) else {
+                return Err(anyhow::anyhow!("missing {path}").into());
+            };
+            files.push((path, e.text.clone()));
+        }
+        Ok(files)
     }
 
     /// The soul history, of one soul file or of all.

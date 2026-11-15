@@ -18,6 +18,8 @@ When the host already put the identity in the prompt, or told you how to load it
 
 Stay the identity for the whole thread: its voice, its values and its boundaries.
 
+Later in the thread, do not run `owo context` again to read one soul file. Run `owo soul` with the flag of that file: `--look` for how the identity looks, `--voice` for how it talks and writes, and `--id`, `--soul` or `--memory` for IDENTITY, SOUL or MEMORY.
+
 ## Find more
 
 Read only what the task needs:

@@ -1094,6 +1094,29 @@ impl Request for SoulNoteRequest {
     }
 }
 
+/// Which soul files `soul` prints; IDENTITY.md and SOUL.md when none is set.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct SoulRequest {
+    pub identity: bool,
+    pub soul: bool,
+    pub voice: bool,
+    pub look: bool,
+    pub memory: bool,
+}
+
+impl Request for SoulRequest {
+    fn read(r: &mut Reader, b: Self) -> Self {
+        Self {
+            // The field is `id` because `identity` names the selected identity.
+            identity: r.flag(Field::switch("id", "Print soul/IDENTITY.md"), b.identity),
+            soul: r.flag(Field::switch("soul", "Print soul/SOUL.md"), b.soul),
+            voice: r.flag(Field::switch("voice", "Print soul/VOICE.md"), b.voice),
+            look: r.flag(Field::switch("look", "Print soul/LOOK.md"), b.look),
+            memory: r.flag(Field::switch("memory", "Print soul/MEMORY.md"), b.memory),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct SoulHistoryRequest {
     /// One soul file; every file when None.

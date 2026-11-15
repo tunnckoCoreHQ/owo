@@ -11,10 +11,6 @@ use std::path::PathBuf;
 
 /// The help line of each command that only groups other commands.
 const GROUPS: &[(&str, &str)] = &[
-    (
-        "soul",
-        "Soul history: evidence-backed records of soul changes",
-    ),
     ("export", "Export the identity to another format"),
     (
         "sync",
