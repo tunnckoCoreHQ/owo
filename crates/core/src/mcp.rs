@@ -282,14 +282,10 @@ fn http_request(stream: TcpStream, select: &Select, env: &Env) -> std::io::Resul
     }
     // Read the body even for a refused request: closing with unread data resets the connection
     // and the client never sees the status.
-    let mut body = vec![];
     let length = length.filter(|_| !chunked);
-    let mut body_read = false;
-    if let Some(length) = length.filter(|n| head <= MAX_HEAD && *n <= MAX_BODY) {
-        body.resize(length, 0);
-        reader.read_exact(&mut body)?;
-        body_read = true;
-    }
+    let fits = length.filter(|n| head <= MAX_HEAD && *n <= MAX_BODY);
+    let mut body = vec![0; fits.unwrap_or(0)];
+    reader.read_exact(&mut body)?;
     let mut parts = request.split_whitespace();
     let (method, path) = (parts.next().unwrap_or(""), parts.next().unwrap_or(""));
     let path = path.split('?').next().unwrap_or("");
@@ -314,7 +310,7 @@ fn http_request(stream: TcpStream, select: &Select, env: &Env) -> std::io::Resul
         reply.len()
     )?;
     stream.flush()?;
-    if !body_read {
+    if fits.is_none() {
         stream.shutdown(std::net::Shutdown::Write)?;
         stream.set_read_timeout(Some(Duration::from_millis(200)))?;
         let stop = Instant::now() + Duration::from_secs(2);
