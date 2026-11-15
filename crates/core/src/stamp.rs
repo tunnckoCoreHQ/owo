@@ -50,6 +50,12 @@ fn touch_updated(text: &str, today: &str) -> Option<String> {
 }
 
 pub fn run(id: &Identity, check: bool) -> Result<Report> {
+    let (report, writes) = plan(id, check)?;
+    writes.commit()?;
+    Ok(report)
+}
+
+fn plan(id: &Identity, check: bool) -> Result<(Report, Writes)> {
     if let Some(e) = id.entries.iter().find(|e| e.lossy && !check) {
         bail!("{} is not valid UTF-8; fix it before stamping", e.rel);
     }
@@ -115,7 +121,7 @@ pub fn run(id: &Identity, check: bool) -> Result<Report> {
         }
     }
     if check || report.is_clean() {
-        return Ok(report);
+        return Ok((report, Writes::default()));
     }
     let soul = if soul_changed { bumped_soul(id)? } else { None };
     let writes = touched
@@ -128,12 +134,11 @@ pub fn run(id: &Identity, check: bool) -> Result<Report> {
         w.json(&path, &path, doc)
     })?;
     let path = id.dir.join("soul/soul.json");
-    match soul {
+    let writes = match soul {
         Some(soul) => writes.json(&path, &path, &soul)?,
         None => writes,
-    }
-    .commit()?;
-    Ok(report)
+    };
+    Ok((report, writes))
 }
 
 fn bumped_soul(id: &Identity) -> Result<Option<Value>> {
