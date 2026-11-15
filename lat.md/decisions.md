@@ -138,6 +138,8 @@ Turn ids: an agent message's id is its `messageId`. ACP gives `session/prompt` n
 
 With `auto_ingest` on (see [[formats#Config resolution]]), the proxy runs the ingest of each sync run itself. When a store's push reports a run due, or a run still pending, the proxy starts a background agent with the text of that run's prompt file as the last argument of the command, in the root, with its stdin, stdout and stderr on the null device, so nothing of it reaches the client or the session. The prompt is the whole task: it points the agent at owo ingest and ends with the run's `owo sync done`. The proxy does not wait for the agent and does not call `sync done` itself. A start that fails, or an agent that exits with an error, is one warning line.
 
+A dry run (`Options::dry_run`, `owo acp --dry-run`) starts no ingest agent, because the agent edits the root.
+
 One agent runs at a time in a proxy: while one runs, a push starts no other. The run of that push stays pending, so a later push of the session reports it and starts it then. A run whose agent ended without `sync done` stays pending too, and the next push of the session starts it again.
 
 The command is `ingest_command` from the config. Without it, the proxy takes the command of the harness from the ACP agent command (`Options::agent`), by the name of an argument without its folder and its `@version`, so a path and an `npx` package name work too. `harness_command` in `acp.rs` holds the table:
