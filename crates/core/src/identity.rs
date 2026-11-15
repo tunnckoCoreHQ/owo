@@ -355,37 +355,28 @@ impl Identity {
 
     fn link_keys(entries: &[Entry]) -> BTreeMap<String, Vec<usize>> {
         let mut keys: BTreeMap<String, Vec<usize>> = BTreeMap::new();
-        let mut add = |key: String, idx: usize| {
-            let key = key.trim().to_lowercase();
-            if key.is_empty() {
-                return;
-            }
-            let list = keys.entry(key).or_default();
-            if !list.contains(&idx) {
-                list.push(idx);
-            }
-        };
         for (idx, e) in entries.iter().enumerate() {
             if e.is_generated() {
                 continue;
             }
+            let mut add = |key: &str| {
+                let key = key.trim().to_lowercase();
+                if key.is_empty() {
+                    return;
+                }
+                let list = keys.entry(key).or_default();
+                if !list.contains(&idx) {
+                    list.push(idx);
+                }
+            };
             if e.kind == Kind::Soul {
-                add(
-                    e.rel
-                        .trim_start_matches("soul/")
-                        .trim_end_matches(".md")
-                        .to_string(),
-                    idx,
-                );
+                add(e.rel.trim_start_matches("soul/").trim_end_matches(".md"));
             }
-            if let Some(t) = &e.title {
-                add(t.clone(), idx);
+            for name in e.title.iter().chain(&e.aliases) {
+                add(name);
             }
-            for a in &e.aliases {
-                add(a.clone(), idx);
-            }
-            add(e.stem_key(), idx);
-            add(e.rel.trim_end_matches(".md").to_string(), idx);
+            add(&e.stem_key());
+            add(e.rel.trim_end_matches(".md"));
         }
         keys
     }
