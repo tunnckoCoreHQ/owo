@@ -404,7 +404,11 @@ fn fill(src: &Path, refs: &Path, root: &Path, slug: &str, manifest: &Value) -> R
             .into_iter()
             .filter(|p| !is_index(p))
         {
-            let stem = stem_of(&p);
+            let stem = p
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or_default()
+                .to_string();
             let date = date_prefix(&stem);
             if *dated && date.is_none() && *kind != "event" {
                 r.skip(rel(&p), "no date in the file name");
