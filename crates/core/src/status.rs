@@ -73,16 +73,19 @@ pub struct Row {
 pub fn list(root: &std::path::Path) -> Vec<Row> {
     crate::config::list_identities(root)
         .into_iter()
-        .map(|slug| {
-            let id = Identity::load(root, &slug).ok();
-            Row {
-                name: id.as_ref().map_or(slug.clone(), |i| i.name().to_string()),
-                last_activity: id
-                    .as_ref()
-                    .and_then(|i| scope_activity(i).into_iter().map(|(_, t)| t).max()),
-                projects: id.map_or(vec![], |i| i.projects()),
+        .map(|slug| match Identity::load(root, &slug) {
+            Ok(id) => Row {
+                name: id.name().to_string(),
+                last_activity: scope_activity(&id).into_iter().map(|(_, t)| t).max(),
+                projects: id.projects(),
                 slug,
-            }
+            },
+            Err(_) => Row {
+                name: slug.clone(),
+                slug,
+                last_activity: None,
+                projects: vec![],
+            },
         })
         .collect()
 }
