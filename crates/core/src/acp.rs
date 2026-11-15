@@ -75,7 +75,18 @@ struct Turn {
     agent: Vec<(Option<String>, String)>,
     intro: bool,
     identity: Option<String>,
-    split: bool,
+    update_after_chunk: bool,
+}
+
+impl Turn {
+    fn message_to_join(&mut self, id: &Option<String>) -> Option<&mut String> {
+        let message = match id {
+            Some(_) => self.agent.iter_mut().find(|(i, _)| i == id),
+            None if self.update_after_chunk => None,
+            None => self.agent.last_mut().filter(|(i, _)| i.is_none()),
+        };
+        message.map(|(_, text)| text)
+    }
 }
 
 struct Session {
@@ -669,21 +680,16 @@ fn from_agent_line(line: &[u8], state: &Mutex<State>, setup: &Setup) -> Option<A
 fn track(st: &mut State, session: &str, update: &Value) -> Option<()> {
     let turn = st.turns.get_mut(session)?.front_mut()?;
     if update["sessionUpdate"] != "agent_message_chunk" || update["content"]["type"] != "text" {
-        turn.split = true;
+        turn.update_after_chunk = true;
         return None;
     }
     let text = update["content"]["text"].as_str()?;
     let id = update["messageId"].as_str().map(String::from);
-    let same = match &id {
-        Some(_) => turn.agent.iter_mut().find(|(i, _)| *i == id),
-        None if turn.split => None,
-        None => turn.agent.last_mut().filter(|(i, _)| i.is_none()),
-    };
-    turn.split = false;
-    match same {
-        Some((_, joined)) => joined.push_str(text),
+    match turn.message_to_join(&id) {
+        Some(joined) => joined.push_str(text),
         None => turn.agent.push((id, text.to_string())),
     }
+    turn.update_after_chunk = false;
     Some(())
 }
 
