@@ -729,7 +729,11 @@ fn turns(turn: Turn) -> Vec<crate::Turn> {
         text: turn.user,
     });
     let agent = turn.agent.into_iter().filter_map(|(id, text)| {
-        let id = id.or_else(|| (!replay).then(clock_id))?;
+        let id = match id {
+            Some(id) => id,
+            None if !replay => clock_id(),
+            None => return None,
+        };
         Some(crate::Turn {
             id,
             role: crate::Role::Assistant,
