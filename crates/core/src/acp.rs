@@ -62,6 +62,7 @@ enum Pending {
     Config(String),
 }
 
+#[derive(Default)]
 struct Turn {
     request: String,
     replay: bool,
@@ -455,8 +456,10 @@ fn from_client(msg: &mut Value, state: &Mutex<State>, setup: &Setup) -> Option<R
                 ("session/load", Some(s)) => {
                     let identity = st.session(s).identity.clone();
                     st.turns.entry(s.clone()).or_default().push_back(Turn {
+                        request: key.clone(),
+                        replay: true,
                         identity,
-                        ..turn(&key, true, String::new())
+                        ..Default::default()
                     });
                     st.pending.insert(key, Pending::Load(s.clone()));
                 }
@@ -511,9 +514,11 @@ fn from_client(msg: &mut Value, state: &Mutex<State>, setup: &Setup) -> Option<R
                 .entry(session.clone())
                 .or_default()
                 .push_back(Turn {
+                    request: key.clone(),
+                    user,
                     intro,
                     identity,
-                    ..turn(&key, false, user)
+                    ..Default::default()
                 });
             st.pending.insert(key, Pending::Prompt(session.clone()));
             let text = text?;
@@ -607,18 +612,6 @@ fn run_command(st: &mut State, setup: &Setup, session: &str, id: &Value, arg: &s
 
 fn update(session: &str, update: Value) -> Value {
     json!({ "jsonrpc": "2.0", "method": "session/update", "params": { "sessionId": session, "update": update } })
-}
-
-fn turn(request: &str, replay: bool, user: String) -> Turn {
-    Turn {
-        request: request.into(),
-        replay,
-        user,
-        agent: vec![],
-        split: false,
-        intro: false,
-        identity: None,
-    }
 }
 
 #[derive(Default)]
