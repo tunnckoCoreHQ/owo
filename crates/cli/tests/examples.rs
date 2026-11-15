@@ -68,6 +68,21 @@ fn resolve_show_links() {
 }
 
 #[test]
+fn resolve_without_a_name_is_a_usage_error() {
+    let one = copy_example("nicole");
+    for mut cmd in [
+        owo(one.path()),
+        owo(&examples()),
+        owo_as(&examples(), "nicole"),
+    ] {
+        let out = cmd.arg("resolve").output().unwrap();
+        assert_eq!(out.status.code(), Some(2));
+        assert!(out.stdout.is_empty());
+        assert!(String::from_utf8_lossy(&out.stderr).contains("required arguments"));
+    }
+}
+
+#[test]
 fn context_with_project_points_at_missing_kb() {
     let v = json(owo_as(&examples(), "reviewer").args([
         "--project",

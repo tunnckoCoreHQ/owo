@@ -787,7 +787,7 @@ impl Request for ResolveRequest {
     fn read(r: &mut Reader, b: Self) -> Self {
         Self {
             name: r.words(
-                Field::words("name", "Entry name, alias, path or [[link]]"),
+                Field::words("name", "Entry name, alias, path or [[link]]").required(),
                 b.name,
             ),
             kind: r.named(
