@@ -232,21 +232,14 @@ pub fn classify(rel: &str) -> Kind {
 fn parse_entry(rel: String, text: String, lossy: bool) -> Entry {
     let kind = classify(&rel);
     let split = markdown::split(&text);
-    let mut frontmatter = None;
-    let mut frontmatter_error = None;
-    if let Some(fm) = split.frontmatter {
-        match markdown::parse_frontmatter(fm) {
-            Ok(m) => frontmatter = Some(m),
-            Err(e) => frontmatter_error = Some(e),
-        }
-    }
+    let parsed = split.frontmatter.map(markdown::parse_frontmatter);
     let heading = markdown::first_heading(split.body);
     let mut entry = Entry {
         rel,
         kind,
         text: String::new(),
-        frontmatter,
-        frontmatter_error,
+        frontmatter_error: parsed.as_ref().and_then(|p| p.as_ref().err()).cloned(),
+        frontmatter: parsed.and_then(Result::ok),
         lossy,
         title: None,
         aliases: vec![],
