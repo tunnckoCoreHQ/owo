@@ -234,16 +234,11 @@ pub fn now_block(s: &State, project: Option<&str>) -> String {
         "- Review: {review}, {} unreviewed log days",
         r.unreviewed_log_days
     ));
-    let mut more = vec!["life/_index.md", "life/timeline.md", "work/_index.md"]
-        .into_iter()
-        .map(String::from)
-        .collect::<Vec<_>>();
-    if let Some(p) = project {
-        more.push(format!("work/projects/{p}/notes/"));
-    }
+    let notes = project
+        .map(|p| format!(", work/projects/{p}/notes/"))
+        .unwrap_or_default();
     lines.push(format!(
-        "- More: {} (or `owo search`, `owo resolve`)",
-        more.join(", ")
+        "- More: life/_index.md, life/timeline.md, work/_index.md{notes} (or `owo search`, `owo resolve`)"
     ));
     format!("## Now\n\n{}\n", lines.join("\n"))
 }
