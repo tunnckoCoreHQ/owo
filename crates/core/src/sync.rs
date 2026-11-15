@@ -347,6 +347,14 @@ pub fn push(req: &StartRequest, turns: &[Turn]) -> Result<Start> {
     Ok(out)
 }
 
+fn new_user_turns(messages: &[Message], done: usize, pending_end: Option<usize>) -> usize {
+    let counted_from = pending_end.map_or(done, |end| end.clamp(done, messages.len()));
+    messages[counted_from..]
+        .iter()
+        .filter(|m| m.role == "user")
+        .count()
+}
+
 fn run(
     req: &StartRequest,
     transcript: &Path,
@@ -365,13 +373,8 @@ fn run(
     let done = doc["until"].as_u64().unwrap_or(0) as usize;
     let done = done.min(messages.len());
     let until = messages.len();
-    let counted_from = doc["pending"]["until"]
-        .as_u64()
-        .map_or(done, |u| (u as usize).clamp(done, until));
-    let new_user = messages[counted_from..]
-        .iter()
-        .filter(|m| m.role == "user")
-        .count();
+    let pending_end = doc["pending"]["until"].as_u64().map(|u| u as usize);
+    let new_user = new_user_turns(&messages, done, pending_end);
     let due = new_user > 0 && (req.now || new_user >= req.every);
     let from = (0..done)
         .rev()
