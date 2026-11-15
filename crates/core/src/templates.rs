@@ -4,32 +4,32 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
-macro_rules! t {
+macro_rules! template {
     ($f:expr) => {
         include_str!(concat!("../../../templates/", $f))
     };
 }
 
 pub const IDENTITY_FILES: &[(&str, &str)] = &[
-    ("identity.json", t!("identity.json")),
-    ("soul/soul.json", t!("soul/soul.json")),
-    ("soul/IDENTITY.md", t!("soul/IDENTITY.md")),
-    ("soul/SOUL.md", t!("soul/SOUL.md")),
-    ("soul/VOICE.md", t!("soul/VOICE.md")),
-    ("soul/LOOK.md", t!("soul/LOOK.md")),
-    ("soul/MEMORY.md", t!("soul/MEMORY.md")),
-    ("soul/examples/good.md", t!("soul/examples-good.md")),
-    ("soul/examples/bad.md", t!("soul/examples-bad.md")),
+    ("identity.json", template!("identity.json")),
+    ("soul/soul.json", template!("soul/soul.json")),
+    ("soul/IDENTITY.md", template!("soul/IDENTITY.md")),
+    ("soul/SOUL.md", template!("soul/SOUL.md")),
+    ("soul/VOICE.md", template!("soul/VOICE.md")),
+    ("soul/LOOK.md", template!("soul/LOOK.md")),
+    ("soul/MEMORY.md", template!("soul/MEMORY.md")),
+    ("soul/examples/good.md", template!("soul/examples-good.md")),
+    ("soul/examples/bad.md", template!("soul/examples-bad.md")),
     (
         "soul/examples/greetings.md",
-        t!("soul/examples-greetings.md"),
+        template!("soul/examples-greetings.md"),
     ),
-    ("work/README.md", t!("work-README.md")),
+    ("work/README.md", template!("work-README.md")),
 ];
 
 macro_rules! entries {
     ($($n:literal)*) => {
-        &[$(($n, t!(concat!("entries/", $n, ".md")))),*]
+        &[$(($n, template!(concat!("entries/", $n, ".md")))),*]
     };
 }
 
