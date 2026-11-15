@@ -172,23 +172,13 @@ impl Entry {
     }
 
     pub fn stem_key(&self) -> String {
-        let path = Path::new(&self.rel);
-        if matches!(
-            path.file_name().and_then(|f| f.to_str()),
-            Some("overview.md" | "project.md")
-        ) {
-            if let Some(parent) = path
-                .parent()
-                .and_then(|p| p.file_name())
-                .and_then(|f| f.to_str())
-            {
-                return parent.to_string();
-            }
+        let mut parts = self.rel.rsplit('/');
+        let file = parts.next().unwrap_or_default();
+        match parts.next() {
+            Some(dir) if matches!(file, "overview.md" | "project.md") => dir,
+            _ => file.strip_suffix(".md").unwrap_or(file),
         }
-        path.file_stem()
-            .and_then(|s| s.to_str())
-            .unwrap_or_default()
-            .to_string()
+        .to_string()
     }
 
     pub fn is_generated(&self) -> bool {
