@@ -73,19 +73,16 @@ pub struct Row {
 pub fn list(root: &std::path::Path) -> Vec<Row> {
     crate::config::list_identities(root)
         .into_iter()
-        .map(|slug| match Identity::load(root, &slug) {
-            Ok(id) => Row {
-                name: id.name().to_string(),
-                last_activity: scope_activity(&id).into_iter().map(|(_, t)| t).max(),
-                projects: id.projects(),
+        .map(|slug| {
+            let id = Identity::load(root, &slug).ok();
+            Row {
+                name: id.as_ref().map_or(slug.clone(), |i| i.name().to_string()),
+                last_activity: id
+                    .as_ref()
+                    .and_then(|i| scope_activity(i).into_iter().map(|(_, t)| t).max()),
+                projects: id.map_or(vec![], |i| i.projects()),
                 slug,
-            },
-            Err(_) => Row {
-                name: slug.clone(),
-                slug,
-                last_activity: None,
-                projects: vec![],
-            },
+            }
         })
         .collect()
 }
@@ -204,35 +201,28 @@ pub fn join_links(links: &[Link]) -> String {
 }
 
 pub fn now_block(s: &State, project: Option<&str>) -> String {
-    let mut out = String::from("## Now\n\n");
     let scopes: Vec<String> = s
         .last_activity_by_scope
         .iter()
         .map(|(scope, t)| format!("{scope} {}", crate::state::day(t)))
         .collect();
-    out.push_str(&format!(
-        "- Last activity: {}\n",
+    let mut lines = vec![format!(
+        "- Last activity: {}",
         if scopes.is_empty() {
             "none".into()
         } else {
             scopes.join(", ")
         }
-    ));
+    )];
     if let Some((p, t)) = &s.last_project {
-        out.push_str(&format!("- Last project: {p} ({})\n", crate::state::day(t)));
+        lines.push(format!("- Last project: {p} ({})", crate::state::day(t)));
     }
-    out.push_str(&format!("- Recent days: {}\n", join_links(&s.recent_logs)));
-    out.push_str(&format!(
-        "- Recent events: {}\n",
-        join_links(&s.recent_events)
-    ));
-    out.push_str(&format!(
-        "- Open threads: {}\n",
-        join_links(&s.open_threads)
-    ));
+    lines.push(format!("- Recent days: {}", join_links(&s.recent_logs)));
+    lines.push(format!("- Recent events: {}", join_links(&s.recent_events)));
+    lines.push(format!("- Open threads: {}", join_links(&s.open_threads)));
     if !s.open_conflicts.is_empty() {
-        out.push_str(&format!(
-            "- Open conflicts: {}\n",
+        lines.push(format!(
+            "- Open conflicts: {}",
             join_links(&s.open_conflicts)
         ));
     }
@@ -245,8 +235,8 @@ pub fn now_block(s: &State, project: Option<&str>) -> String {
             r.every_days
         ),
     };
-    out.push_str(&format!(
-        "- Review: {review}, {} unreviewed log days\n",
+    lines.push(format!(
+        "- Review: {review}, {} unreviewed log days",
         r.unreviewed_log_days
     ));
     let mut more = vec!["life/_index.md", "life/timeline.md", "work/_index.md"]
@@ -256,9 +246,9 @@ pub fn now_block(s: &State, project: Option<&str>) -> String {
     if let Some(p) = project {
         more.push(format!("work/projects/{p}/notes/"));
     }
-    out.push_str(&format!(
-        "- More: {} (or `owo search`, `owo resolve`)\n",
+    lines.push(format!(
+        "- More: {} (or `owo search`, `owo resolve`)",
         more.join(", ")
     ));
-    out
+    format!("## Now\n\n{}\n", lines.join("\n"))
 }
