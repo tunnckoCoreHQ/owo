@@ -158,6 +158,18 @@ pub struct StartRequest<'a> {
     pub project: Option<&'a str>,
 }
 
+fn check_session(session: &str) -> Result<()> {
+    if session.is_empty()
+        || !session
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.')
+        || session.starts_with('.')
+    {
+        bail!("session id {session:?} must be letters, digits, '-', '_' or '.'");
+    }
+    Ok(())
+}
+
 struct Lock {
     path: PathBuf,
     _made: Made,
@@ -175,14 +187,6 @@ impl Drop for Made {
 
 impl Lock {
     fn take(root: &Path, session: &str) -> Result<Option<Lock>> {
-        if session.is_empty()
-            || !session
-                .chars()
-                .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.')
-            || session.starts_with('.')
-        {
-            bail!("session id {session:?} must be letters, digits, '-', '_' or '.'");
-        }
         if crate::write::dry() {
             return Ok(None);
         }
@@ -237,6 +241,7 @@ fn store(session: &str) -> String {
 }
 
 pub fn start(req: &StartRequest, transcript: &Path, format: Format) -> Result<Start> {
+    check_session(req.session)?;
     let _lock = Lock::take(req.root, req.session)?;
     if let Some(t) = read_bookmark(req.root, req.session)?["transcript"].as_str() {
         if t.ends_with(&store(req.session)) {
@@ -300,6 +305,7 @@ fn drop_partial_line(bytes: &mut Vec<u8>) {
 }
 
 pub fn push(req: &StartRequest, turns: &[Turn]) -> Result<Start> {
+    check_session(req.session)?;
     let _lock = Lock::take(req.root, req.session)?;
     let file = req.root.join(store(req.session));
     if let Some(t) = read_bookmark(req.root, req.session)?["transcript"].as_str() {
@@ -488,6 +494,7 @@ pub fn due(root: &Path, slug: Option<&str>) -> Result<Vec<Due>> {
 }
 
 pub fn done(root: &Path, session: &str, until: usize) -> Result<Bookmark> {
+    check_session(session)?;
     let _lock = Lock::take(root, session)?;
     let mut doc = read_bookmark(root, session)?;
     if doc.get("session").is_none() {
