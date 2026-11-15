@@ -363,13 +363,7 @@ impl Proxy {
         let copied = (|| -> std::io::Result<()> {
             let mut line = vec![];
             while agent_out.read_until(b'\n', &mut line)? > 0 {
-                let act = setup
-                    .as_deref()
-                    .and_then(|s| from_agent_line(&line, &state, s))
-                    .unwrap_or_default();
-                if let Some(job) = act.store {
-                    let _ = store.send(job);
-                }
+                let act = track_and_store(&line, &state, setup.as_deref(), &store);
                 match &act.line {
                     Some(msg) => emit(&client_out, &encode(msg))?,
                     None => emit(&client_out, &line)?,
@@ -583,6 +577,21 @@ struct Agent {
     line: Option<Value>,
     after: Option<Value>,
     store: Option<Job>,
+}
+
+fn track_and_store(
+    line: &[u8],
+    state: &Mutex<State>,
+    setup: Option<&Setup>,
+    store: &mpsc::Sender<Job>,
+) -> Agent {
+    let mut act = setup
+        .and_then(|s| from_agent_line(line, state, s))
+        .unwrap_or_default();
+    if let Some(job) = act.store.take() {
+        let _ = store.send(job);
+    }
+    act
 }
 
 fn from_agent_line(line: &[u8], state: &Mutex<State>, setup: &Setup) -> Option<Agent> {
