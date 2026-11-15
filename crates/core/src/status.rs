@@ -134,7 +134,7 @@ pub(crate) fn open_links(id: &Identity, kind: Kind) -> Vec<Link> {
 
 pub fn compute(id: &Identity, days: i64, logs: usize) -> State {
     let today = Utc::now().date_naive();
-    let newest = id
+    let story_today = id
         .entries
         .iter()
         .filter(|e| matches!(e.kind, Kind::Log | Kind::Event))
@@ -142,7 +142,7 @@ pub fn compute(id: &Identity, days: i64, logs: usize) -> State {
         .filter_map(|e| date_of(&e.field_str("date")?))
         .max()
         .unwrap_or(today);
-    let since = newest - Duration::days(days);
+    let since = story_today - Duration::days(days);
     let review = crate::state::review(id);
     let log_entries: Vec<&Entry> = by_date_desc(id, Kind::Log)
         .into_iter()
