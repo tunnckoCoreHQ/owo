@@ -3,6 +3,7 @@ use chrono::NaiveDate;
 use serde_json::{Map, Value};
 use std::collections::BTreeMap;
 use std::path::PathBuf;
+use std::str::FromStr;
 
 pub const MAX_DAYS: i64 = 36500;
 
@@ -34,11 +35,11 @@ pub struct Field {
 }
 
 impl Field {
-    pub fn new(name: &'static str, ty: Type, help: &'static str) -> Self {
+    pub fn new(name: &'static str, help: &'static str) -> Self {
         Self {
             name,
             help,
-            ty,
+            ty: Type::Text,
             positional: false,
             many: false,
             required: false,
@@ -51,28 +52,15 @@ impl Field {
         }
     }
 
-    pub fn switch(name: &'static str, help: &'static str) -> Self {
-        Self::new(name, Type::Switch, help)
-    }
-
-    pub fn positional(name: &'static str, ty: Type, help: &'static str) -> Self {
+    pub fn positional(name: &'static str, help: &'static str) -> Self {
         Self {
             positional: true,
-            ..Self::new(name, ty, help)
+            ..Self::new(name, help)
         }
-    }
-
-    pub fn words(name: &'static str, help: &'static str) -> Self {
-        Self::positional(name, Type::Text, help).many()
     }
 
     pub fn required(mut self) -> Self {
         self.required = true;
-        self
-    }
-
-    pub fn many(mut self) -> Self {
-        self.many = true;
         self
     }
 
@@ -226,35 +214,6 @@ pub struct Reader<'a> {
     error: Option<Error>,
 }
 
-pub trait Number: Sized {
-    fn parse(text: &str) -> Option<Self>;
-    fn value(&self) -> Value;
-}
-
-macro_rules! number {
-    ($($t:ty),*) => {$(
-        impl Number for $t {
-            fn parse(text: &str) -> Option<Self> {
-                text.parse().ok()
-            }
-            fn value(&self) -> Value {
-                (*self).into()
-            }
-        }
-    )*};
-}
-
-number!(usize, i64);
-
-impl<N: Number> Number for Option<N> {
-    fn parse(text: &str) -> Option<Self> {
-        N::parse(text).map(Some)
-    }
-    fn value(&self) -> Value {
-        self.as_ref().map_or(Value::Null, N::value)
-    }
-}
-
 fn given(is: bool) -> Value {
     if is {
         Value::Bool(true)
@@ -273,9 +232,9 @@ impl<'a> Reader<'a> {
         }
     }
 
-    fn declare(&mut self, f: Field, value: Value) -> Option<(&'static str, &'a Args)> {
+    fn declare(&mut self, f: Field, ty: Type, value: Value) -> Option<(&'static str, &'a Args)> {
         let name = f.name;
-        self.fields.push(f);
+        self.fields.push(Field { ty, ..f });
         match self.mode {
             Mode::Declare => None,
             Mode::Check => {
@@ -305,24 +264,29 @@ impl<'a> Reader<'a> {
     }
 
     pub fn flag(&mut self, f: Field, base: bool) -> bool {
-        match self.declare(f, base.into()) {
+        match self.declare(f, Type::Switch, base.into()) {
             Some((name, a)) => a.get(name).and_then(Value::as_bool) == Some(true),
             None => base,
         }
     }
 
     pub fn text(&mut self, f: Field, base: Option<String>) -> Option<String> {
-        match self.declare(f, given(base.is_some())) {
+        match self.declare(f, Type::Text, given(base.is_some())) {
+            Some((name, a)) => self.one(name, a).or(base),
+            None => base,
+        }
+    }
+
+    pub fn json(&mut self, f: Field, base: Option<String>) -> Option<String> {
+        match self.declare(f, Type::Json, given(base.is_some())) {
             Some((name, a)) => self.one(name, a).or(base),
             None => base,
         }
     }
 
     pub fn string(&mut self, f: Field, base: String) -> String {
-        match self.declare(f, given(!base.is_empty())) {
-            Some((name, a)) => self.one(name, a).unwrap_or(base),
-            None => base,
-        }
+        let base = Some(base).filter(|b| !b.is_empty());
+        self.text(f, base).unwrap_or_default()
     }
 
     fn one_path(&mut self, name: &str, args: &Args) -> Option<PathBuf> {
@@ -333,43 +297,42 @@ impl<'a> Reader<'a> {
     }
 
     pub fn path(&mut self, f: Field, base: Option<PathBuf>) -> Option<PathBuf> {
-        match self.declare(f, given(base.is_some())) {
+        match self.declare(f, Type::Path, given(base.is_some())) {
             Some((name, a)) => self.one_path(name, a).or(base),
             None => base,
         }
     }
 
     pub fn required_path(&mut self, f: Field, base: PathBuf) -> PathBuf {
-        match self.declare(f, given(!base.as_os_str().is_empty())) {
-            Some((name, a)) => self.one_path(name, a).unwrap_or(base),
-            None => base,
-        }
+        let base = Some(base).filter(|b| !b.as_os_str().is_empty());
+        self.path(f.required(), base).unwrap_or_default()
     }
 
     pub fn list(&mut self, f: Field, base: Vec<String>) -> Vec<String> {
-        match self.declare(f, given(!base.is_empty())) {
+        let f = Field { many: true, ..f };
+        match self.declare(f, Type::Text, given(!base.is_empty())) {
             Some((name, a)) if a.get(name).is_some() => a.strings(name).collect(),
             _ => base,
         }
     }
 
     pub fn words(&mut self, f: Field, base: String) -> String {
-        match self.declare(f, given(!base.is_empty())) {
-            Some((name, a)) if a.get(name).is_some() => {
-                a.strings(name).collect::<Vec<_>>().join(" ")
-            }
-            _ => base,
-        }
+        let f = Field {
+            positional: true,
+            ..f
+        };
+        let base = Some(base).filter(|b| !b.is_empty()).into_iter().collect();
+        self.list(f, base).join(" ")
     }
 
-    pub fn int<T: Number>(&mut self, f: Field, base: T) -> T {
-        let Some((name, a)) = self.declare(f, base.value()) else {
+    pub fn int<T: FromStr + Into<Value> + Copy>(&mut self, f: Field, base: Option<T>) -> Option<T> {
+        let Some((name, a)) = self.declare(f, Type::Int, base.into()) else {
             return base;
         };
         let Some(text) = self.one(name, a) else {
             return base;
         };
-        T::parse(&text).unwrap_or_else(|| {
+        text.parse().map(Some).unwrap_or_else(|_| {
             self.fail(format!(
                 "argument {name:?} must be an integer, not {text:?}"
             ));
@@ -379,7 +342,7 @@ impl<'a> Reader<'a> {
 
     pub fn day(&mut self, f: Field, base: Option<NaiveDate>) -> Option<NaiveDate> {
         let name = f.name;
-        let Some((name, a)) = self.declare(f, given(base.is_some())) else {
+        let Some((name, a)) = self.declare(f, Type::Day, given(base.is_some())) else {
             if let (Mode::Check, Some(day)) = (&self.mode, base) {
                 if let Err(e) = crate::parse_day(&day.to_string()) {
                     self.fail(format!("argument {name:?}: {e}"));
@@ -402,24 +365,36 @@ impl<'a> Reader<'a> {
     pub fn named<T>(
         &mut self,
         f: Field,
+        values: impl IntoIterator<Item = &'static str>,
         from: fn(&str) -> Option<T>,
         base: Option<T>,
     ) -> Option<T> {
-        match self.declare(f, given(base.is_some())) {
+        let ty = Type::Choice(values.into_iter().collect());
+        match self.declare(f, ty, given(base.is_some())) {
             Some((name, a)) => self.one(name, a).and_then(|s| from(&s)).or(base),
             None => base,
         }
     }
 
-    pub fn choice<T>(&mut self, f: Field, from: fn(&str) -> Option<T>, base: T) -> T {
-        match self.declare(f, given(true)) {
-            Some((name, a)) => self.one(name, a).and_then(|s| from(&s)).unwrap_or(base),
-            None => base,
-        }
+    pub fn choice<T: Copy>(
+        &mut self,
+        f: Field,
+        values: impl IntoIterator<Item = &'static str>,
+        from: fn(&str) -> Option<T>,
+        base: T,
+    ) -> T {
+        self.named(f, values, from, Some(base)).unwrap_or(base)
     }
 
-    pub fn all_named<T>(&mut self, f: Field, from: fn(&str) -> Option<T>, base: Vec<T>) -> Vec<T> {
-        match self.declare(f, given(!base.is_empty())) {
+    pub fn all_named<T>(
+        &mut self,
+        f: Field,
+        values: impl IntoIterator<Item = &'static str>,
+        from: fn(&str) -> Option<T>,
+        base: Vec<T>,
+    ) -> Vec<T> {
+        let ty = Type::Choice(values.into_iter().collect());
+        match self.declare(Field { many: true, ..f }, ty, given(!base.is_empty())) {
             Some((name, a)) if a.get(name).is_some() => {
                 a.strings(name).filter_map(|s| from(&s)).collect()
             }
@@ -472,7 +447,7 @@ impl<R: Request> Request for DryRun<R> {
         Self {
             req: R::read(r, b.req),
             dry_run: r.flag(
-                Field::switch("dryRun", "Report the files it would write, and write none"),
+                Field::new("dryRun", "Report the files it would write, and write none"),
                 b.dry_run,
             ),
         }
@@ -489,16 +464,11 @@ impl Request for NewRequest {
     fn read(r: &mut Reader, b: Self) -> Self {
         Self {
             name: r.string(
-                Field::positional("name", Type::Text, "Display name, for example \"Thea\"")
-                    .required(),
+                Field::positional("name", "Display name, for example \"Thea\"").required(),
                 b.name,
             ),
             slug: r.text(
-                Field::new(
-                    "slug",
-                    Type::Text,
-                    "Slug override (default: slug of the name)",
-                ),
+                Field::new("slug", "Slug override (default: slug of the name)"),
                 b.slug,
             ),
         }
@@ -517,16 +487,12 @@ impl Request for WriteRequest {
             path: r.string(
                 Field::positional(
                     "path",
-                    Type::Text,
                     "Identity-relative path under soul/, life/ or work/, ending in .md",
                 )
                 .required(),
                 b.path,
             ),
-            content: r.text(
-                Field::new("content", Type::Text, "The file text").hyphen(),
-                b.content,
-            ),
+            content: r.text(Field::new("content", "The file text").hyphen(), b.content),
         }
     }
 }
@@ -558,42 +524,35 @@ impl Request for AddRequest {
     fn read(r: &mut Reader, b: Self) -> Self {
         Self {
             kind: r.choice(
-                Field::positional(
-                    "kind",
-                    Type::Choice(crate::entry_types().collect()),
-                    "Entry type",
-                )
-                .required()
-                .value_name("TYPE"),
+                Field::positional("kind", "Entry type")
+                    .required()
+                    .value_name("TYPE"),
+                crate::entry_types(),
                 Kind::from_type,
                 b.kind,
             ),
             title: r.words(
-                Field::words("title", "Title (a log without one is titled by its date)"),
+                Field::new("title", "Title (a log without one is titled by its date)"),
                 b.title,
             ),
             date: r.day(
                 Field::new(
                     "date",
-                    Type::Day,
                     "Date for dated entries (default: today, local time)",
                 ),
                 b.date,
             ),
             parent: r.text(
-                Field::new("parent", Type::Text, "Parent location for location-detail"),
+                Field::new("parent", "Parent location for location-detail"),
                 b.parent,
             ),
             aliases: r.list(
-                Field::new("alias", Type::Text, "Alias (repeatable)")
-                    .many()
-                    .value_name("ALIASES"),
+                Field::new("alias", "Alias (repeatable)").value_name("ALIASES"),
                 b.aliases,
             ),
             kb: r.text(
                 Field::new(
                     "kb",
-                    Type::Text,
                     "KB path for a project, relative to the identity folder",
                 ),
                 b.kb,
@@ -611,7 +570,7 @@ impl Request for StampRequest {
     fn read(r: &mut Reader, b: Self) -> Self {
         Self {
             check: r.flag(
-                Field::switch("check", "Report drift instead of writing"),
+                Field::new("check", "Report drift instead of writing"),
                 b.check,
             ),
         }
@@ -628,18 +587,13 @@ impl Request for LintRequest {
     fn read(r: &mut Reader, b: Self) -> Self {
         Self {
             rules: r.all_named(
-                Field::new(
-                    "rule",
-                    Type::Choice(Rule::all().map(Rule::name).collect()),
-                    "Run only these rules (repeatable)",
-                )
-                .many()
-                .value_name("RULES"),
+                Field::new("rule", "Run only these rules (repeatable)").value_name("RULES"),
+                Rule::all().map(Rule::name),
                 Rule::from_name,
                 b.rules,
             ),
             changed: r.flag(
-                Field::switch(
+                Field::new(
                     "changed",
                     "Report only files changed since the last commit or stamp",
                 ),
@@ -658,7 +612,7 @@ impl Request for IndexRequest {
     fn read(r: &mut Reader, b: Self) -> Self {
         Self {
             check: r.flag(
-                Field::switch("check", "Report stale generated files instead of writing"),
+                Field::new("check", "Report stale generated files instead of writing"),
                 b.check,
             ),
         }
@@ -673,7 +627,7 @@ pub struct SlugRequest {
 impl Request for SlugRequest {
     fn read(r: &mut Reader, b: Self) -> Self {
         Self {
-            text: r.words(Field::words("text", "Text to turn into a slug"), b.text),
+            text: r.words(Field::new("text", "Text to turn into a slug"), b.text),
         }
     }
 }
@@ -687,8 +641,7 @@ impl Request for TemplateRequest {
     fn read(r: &mut Reader, b: Self) -> Self {
         Self {
             name: r.string(
-                Field::positional("name", Type::Text, "Template name, as `templates` lists it")
-                    .required(),
+                Field::positional("name", "Template name, as `templates` lists it").required(),
                 b.name,
             ),
         }
@@ -705,16 +658,12 @@ impl Request for ResolveRequest {
     fn read(r: &mut Reader, b: Self) -> Self {
         Self {
             name: r.words(
-                Field::words("name", "Entry name, alias, path or [[link]]").required(),
+                Field::new("name", "Entry name, alias, path or [[link]]").required(),
                 b.name,
             ),
             kind: r.named(
-                Field::new(
-                    "type",
-                    Type::Choice(Kind::names().collect()),
-                    "Limit to one entry type",
-                )
-                .value_name("KIND"),
+                Field::new("type", "Limit to one entry type").value_name("KIND"),
+                Kind::names(),
                 Kind::from_name,
                 b.kind,
             ),
@@ -732,7 +681,7 @@ impl Request for ShowRequest {
     fn read(r: &mut Reader, b: Self) -> Self {
         Self {
             name: r.words(
-                Field::words(
+                Field::new(
                     "name",
                     "Entry name, alias, path, [[link]] or kb:<project>:<path>",
                 ),
@@ -741,7 +690,6 @@ impl Request for ShowRequest {
             section: r.text(
                 Field::new(
                     "section",
-                    Type::Text,
                     "Print only this section (a heading at any level)",
                 ),
                 b.section,
@@ -762,22 +710,22 @@ impl Request for LinksRequest {
     fn read(r: &mut Reader, b: Self) -> Self {
         Self {
             name: r.words(
-                Field::words(
+                Field::new(
                     "name",
                     "Entry name, alias, path or [[link]] (not needed with orphans)",
                 ),
                 b.name,
             ),
             inbound: r.flag(
-                Field::switch("in", "Only links pointing at the entry"),
+                Field::new("in", "Only links pointing at the entry"),
                 b.inbound,
             ),
             outbound: r.flag(
-                Field::switch("out", "Only links going out of the entry"),
+                Field::new("out", "Only links going out of the entry"),
                 b.outbound,
             ),
             orphans: r.flag(
-                Field::switch("orphans", "List entries nothing links to"),
+                Field::new("orphans", "List entries nothing links to"),
                 b.orphans,
             ),
         }
@@ -809,23 +757,25 @@ impl Request for ContextRequest {
     fn read(r: &mut Reader, b: Self) -> Self {
         let d = Self::default();
         Self {
-            voice: r.flag(Field::switch("voice", "Add soul/VOICE.md"), b.voice),
-            look: r.flag(Field::switch("look", "Add soul/LOOK.md"), b.look),
+            voice: r.flag(Field::new("voice", "Add soul/VOICE.md"), b.voice),
+            look: r.flag(Field::new("look", "Add soul/LOOK.md"), b.look),
             with: r.list(
-                Field::new("with", Type::Text, "Add a resolvable entry (repeatable)").many(),
+                Field::new("with", "Add a resolvable entry (repeatable)"),
                 b.with,
             ),
-            notes: r.int(
-                Field::new("notes", Type::Int, "Recent project notes to include").default(d.notes),
-                b.notes,
-            ),
+            notes: r
+                .int(
+                    Field::new("notes", "Recent project notes to include").default(d.notes),
+                    Some(b.notes),
+                )
+                .unwrap_or(b.notes),
             paths: r.choice(
                 Field::new(
                     "format",
-                    Type::Choice(vec!["paths", "text"]),
                     "text: file contents concatenated; paths: the list",
                 )
                 .default("text"),
+                ["paths", "text"],
                 |s| Some(s == "paths"),
                 b.paths,
             ),
@@ -848,12 +798,14 @@ impl Request for StateRequest {
     fn read(r: &mut Reader, b: Self) -> Self {
         let d = Self::default();
         Self {
-            days: r.int(
-                Field::new("days", Type::Int, "Window for recent events")
-                    .default(d.days)
-                    .range(0, MAX_DAYS),
-                b.days,
-            ),
+            days: r
+                .int(
+                    Field::new("days", "Window for recent events")
+                        .default(d.days)
+                        .range(0, MAX_DAYS),
+                    Some(b.days),
+                )
+                .unwrap_or(b.days),
         }
     }
 }
@@ -885,24 +837,16 @@ impl Request for SearchRequest {
     fn read(r: &mut Reader, b: Self) -> Self {
         let d = Self::default();
         Self {
-            query: r.words(Field::words("query", "Search words"), b.query),
+            query: r.words(Field::new("query", "Search words"), b.query),
             scope: r.named(
-                Field::new(
-                    "scope",
-                    Type::Choice(Scope::ALL.map(Scope::name).to_vec()),
-                    "Limit to soul, life or work",
-                ),
+                Field::new("scope", "Limit to soul, life or work"),
+                Scope::ALL.map(Scope::name),
                 Scope::from_name,
                 b.scope,
             ),
             types: r.all_named(
-                Field::new(
-                    "type",
-                    Type::Choice(Kind::names().collect()),
-                    "Limit to entry types (repeatable)",
-                )
-                .many()
-                .value_name("TYPES"),
+                Field::new("type", "Limit to entry types (repeatable)").value_name("TYPES"),
+                Kind::names(),
                 Kind::from_name,
                 b.types,
             ),
@@ -910,15 +854,16 @@ impl Request for SearchRequest {
             since: r.day(
                 Field::new(
                     "since",
-                    Type::Day,
                     "Only entries dated (or updated) on or after YYYY-MM-DD",
                 ),
                 b.since,
             ),
-            limit: r.int(
-                Field::new("limit", Type::Int, "Most hits to print").default(d.limit),
-                b.limit,
-            ),
+            limit: r
+                .int(
+                    Field::new("limit", "Most hits to print").default(d.limit),
+                    Some(b.limit),
+                )
+                .unwrap_or(b.limit),
         }
     }
 }
@@ -934,7 +879,6 @@ impl Request for ReviewDoneRequest {
             through: r.day(
                 Field::new(
                     "through",
-                    Type::Day,
                     "Last story day covered (default: newest log, event or journal date)",
                 ),
                 b.through,
@@ -954,20 +898,15 @@ impl Request for SoulNoteRequest {
     fn read(r: &mut Reader, b: Self) -> Self {
         Self {
             file: r.string(
-                Field::positional("file", Type::Text, "Soul file, for example SOUL.md").required(),
+                Field::positional("file", "Soul file, for example SOUL.md").required(),
                 b.file,
             ),
             change: r.string(
-                Field::new("change", Type::Text, "What changed, in one line").required(),
+                Field::new("change", "What changed, in one line").required(),
                 b.change,
             ),
             evidence: r.list(
-                Field::new(
-                    "evidence",
-                    Type::Text,
-                    "Evidence entry name or [[link]] (repeatable)",
-                )
-                .many(),
+                Field::new("evidence", "Evidence entry name or [[link]] (repeatable)"),
                 b.evidence,
             ),
         }
@@ -986,11 +925,11 @@ pub struct SoulRequest {
 impl Request for SoulRequest {
     fn read(r: &mut Reader, b: Self) -> Self {
         Self {
-            identity: r.flag(Field::switch("id", "Print soul/IDENTITY.md"), b.identity),
-            soul: r.flag(Field::switch("soul", "Print soul/SOUL.md"), b.soul),
-            voice: r.flag(Field::switch("voice", "Print soul/VOICE.md"), b.voice),
-            look: r.flag(Field::switch("look", "Print soul/LOOK.md"), b.look),
-            memory: r.flag(Field::switch("memory", "Print soul/MEMORY.md"), b.memory),
+            identity: r.flag(Field::new("id", "Print soul/IDENTITY.md"), b.identity),
+            soul: r.flag(Field::new("soul", "Print soul/SOUL.md"), b.soul),
+            voice: r.flag(Field::new("voice", "Print soul/VOICE.md"), b.voice),
+            look: r.flag(Field::new("look", "Print soul/LOOK.md"), b.look),
+            memory: r.flag(Field::new("memory", "Print soul/MEMORY.md"), b.memory),
         }
     }
 }
@@ -1006,7 +945,6 @@ impl Request for SoulHistoryRequest {
             file: r.text(
                 Field::positional(
                     "file",
-                    Type::Text,
                     "Soul file, for example SOUL.md (default: every file)",
                 ),
                 b.file,
@@ -1025,16 +963,12 @@ impl Request for ChangesRequest {
     fn read(r: &mut Reader, b: Self) -> Self {
         Self {
             since: r.text(
-                Field::new(
-                    "since",
-                    Type::Text,
-                    "YYYY-MM-DD or anything `git log --since` accepts",
-                )
-                .conflicts("days"),
+                Field::new("since", "YYYY-MM-DD or anything `git log --since` accepts")
+                    .conflicts("days"),
                 b.since,
             ),
             days: r.int(
-                Field::new("days", Type::Int, "Only the last N days").range(0, MAX_DAYS),
+                Field::new("days", "Only the last N days").range(0, MAX_DAYS),
                 b.days,
             ),
         }
@@ -1066,34 +1000,24 @@ impl Request for CardRequest {
     fn read(r: &mut Reader, b: Self) -> Self {
         let d = Self::default();
         let png = r.path(
-            Field::new(
-                "png",
-                Type::Path,
-                "Embed the card in this PNG avatar (needs out)",
-            )
-            .requires("out"),
+            Field::new("png", "Embed the card in this PNG avatar (needs out)").requires("out"),
             b.png,
         );
         let scenario = r.text(
             Field::new(
                 "scenario",
-                Type::Text,
                 "Event or location whose summary becomes the scenario",
             ),
             b.scenario,
         );
         let spec = r.choice(
-            Field::new(
-                "spec",
-                Type::Choice(Spec::ALL.map(Spec::name).to_vec()),
-                "Card spec version",
-            )
-            .default(d.spec.name()),
+            Field::new("spec", "Card spec version").default(d.spec.name()),
+            Spec::ALL.map(Spec::name),
             Spec::from_name,
             b.spec,
         );
         let out = r.path(
-            Field::new("out", Type::Path, "Write to a file instead of stdout"),
+            Field::new("out", "Write to a file instead of stdout"),
             b.out,
         );
         Self {
@@ -1114,10 +1038,7 @@ pub struct SkillRequest {
 impl Request for SkillRequest {
     fn read(r: &mut Reader, b: Self) -> Self {
         Self {
-            out: r.required_path(
-                Field::new("out", Type::Path, "Folder to write SKILL.md into").required(),
-                b.out,
-            ),
+            out: r.required_path(Field::new("out", "Folder to write SKILL.md into"), b.out),
         }
     }
 }
@@ -1130,10 +1051,7 @@ pub struct SoulspecRequest {
 impl Request for SoulspecRequest {
     fn read(r: &mut Reader, b: Self) -> Self {
         Self {
-            out: r.required_path(
-                Field::new("out", Type::Path, "Package folder to write").required(),
-                b.out,
-            ),
+            out: r.required_path(Field::new("out", "Package folder to write"), b.out),
         }
     }
 }
@@ -1150,13 +1068,12 @@ impl Request for SyncOptions {
     fn read(r: &mut Reader, b: Self) -> Self {
         Self {
             now: r.flag(
-                Field::switch("now", "Take any new turns now (session end)"),
+                Field::new("now", "Take any new turns now (session end)"),
                 b.now,
             ),
             every: r.int(
                 Field::new(
                     "every",
-                    Type::Int,
                     "New user turns per run (default: sync_every in the config, else 6)",
                 ),
                 b.every,
@@ -1166,7 +1083,7 @@ impl Request for SyncOptions {
 }
 
 fn session_field(help: &'static str) -> Field {
-    Field::new("session", Type::Text, help)
+    Field::new("session", help)
         .required()
         .value_name("SESSION_ID")
 }
@@ -1188,19 +1105,17 @@ impl Request for SyncStartRequest {
             transcript: r.required_path(
                 Field::new(
                     "transcript",
-                    Type::Path,
                     "Transcript file the host keeps for this session",
-                )
-                .required(),
+                ),
                 b.transcript,
             ),
             format: r.choice(
                 Field::new(
                     "format",
-                    Type::Choice(SyncFormat::ALL.map(SyncFormat::name).to_vec()),
                     "Transcript format; jsonl lines are {\"role\": ..., \"text\": ...} with an optional turn \"id\"",
                 )
                 .default(SyncFormat::default().name()),
+                SyncFormat::ALL.map(SyncFormat::name),
                 SyncFormat::from_name,
                 b.format,
             ),
@@ -1220,10 +1135,9 @@ impl Request for SyncPushRequest {
     fn read(r: &mut Reader, b: Self) -> Self {
         Self {
             session: r.string(session_field(SESSION_HELP), b.session),
-            turns: r.text(
+            turns: r.json(
                 Field::new(
                     "turns",
-                    Type::Json,
                     "JSON array of {\"id\", \"role\", \"text\"}; id is the turn id, the host's id for that message, and a stored turn id is skipped",
                 )
                 .hyphen(),
@@ -1247,15 +1161,16 @@ impl Request for SyncDoneRequest {
                 session_field("Session id given to sync start or sync push"),
                 b.session,
             ),
-            until: r.int(
-                Field::new(
-                    "until",
-                    Type::Int,
-                    "Message index the ingest run reached (the until from sync start)",
+            until: r
+                .int(
+                    Field::new(
+                        "until",
+                        "Message index the ingest run reached (the until from sync start)",
+                    )
+                    .required(),
+                    Some(b.until),
                 )
-                .required(),
-                b.until,
-            ),
+                .unwrap_or(b.until),
         }
     }
 }
@@ -1269,12 +1184,9 @@ pub struct MigrateRequest {
 impl Request for MigrateRequest {
     fn read(r: &mut Reader, b: Self) -> Self {
         Self {
-            path: r.required_path(
-                Field::positional("path", Type::Path, "The v1 identity folder").required(),
-                b.path,
-            ),
+            path: r.required_path(Field::positional("path", "The v1 identity folder"), b.path),
             out: r.required_path(
-                Field::new("out", Type::Path, "New identity folder, <root>/<slug>").required(),
+                Field::new("out", "New identity folder, <root>/<slug>"),
                 b.out,
             ),
         }
