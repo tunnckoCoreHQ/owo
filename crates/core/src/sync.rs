@@ -39,6 +39,7 @@ pub struct PendingRun {
 }
 
 const OVERLAP_TURNS: usize = 2;
+const STALE_LOCK: Duration = Duration::from_secs(60);
 
 #[derive(Debug, Clone)]
 pub struct Message {
@@ -199,7 +200,7 @@ impl Lock {
                 Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
                     let stale = fs::metadata(&path)
                         .and_then(|m| m.modified())
-                        .is_ok_and(|t| t.elapsed().unwrap_or_default() > Duration::from_secs(60));
+                        .is_ok_and(|t| t.elapsed().unwrap_or_default() > STALE_LOCK);
                     if stale {
                         let _ = fs::remove_file(&path);
                     } else {
