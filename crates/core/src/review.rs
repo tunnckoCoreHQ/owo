@@ -1,6 +1,6 @@
 use crate::identity::{Identity, Kind};
 use crate::state::parse_day;
-use crate::status::Link;
+use crate::status::{open_links, Link};
 use anyhow::{bail, Context, Result};
 use chrono::NaiveDate;
 use serde::{Deserialize, Serialize};
@@ -122,12 +122,6 @@ pub fn packet(id: &Identity) -> Packet {
         .collect();
     days.sort_by(|a, b| a.date.cmp(&b.date));
     let of_kind = |k: Kind| id.entries.iter().filter(move |e| e.kind == k);
-    let open = |k: Kind| {
-        of_kind(k)
-            .filter(|e| e.field_str("state").as_deref() == Some("open"))
-            .map(Link::of)
-            .collect()
-    };
     let changed_paths: BTreeSet<&str> = changed.iter().map(|c| c.path.as_str()).collect();
     let memory = id.entry("soul/MEMORY.md");
     Packet {
@@ -149,8 +143,8 @@ pub fn packet(id: &Identity) -> Packet {
             .filter(|e| after_through(&e.field_str("date")))
             .map(|e| e.rel.clone())
             .collect(),
-        open_threads: open(Kind::Thread),
-        open_conflicts: open(Kind::Conflict),
+        open_threads: open_links(id, Kind::Thread),
+        open_conflicts: open_links(id, Kind::Conflict),
         recurring: recurring(&days),
         last_soul_change: last_soul_change(id),
         unreviewed_days: days,

@@ -130,6 +130,14 @@ pub fn last_project(id: &Identity) -> Option<(String, String)> {
     project_stamps(id).into_iter().max_by(|a, b| a.1.cmp(&b.1))
 }
 
+pub(crate) fn open_links(id: &Identity, kind: Kind) -> Vec<Link> {
+    id.entries
+        .iter()
+        .filter(|e| e.kind == kind && e.field_str("state").as_deref() == Some("open"))
+        .map(Link::of)
+        .collect()
+}
+
 pub fn compute(id: &Identity, days: i64, logs: usize) -> State {
     let today = Utc::now().date_naive();
     let newest = id
@@ -151,13 +159,6 @@ pub fn compute(id: &Identity, days: i64, logs: usize) -> State {
         .filter(|e| review.unreviewed(e.field_str("date").as_deref()))
         .count();
     let by_scope = scope_activity(id);
-    let open = |kind: Kind, state: &str| -> Vec<Link> {
-        id.entries
-            .iter()
-            .filter(|e| e.kind == kind && e.field_str("state").as_deref() == Some(state))
-            .map(Link::of)
-            .collect()
-    };
     State {
         identity: id.slug.clone(),
         last_activity: by_scope.iter().map(|(_, t)| t.clone()).max(),
@@ -174,8 +175,8 @@ pub fn compute(id: &Identity, days: i64, logs: usize) -> State {
             })
             .map(Link::of)
             .collect(),
-        open_threads: open(Kind::Thread, "open"),
-        open_conflicts: open(Kind::Conflict, "open"),
+        open_threads: open_links(id, Kind::Thread),
+        open_conflicts: open_links(id, Kind::Conflict),
         last_soul_change: crate::review::last_soul_change(id),
         review: Review {
             last_reviewed: review.last_reviewed,
