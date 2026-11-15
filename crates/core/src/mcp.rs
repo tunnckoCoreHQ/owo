@@ -25,15 +25,10 @@ fn schema_type(f: &Field) -> &'static str {
 }
 
 fn schema(op: &Operation) -> Value {
-    let mut props = Map::new();
-    props.insert(
-        "identity".into(),
-        json!({ "type": "string", "description": "Identity slug (default: the server's)" }),
-    );
-    props.insert(
-        "project".into(),
-        json!({ "type": "string", "description": "Project slug" }),
-    );
+    let mut props = json!({
+        "identity": { "type": "string", "description": "Identity slug (default: the server's)" },
+        "project": { "type": "string", "description": "Project slug" },
+    });
     for f in &op.fields {
         let kind = schema_type(f);
         let mut s = json!({ "type": kind, "description": f.help });
@@ -54,7 +49,7 @@ fn schema(op: &Operation) -> Value {
         } else if let Some(v) = values {
             s["enum"] = v;
         }
-        props.insert(f.name.to_string(), s);
+        props[f.name] = s;
     }
     let required: Vec<&str> = op
         .fields
@@ -121,13 +116,8 @@ fn run_tool(op: &Operation, params: &Value, select: &Select, env: &Env) -> Value
 }
 
 fn reply_of(op: &Operation, ran: Ran) -> Value {
-    let Ran {
-        mut warnings,
-        result: outcome,
-    } = ran;
-    let lines = |warnings: &[String]| -> String {
-        warnings.iter().map(|w| crate::warning_line(w)).collect()
-    };
+    let (mut warnings, outcome) = (ran.warnings, ran.result);
+    let lines = |w: &[String]| w.iter().map(|w| crate::warning_line(w)).collect::<String>();
     let (stdout, stderr, error) = match &outcome {
         _ if !returns_text(op) => {
             let envelope = match &outcome {
@@ -142,11 +132,7 @@ fn reply_of(op: &Operation, ran: Ran) -> Value {
             warnings.extend(envelope.text_warnings());
             (text(o), lines(&warnings), !envelope.ok)
         }
-        Err(e) => (
-            String::new(),
-            format!("{}owo: {}\n", lines(&warnings), e),
-            true,
-        ),
+        Err(e) => ("".into(), format!("{}owo: {e}\n", lines(&warnings)), true),
     };
     let text = match (stdout.trim().is_empty(), stderr.trim().is_empty()) {
         (true, _) => stderr,
