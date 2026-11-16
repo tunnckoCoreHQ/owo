@@ -21,7 +21,6 @@ pub struct FileConfig {
 pub enum Origin {
     Flag,
     Env,
-    #[serde(rename = "project-file")]
     LocalConfig(PathBuf),
     UserConfig(PathBuf),
     Default,
