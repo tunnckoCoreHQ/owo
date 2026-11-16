@@ -1,5 +1,6 @@
 use owo_core::{
-    day, join_links, now_block, Diagnostic, Hit, Kind, Level, Outcome, ReviewPacket, SyncReport,
+    day, join_links, now_block, Diagnostic, Hit, Kind, Level, Origin, Outcome, ReviewPacket,
+    SyncReport,
 };
 
 struct Text {
@@ -35,6 +36,17 @@ fn diagnostic(d: &Diagnostic) -> String {
         None => d.path.clone(),
     };
     format!("{level}[{}] {place}: {}", d.rule, d.message)
+}
+
+fn origin(o: &Origin) -> String {
+    match o {
+        Origin::Flag => "flag".into(),
+        Origin::Env => "environment".into(),
+        Origin::LocalConfig(file) => format!("local config {}", file.display()),
+        Origin::UserConfig(file) => format!("user config {}", file.display()),
+        Origin::Default => "default".into(),
+        Origin::OnlyIdentity => "only identity".into(),
+    }
 }
 
 fn sync(s: &SyncReport) -> String {
@@ -82,7 +94,11 @@ impl Text {
         match outcome {
             Outcome::Slug(value) => self.line(value),
             Outcome::Config(r) => {
-                self.line(format!("root: {} ({:?})", r.root.display(), r.root_source));
+                self.line(format!(
+                    "root: {} ({})",
+                    r.root.display(),
+                    origin(&r.root_source)
+                ));
                 self.line(format!(
                     "identity: {}",
                     r.identity.as_deref().unwrap_or("-")
