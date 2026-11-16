@@ -33,10 +33,10 @@ fn examples_are_lint_clean_and_current() {
 #[test]
 fn resolve_show_links() {
     owo_as(&examples(), "nicole")
-        .args(["resolve", "life/log/2026-10-30.md"])
+        .args(["resolve", "life/daily-log/2026-10-30.md"])
         .assert()
         .success()
-        .stdout("life/log/2026-10-30.md\n");
+        .stdout("life/daily-log/2026-10-30.md\n");
     let root = examples();
     owo_as(&root, "reviewer")
         .args(["resolve", "Mina Okafor"])
@@ -317,7 +317,7 @@ fn reflect_digest_then_done() {
         .args(["add", "daily-log", "Pairing", "--date", "2026-11-04"])
         .assert()
         .success();
-    let log = tmp.path().join("reviewer/life/log/2026-11-04.md");
+    let log = tmp.path().join("reviewer/life/daily-log/2026-11-04.md");
     let text = fs::read_to_string(&log).unwrap();
     fs::write(&log, format!("{text}- Paired on the parser.\n")).unwrap();
     let p = json(owo_as(tmp.path(), "reviewer").arg("reflect"));

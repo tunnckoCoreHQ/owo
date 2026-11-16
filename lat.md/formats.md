@@ -17,7 +17,7 @@ The root holds identity folders and shared working data. It works well as a Git 
 An identity is `<root>/<slug>/` with `identity.json`, `persona/`, `life/` and `work/`; `owo new` creates every folder and file listed here.
 
 - `persona/`: `soul.json` (SoulSpec v0.5), `state.json`, `IDENTITY.md`, `SOUL.md`, `VOICE.md`, `LOOK.md`, `MEMORY.md`, `examples/{good,bad,greetings}.md`.
-- `life/`: `state.json`, `_index.md`, `timeline.md`, and one folder per category: characters, locations, cultures, factions, events, eras, threads, conflicts, insights, writing, log (the daily logs), journal.
+- `life/`: `state.json`, `_index.md`, `timeline.md`, and one folder per category: characters, locations, cultures, factions, events, eras, threads, conflicts, insights, writing, daily-log (the daily logs), journal.
 - `work/`: `state.json`, `PROFILE.md` (the work profile), `_index.md`, `projects/<p>/README.md` (the project readme), `projects/<p>/notes/YYYY-MM-DD_<slug>.md` (the project notes).
 
 Each top-level location is a folder with `overview.md`. Rooms and angles are sibling files beside it, and location folders sit one level deep.
@@ -102,7 +102,7 @@ Every file write is all or nothing: owo writes `<name>.tmp` next to the file and
 
 Generated files start with a marker comment and depend only on entry content, so regeneration is deterministic and comparable. Only `owo index` writes them.
 
-Each life category `_index.md` lists `- [[Title]] (marks): summary (aliases: ...)`, where the marks name a `state` other than open (closed, resolved) and a `status` other than canon; location details nest under their overview. `life/_index.md` lists categories with counts. `life/timeline.md` groups events under eras sorted by `date`; `era` resolves like any link (title, alias, slug, `|label`). `work/_index.md` lists the work profile and the projects with their project note counts.
+Each life category `_index.md` lists `- [[Title]] (marks): summary (aliases: ...)`, where the marks name a `state` other than open (closed, resolved) and a `status` other than canon; location details nest under their overview. `life/_index.md` lists categories with counts. A category heading is its folder name in title case, so `daily-log` is `Daily Log`. `life/timeline.md` groups events under eras sorted by `date`; `era` resolves like any link (title, alias, slug, `|label`). `work/_index.md` lists the work profile and the projects with their project note counts.
 
 ## Config resolution
 

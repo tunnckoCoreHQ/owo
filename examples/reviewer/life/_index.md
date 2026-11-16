@@ -11,6 +11,6 @@
 - [Conflicts](conflicts/_index.md): 0
 - [Insights](insights/_index.md): 3
 - [Writing](writing/_index.md): 1
-- [Log](log/_index.md): 9
+- [Daily Log](daily-log/_index.md): 9
 - [Journal](journal/_index.md): 0
 - [Timeline](timeline.md)

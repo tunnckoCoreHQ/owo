@@ -53,7 +53,7 @@ const KIND_ROWS: [KindRow; Kind::Unknown as usize + 1] = [
     typed!(Conflict, "conflict", Some("conflicts")),
     typed!(Insight, "insight", Some("insights")),
     typed!(Writing, "writing", Some("writing")),
-    typed!(DailyLog, "daily-log", Some("log")),
+    typed!(DailyLog, "daily-log", Some("daily-log")),
     typed!(Journal, "journal", Some("journal")),
     typed!(ProjectReadme, "project-readme", None),
     typed!(ProjectNote, "project-note", None),
@@ -152,7 +152,7 @@ impl Kind {
             Kind::LocationDetail => format!("life/locations/{}/{slug}.md", parent?),
             Kind::ProjectReadme => format!("work/projects/{slug}/README.md"),
             Kind::ProjectNote => format!("work/projects/{}/notes/{date}_{slug}.md", project?),
-            Kind::DailyLog => format!("life/log/{date}.md"),
+            Kind::DailyLog => format!("life/daily-log/{date}.md"),
             _ => {
                 let dir = self.kind_row().category?;
                 match self.dated() {
@@ -467,7 +467,7 @@ mod tests {
             Kind::LocationDetail
         );
         assert_eq!(classify("life/locations/flat.md"), Kind::Unknown);
-        assert_eq!(classify("life/log/2026-11-01.md"), Kind::DailyLog);
+        assert_eq!(classify("life/daily-log/2026-11-01.md"), Kind::DailyLog);
         assert_eq!(classify("life/events/_index.md"), Kind::Generated);
         assert_eq!(classify("life/timeline.md"), Kind::Generated);
         assert_eq!(classify("work/PROFILE.md"), Kind::WorkProfile);

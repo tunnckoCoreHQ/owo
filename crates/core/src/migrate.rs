@@ -405,7 +405,7 @@ fn fill(src: &Path, refs: &Path, root: &Path, slug: &str, manifest: &Value) -> R
     let groups: &[(&str, &str, &str, bool)] = &[
         ("characters", "life/characters", "character", false),
         ("history/events", "life/events", "event", true),
-        ("memory/daily", "life/log", "daily-log", true),
+        ("memory/daily", "life/daily-log", "daily-log", true),
         ("memory/journal", "life/journal", "journal", true),
         ("memory/lessons", "life/insights", "insight", false),
         ("cultures", "life/cultures", "culture", false),

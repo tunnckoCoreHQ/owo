@@ -26,8 +26,8 @@ fn migrate_v1_fixture() {
         "life/characters/ada.md",
         "life/characters/gull.md",
         "life/events/the-storm.md",
-        "life/log/2026-01-01.md",
-        "life/log/2026-01-02.md",
+        "life/daily-log/2026-01-01.md",
+        "life/daily-log/2026-01-02.md",
         "life/journal/2026-01-01_tired.md",
         "life/insights/trim-the-wick.md",
         "life/conflicts/ferry-day.md",
@@ -62,11 +62,11 @@ fn migrate_v1_fixture() {
         .unwrap()
         .contains("status: canon"));
     assert!(
-        skipped.contains("2026-01-02_extra.md (target life/log/2026-01-02.md exists"),
+        skipped.contains("2026-01-02_extra.md (target life/daily-log/2026-01-02.md exists"),
         "{skipped}"
     );
     assert_eq!(
-        fs::read_to_string(out.join("life/log/2026-01-02.md"))
+        fs::read_to_string(out.join("life/daily-log/2026-01-02.md"))
             .unwrap()
             .trim_end()
             .lines()

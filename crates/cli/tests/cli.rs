@@ -145,7 +145,7 @@ fn broken_entries_are_reported() {
         "---\ntype: event\ntitle: Storm\nsummary: A storm.\nstatus: disputed\ncreated: 2026-10-01\nupdated: 2026-10-01\ndate: 2026-07-01\n---\n\n# Storm\n\nSee [[Nowhere]] and [[Salt]]. Sam was born 1990-04-12.\n",
     );
     w("life/characters/bad.md", "---\ntype: event\ntitle: Bad\nsummary: x\nstatus: maybe\ncreated: 2026-13-01\nupdated: 2026-10-01\n---\n# Bad\n");
-    w("life/log/2026-07-02.md", "---\ntype: daily-log\ntitle: Day\nstatus: canon\ncreated: 2026-07-02\nupdated: 2026-07-02\ndate: 2026-07-03\n---\n- x\n");
+    w("life/daily-log/2026-07-02.md", "---\ntype: daily-log\ntitle: Day\nstatus: canon\ncreated: 2026-07-02\nupdated: 2026-07-02\ndate: 2026-07-03\n---\n- x\n");
     w("life/characters/samuel-two.md", "---\ntype: character\ntitle: Sam Two\naliases: [Samuel]\nsummary: x\nstatus: canon\ncreated: 2026-10-01\nupdated: 2026-10-01\n---\n# Sam Two\n");
     w("life/notes.md", "# stray\n");
     w("life/locations/empty-place/detail.md", "---\ntype: location-detail\ntitle: Detail\nsummary: x\nstatus: canon\ncreated: 2026-10-01\nupdated: 2026-10-01\nparent: \"[[Harbor House]]\"\n---\n# Detail\n");
@@ -160,7 +160,7 @@ fn broken_entries_are_reported() {
         "identifiers:life/events/storm.md",
         "supersede:life/events/storm.md",
         "schema:life/characters/bad.md",
-        "schema:life/log/2026-07-02.md",
+        "schema:life/daily-log/2026-07-02.md",
         "unique:life/characters/samuel-two.md",
         "tree:life/notes.md",
         "tree:life/locations/empty-place",
@@ -191,7 +191,7 @@ fn memory_budget_and_dupes_warn() {
     .unwrap();
     let passage = "the tide came in fast and we pulled the boat up past the stones together";
     fs::write(dir.join("life/journal/2026-06-14_salt.md"), format!("---\ntype: journal\ntitle: Salt\nstatus: canon\ncreated: 2026-06-14\nupdated: 2026-06-14\ndate: 2026-06-14\n---\n# Salt\n\n{passage}\n")).unwrap();
-    fs::write(dir.join("life/log/2026-06-14.md"), format!("---\ntype: daily-log\ntitle: Sailing day\nstatus: canon\ncreated: 2026-06-14\nupdated: 2026-06-14\ndate: 2026-06-14\n---\n# Sailing day\n\n- [[First Sail]] {passage}\n")).unwrap();
+    fs::write(dir.join("life/daily-log/2026-06-14.md"), format!("---\ntype: daily-log\ntitle: Sailing day\nstatus: canon\ncreated: 2026-06-14\nupdated: 2026-06-14\ndate: 2026-06-14\n---\n# Sailing day\n\n- [[First Sail]] {passage}\n")).unwrap();
     let v = lint_json(tmp.path(), &["budget", "memory-reflection", "dupes"]);
     let warnings = rules_in(&v, "warnings");
     assert!(
