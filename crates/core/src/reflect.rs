@@ -21,7 +21,7 @@ pub struct Changed {
 }
 
 #[derive(Debug, Serialize)]
-pub struct LogDay {
+pub struct DailyLog {
     pub path: String,
     pub date: String,
     pub title: String,
@@ -37,9 +37,9 @@ pub struct ReflectionDigest {
     pub memory_words: usize,
     pub memory_changed_outside_reflection: bool,
     pub changed: Vec<Changed>,
-    pub unreflected_days: Vec<LogDay>,
+    pub unreflected_days: Vec<DailyLog>,
     pub events: Vec<Link>,
-    pub lessons: Vec<Link>,
+    pub insights: Vec<Link>,
     pub journal: Vec<String>,
     pub open_threads: Vec<Link>,
     pub open_conflicts: Vec<Link>,
@@ -54,7 +54,7 @@ const STOP_WORDS: &[&str] = &[
     "with", "you", "your",
 ];
 
-fn recurring(days: &[LogDay]) -> Vec<(String, usize)> {
+fn recurring(days: &[DailyLog]) -> Vec<(String, usize)> {
     let content = |w: &str| !STOP_WORDS.contains(&w);
     let mut seen: BTreeMap<String, BTreeSet<&str>> = BTreeMap::new();
     for d in days {
@@ -103,11 +103,13 @@ pub fn digest(id: &Identity) -> ReflectionDigest {
         });
     }
     changed.sort_by(|a, b| b.updated.cmp(&a.updated).then(a.path.cmp(&b.path)));
-    let mut days: Vec<LogDay> = id
+    let mut days: Vec<DailyLog> = id
         .entries
         .iter()
-        .filter(|e| e.kind == Kind::Log && !e.is_blank() && after_through(&e.field_str("date")))
-        .map(|e| LogDay {
+        .filter(|e| {
+            e.kind == Kind::DailyLog && !e.is_blank() && after_through(&e.field_str("date"))
+        })
+        .map(|e| DailyLog {
             path: e.rel.clone(),
             date: e.field_str("date").unwrap_or_default(),
             title: e.title.clone().unwrap_or_default(),
@@ -136,7 +138,7 @@ pub fn digest(id: &Identity) -> ReflectionDigest {
             .filter(|e| after_through(&e.field_str("date")))
             .map(Link::of)
             .collect(),
-        lessons: of_kind(Kind::Lesson)
+        insights: of_kind(Kind::Insight)
             .filter(|e| changed_paths.contains(e.rel.as_str()))
             .map(Link::of)
             .collect(),
@@ -171,8 +173,8 @@ pub fn done(id: &Identity, through: Option<NaiveDate>) -> Result<ReflectionRecor
         None => id
             .entries
             .iter()
-            .filter(|e| matches!(e.kind, Kind::Log | Kind::Event | Kind::Journal))
-            .filter(|e| !(e.kind == Kind::Log && e.is_blank()))
+            .filter(|e| matches!(e.kind, Kind::DailyLog | Kind::Event | Kind::Journal))
+            .filter(|e| !(e.kind == Kind::DailyLog && e.is_blank()))
             .filter_map(|e| e.field_str("date"))
             .filter(|d| parse_day(d).is_ok())
             .max(),
@@ -302,9 +304,9 @@ mod tests {
 
     #[test]
     fn recurring_phrases_skip_function_words() {
-        let days: Vec<LogDay> = ["01", "02", "03"]
+        let days: Vec<DailyLog> = ["01", "02", "03"]
             .iter()
-            .map(|d| LogDay {
+            .map(|d| DailyLog {
                 path: String::new(),
                 date: format!("2026-01-{d}"),
                 title: String::new(),

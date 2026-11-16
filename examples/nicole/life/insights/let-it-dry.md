@@ -1,5 +1,5 @@
 ---
-type: lesson
+type: insight
 title: "Let It Dry"
 aliases: []
 summary: "Patience before the kiln saves the work."

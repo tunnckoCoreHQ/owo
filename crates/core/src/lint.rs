@@ -93,7 +93,7 @@ fn tree(id: &Identity, out: &mut Vec<Diagnostic>) {
         "persona/state.json".into(),
         "life/state.json".into(),
         "work/state.json".into(),
-        "work/README.md".into(),
+        "work/PROFILE.md".into(),
     ];
     required.extend(PERSONA_FILES.iter().map(|f| format!("persona/{f}")));
     for rel in &required {
@@ -241,7 +241,7 @@ fn check_entry_schema(e: &Entry, out: &mut Vec<Diagnostic>) {
             Some(_) => out.push(err(rel, format!("{key} must be a list of strings"))),
         }
     }
-    let needs_summary = !matches!(e.kind, Kind::Log | Kind::Journal | Kind::Writing);
+    let needs_summary = !matches!(e.kind, Kind::DailyLog | Kind::Journal | Kind::Writing);
     if needs_summary && e.field_str("summary").is_none_or(|s| s.trim().is_empty()) {
         out.push(warn(rel, "summary is empty; indexes and search use it"));
     }
@@ -309,7 +309,7 @@ fn check_entry_schema(e: &Entry, out: &mut Vec<Diagnostic>) {
                 out.push(err(rel, "parent is missing"));
             }
         }
-        Kind::Note => {
+        Kind::ProjectNote => {
             let folder = rel.split('/').nth(2).unwrap_or_default();
             if e.field_str("project").as_deref() != Some(folder) {
                 out.push(err(rel, format!("project must be {folder:?}")));

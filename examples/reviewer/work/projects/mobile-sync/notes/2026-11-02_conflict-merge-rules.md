@@ -1,5 +1,5 @@
 ---
-type: note
+type: project-note
 title: "Conflict merge rules"
 aliases: []
 summary: "Merge rules need a written table before code."

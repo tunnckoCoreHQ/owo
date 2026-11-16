@@ -16,7 +16,7 @@ pub fn add(id: &Identity, req: &Request, project: Option<&str>) -> Result<(Strin
     let (parent, kb) = (req.parent.is_some(), req.kb.is_some());
     for (set, field, noun, kind) in [
         (parent, "parent", "parent", Kind::LocationDetail),
-        (kb, "kb", "KB", Kind::Project),
+        (kb, "kb", "KB", Kind::ProjectReadme),
     ] {
         if set && req.kind != kind {
             return Err(Fault::OnlyFor {
@@ -34,7 +34,7 @@ pub fn add(id: &Identity, req: &Request, project: Option<&str>) -> Result<(Strin
         .map(|d| d.to_string())
         .unwrap_or_else(|| today.clone());
     let title = match req.title.trim() {
-        "" if req.kind == Kind::Log => date.as_str(),
+        "" if req.kind == Kind::DailyLog => date.as_str(),
         t => t,
     };
     for name in std::iter::once(title).chain(req.aliases.iter().map(String::as_str)) {
@@ -75,7 +75,7 @@ pub fn add(id: &Identity, req: &Request, project: Option<&str>) -> Result<(Strin
         None
     };
 
-    if req.kind == Kind::Note {
+    if req.kind == Kind::ProjectNote {
         let project = project.ok_or(Fault::KindNeeds {
             kind: req.kind,
             field: "project",
@@ -125,14 +125,14 @@ pub fn add(id: &Identity, req: &Request, project: Option<&str>) -> Result<(Strin
             "alias",
         )?;
     }
-    if let (Some(kb), Kind::Project) = (req.kb.as_deref(), req.kind) {
+    if let (Some(kb), Kind::ProjectReadme) = (req.kb.as_deref(), req.kind) {
         let to = format!("kb: \"{}\"", templates::yaml_escape(kb));
         text = fill_line(&text, "kb: \"\"", &to, "kb")?;
     }
     let notes = path.with_file_name("notes");
     let writes = Writes::default().file(&path, &path, text);
     match req.kind {
-        Kind::Project => writes.dir(&notes, &notes),
+        Kind::ProjectReadme => writes.dir(&notes, &notes),
         _ => writes,
     }
     .commit()?;

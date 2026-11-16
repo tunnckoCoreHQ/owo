@@ -9,7 +9,7 @@
 - [Eras](eras/_index.md): 1
 - [Threads](threads/_index.md): 1
 - [Conflicts](conflicts/_index.md): 0
-- [Lessons](lessons/_index.md): 1
+- [Insights](insights/_index.md): 1
 - [Writing](writing/_index.md): 0
 - [Log](log/_index.md): 4
 - [Journal](journal/_index.md): 1

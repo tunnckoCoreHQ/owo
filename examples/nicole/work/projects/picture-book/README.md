@@ -1,5 +1,5 @@
 ---
-type: project
+type: project-readme
 title: "Picture Book"
 aliases: []
 summary: "A children's picture book about a lighthouse keeper's cat."
@@ -13,6 +13,10 @@ sources: []
 ---
 
 # Picture Book
+
+## About
+
+A sixteen-spread picture book for young readers, told through the eyes of a lighthouse keeper's cat.
 
 ## What I do here
 

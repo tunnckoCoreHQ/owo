@@ -174,7 +174,7 @@ fn pr10_date_outside_four_digit_years_is_a_usage_error() {
     let state = tmp.path().join("ids/nicole/persona/state.json");
     let before = fs::read_to_string(&state).unwrap();
     usage(id.add(&AddRequest {
-        kind: Kind::Log,
+        kind: Kind::DailyLog,
         date: Some(far),
         ..Default::default()
     }));

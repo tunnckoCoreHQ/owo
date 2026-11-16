@@ -1,5 +1,5 @@
 ---
-type: note
+type: project-note
 title: "Idempotency keys"
 aliases: []
 summary: "Asked for idempotency keys on the transfer retry path."

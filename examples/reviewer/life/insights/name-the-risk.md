@@ -1,5 +1,5 @@
 ---
-type: lesson
+type: insight
 title: "Name the Risk"
 aliases: []
 summary: "Every review summary names its main risk in one line."

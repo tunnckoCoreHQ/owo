@@ -80,7 +80,7 @@ fn atomic_card_failed_rename_leaves_no_tmp() {
 #[test]
 fn atomic_write_replaces_the_file() {
     let tmp = setup();
-    let file = nicole(tmp.path()).join("life/lessons/let-it-dry.md");
+    let file = nicole(tmp.path()).join("life/insights/let-it-dry.md");
     let before = ino(&file);
     assert!(run(
         tmp.path(),
@@ -88,7 +88,7 @@ fn atomic_write_replaces_the_file() {
             "-i",
             "nicole",
             "write",
-            "life/lessons/let-it-dry.md",
+            "life/insights/let-it-dry.md",
             "--content",
             "# Let It Dry\n"
         ]
@@ -102,7 +102,7 @@ fn atomic_write_replaces_the_file() {
 fn atomic_index_replaces_the_files() {
     let tmp = setup();
     let dir = nicole(tmp.path());
-    let files = ["life/lessons/_index.md", "life/timeline.md"].map(|r| dir.join(r));
+    let files = ["life/insights/_index.md", "life/timeline.md"].map(|r| dir.join(r));
     let before = files.clone().map(|f| {
         fs::write(&f, "stale\n").unwrap();
         ino(&f)
@@ -117,7 +117,7 @@ fn atomic_index_replaces_the_files() {
 #[test]
 fn atomic_stamp_replaces_the_entry() {
     let tmp = setup();
-    let file = nicole(tmp.path()).join("life/lessons/let-it-dry.md");
+    let file = nicole(tmp.path()).join("life/insights/let-it-dry.md");
     let text = fs::read_to_string(&file).unwrap();
     fs::write(&file, format!("{text}\nMore.\n")).unwrap();
     let before = ino(&file);
@@ -247,7 +247,7 @@ fn atomic_failed_sync_leaves_no_session_folder() {
 fn atomic_stamp_is_all_or_nothing() {
     let tmp = setup();
     let dir = nicole(tmp.path());
-    let file = dir.join("life/lessons/let-it-dry.md");
+    let file = dir.join("life/insights/let-it-dry.md");
     let text = fs::read_to_string(&file).unwrap();
     fs::write(&file, format!("{text}\nMore.\n")).unwrap();
     let before = snapshot(&dir);
@@ -261,7 +261,7 @@ fn atomic_stamp_is_all_or_nothing() {
 fn atomic_index_is_all_or_nothing() {
     let tmp = setup();
     let dir = nicole(tmp.path());
-    for rel in ["life/lessons/_index.md", "work/_index.md"] {
+    for rel in ["life/insights/_index.md", "work/_index.md"] {
         fs::write(dir.join(rel), "stale\n").unwrap();
     }
     let last = dir.join("work/_index.md");

@@ -51,12 +51,12 @@ const KIND_ROWS: [KindRow; Kind::Unknown as usize + 1] = [
     typed!(Era, "era", Some("eras")),
     typed!(Thread, "thread", Some("threads")),
     typed!(Conflict, "conflict", Some("conflicts")),
-    typed!(Lesson, "lesson", Some("lessons")),
+    typed!(Insight, "insight", Some("insights")),
     typed!(Writing, "writing", Some("writing")),
-    typed!(Log, "log", Some("log")),
+    typed!(DailyLog, "daily-log", Some("log")),
     typed!(Journal, "journal", Some("journal")),
-    typed!(Project, "project", None),
-    typed!(Note, "note", None),
+    typed!(ProjectReadme, "project-readme", None),
+    typed!(ProjectNote, "project-note", None),
     untyped(Kind::WorkProfile, "work-profile"),
     untyped(Kind::Generated, "generated"),
     untyped(Kind::Unknown, "unknown"),
@@ -97,12 +97,12 @@ pub enum Kind {
     Era,
     Thread,
     Conflict,
-    Lesson,
+    Insight,
     Writing,
-    Log,
+    DailyLog,
     Journal,
-    Project,
-    Note,
+    ProjectReadme,
+    ProjectNote,
     WorkProfile,
     Generated,
     Unknown,
@@ -134,8 +134,8 @@ impl Kind {
 
     pub fn dated(self) -> Option<bool> {
         match self {
-            Kind::Log => Some(false),
-            Kind::Journal | Kind::Writing | Kind::Note => Some(true),
+            Kind::DailyLog => Some(false),
+            Kind::Journal | Kind::Writing | Kind::ProjectNote => Some(true),
             _ => None,
         }
     }
@@ -150,9 +150,9 @@ impl Kind {
         Some(match self {
             Kind::Location => format!("life/locations/{slug}/overview.md"),
             Kind::LocationDetail => format!("life/locations/{}/{slug}.md", parent?),
-            Kind::Project => format!("work/projects/{slug}/project.md"),
-            Kind::Note => format!("work/projects/{}/notes/{date}_{slug}.md", project?),
-            Kind::Log => format!("life/log/{date}.md"),
+            Kind::ProjectReadme => format!("work/projects/{slug}/README.md"),
+            Kind::ProjectNote => format!("work/projects/{}/notes/{date}_{slug}.md", project?),
+            Kind::DailyLog => format!("life/log/{date}.md"),
             _ => {
                 let dir = self.kind_row().category?;
                 match self.dated() {
@@ -197,7 +197,12 @@ impl Entry {
         let mut parts = self.rel.rsplit('/');
         let file = parts.next().unwrap_or_default();
         match parts.next() {
-            Some(dir) if matches!(file, "overview.md" | "project.md") => dir,
+            Some(dir)
+                if file == "overview.md"
+                    || (file == "README.md" && self.kind == Kind::ProjectReadme) =>
+            {
+                dir
+            }
             _ => file.strip_suffix(".md").unwrap_or(file),
         }
         .to_string()
@@ -237,9 +242,9 @@ pub fn classify(rel: &str) -> Kind {
         }
         ["persona", file] if PERSONA_FILES.contains(file) => Kind::Persona,
         ["persona", "examples", _] => Kind::Example,
-        ["work", "README.md"] => Kind::WorkProfile,
-        ["work", "projects", _, "project.md"] => Kind::Project,
-        ["work", "projects", _, "notes", _] => Kind::Note,
+        ["work", "PROFILE.md"] => Kind::WorkProfile,
+        ["work", "projects", _, "README.md"] => Kind::ProjectReadme,
+        ["work", "projects", _, "notes", _] => Kind::ProjectNote,
         ["life", "locations", _, "overview.md"] => Kind::Location,
         ["life", "locations", _, _] => Kind::LocationDetail,
         ["life", category, _] => life_categories()
@@ -414,23 +419,23 @@ impl Identity {
     }
 
     pub fn project(&self, slug: &str) -> Option<&Entry> {
-        self.entry(&format!("work/projects/{slug}/project.md"))
+        self.entry(&format!("work/projects/{slug}/README.md"))
     }
 
     pub fn projects(&self) -> Vec<String> {
         self.entries
             .iter()
-            .filter(|e| e.kind == Kind::Project)
+            .filter(|e| e.kind == Kind::ProjectReadme)
             .map(|e| e.stem_key())
             .collect()
     }
 
-    pub fn notes(&self, project: &str) -> Vec<&Entry> {
+    pub fn project_notes(&self, project: &str) -> Vec<&Entry> {
         let prefix = format!("work/projects/{project}/notes/");
         let mut notes: Vec<&Entry> = self
             .entries
             .iter()
-            .filter(|e| e.kind == Kind::Note && e.rel.starts_with(&prefix))
+            .filter(|e| e.kind == Kind::ProjectNote && e.rel.starts_with(&prefix))
             .collect();
         notes.sort_by(|a, b| b.rel.cmp(&a.rel));
         notes
@@ -462,14 +467,14 @@ mod tests {
             Kind::LocationDetail
         );
         assert_eq!(classify("life/locations/flat.md"), Kind::Unknown);
-        assert_eq!(classify("life/log/2026-11-01.md"), Kind::Log);
+        assert_eq!(classify("life/log/2026-11-01.md"), Kind::DailyLog);
         assert_eq!(classify("life/events/_index.md"), Kind::Generated);
         assert_eq!(classify("life/timeline.md"), Kind::Generated);
-        assert_eq!(classify("work/README.md"), Kind::WorkProfile);
-        assert_eq!(classify("work/projects/api/project.md"), Kind::Project);
+        assert_eq!(classify("work/PROFILE.md"), Kind::WorkProfile);
+        assert_eq!(classify("work/projects/api/README.md"), Kind::ProjectReadme);
         assert_eq!(
             classify("work/projects/api/notes/2026-11-01_x.md"),
-            Kind::Note
+            Kind::ProjectNote
         );
         assert_eq!(classify("life/stuff/x.md"), Kind::Unknown);
         assert_eq!(classify("life/stuff/_index.md"), Kind::Unknown);

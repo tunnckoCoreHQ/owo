@@ -43,7 +43,7 @@ pub use migrate::Report as MigrateReport;
 pub use operation::{operations, Envelope, Operation, Outcome, Ran};
 pub use output::{warning_line, Diagnostic, Level};
 pub use reflect::{
-    Changed, LogDay, PersonaChange, PersonaChangeReport, ReflectionDigest, ReflectionRecord,
+    Changed, DailyLog, PersonaChange, PersonaChangeReport, ReflectionDigest, ReflectionRecord,
 };
 pub use request::{
     AddRequest, Args, CardRequest, ChangesRequest, ContextRequest, Field, IndexRequest,
@@ -309,10 +309,10 @@ impl Identity {
                 ),
             ));
         }
-        if req.title.trim().is_empty() && req.kind != Kind::Log {
+        if req.title.trim().is_empty() && req.kind != Kind::DailyLog {
             return Err(Fault::NeedsTitle(req.kind).into());
         }
-        let project = if req.kind == Kind::Note {
+        let project = if req.kind == Kind::ProjectNote {
             self.working_project()?
         } else {
             None

@@ -19,7 +19,7 @@ Each rule has a code usable with `--rule`.
 - `state` (warning): state files match content hashes; it reports what `owo stamp --check` reports, and a state file that does not parse.
 - `budget` (warning): persona file word counts within soft budgets (IDENTITY 800, SOUL 800, VOICE 1000, LOOK 600, MEMORY 1500), overridable in `identity.json`.
 - `dupes` (warning): shared 12-word passages between authored files; the message quotes one shared passage.
-- `orphans` (warning): entries with zero inbound links; logs, journal, notes and persona files are exempt.
+- `orphans` (warning): entries with zero inbound links; daily logs, journal, project notes and persona files are exempt.
 - `persona-evidence` (warning): each persona change cites two links that each resolve to one entry, or one `defining: true` event.
 - `reflection-due` (info): never reflected, or `reflect_every_days` passed.
 - `kb` (error for an unknown project or malformed link; warning for a missing file or section): `[[kb:<p>:<path>#<Section>]]` links. A KB folder that is not on disk is skipped, so identities lint clean on machines without the project checked out.

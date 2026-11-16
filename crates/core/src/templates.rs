@@ -32,7 +32,7 @@ pub const IDENTITY_FILES: &[(&str, &str)] = &[
         "persona/examples/greetings.md",
         template!("persona/examples-greetings.md"),
     ),
-    ("work/README.md", template!("work-README.md")),
+    ("work/PROFILE.md", template!("work-PROFILE.md")),
 ];
 
 pub fn all() -> Vec<(&'static str, String, &'static str)> {

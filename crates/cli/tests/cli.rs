@@ -61,7 +61,7 @@ fn new_identity_lints_clean() {
         "persona/state.json",
         "life/state.json",
         "work/state.json",
-        "work/README.md",
+        "work/PROFILE.md",
         "life/timeline.md",
     ] {
         assert!(tmp.path().join("thea").join(rel).is_file(), "{rel}");
@@ -145,12 +145,12 @@ fn broken_entries_are_reported() {
         "---\ntype: event\ntitle: Storm\nsummary: A storm.\nstatus: disputed\ncreated: 2026-10-01\nupdated: 2026-10-01\ndate: 2026-07-01\n---\n\n# Storm\n\nSee [[Nowhere]] and [[Salt]]. Sam was born 1990-04-12.\n",
     );
     w("life/characters/bad.md", "---\ntype: event\ntitle: Bad\nsummary: x\nstatus: maybe\ncreated: 2026-13-01\nupdated: 2026-10-01\n---\n# Bad\n");
-    w("life/log/2026-07-02.md", "---\ntype: log\ntitle: Day\nstatus: canon\ncreated: 2026-07-02\nupdated: 2026-07-02\ndate: 2026-07-03\n---\n- x\n");
+    w("life/log/2026-07-02.md", "---\ntype: daily-log\ntitle: Day\nstatus: canon\ncreated: 2026-07-02\nupdated: 2026-07-02\ndate: 2026-07-03\n---\n- x\n");
     w("life/characters/samuel-two.md", "---\ntype: character\ntitle: Sam Two\naliases: [Samuel]\nsummary: x\nstatus: canon\ncreated: 2026-10-01\nupdated: 2026-10-01\n---\n# Sam Two\n");
     w("life/notes.md", "# stray\n");
     w("life/locations/empty-place/detail.md", "---\ntype: location-detail\ntitle: Detail\nsummary: x\nstatus: canon\ncreated: 2026-10-01\nupdated: 2026-10-01\nparent: \"[[Harbor House]]\"\n---\n# Detail\n");
     w("persona/LOOK.md", "---\nupdated: 2026-10-01\n---\n# Look\n");
-    w("life/lessons/old.md", "---\ntype: lesson\ntitle: Old\nsummary: x\nstatus: superseded\ncreated: 2026-10-01\nupdated: 2026-10-01\n---\n# Old\n");
+    w("life/insights/old.md", "---\ntype: insight\ntitle: Old\nsummary: x\nstatus: superseded\ncreated: 2026-10-01\nupdated: 2026-10-01\n---\n# Old\n");
 
     let v = lint_json(tmp.path(), &[]);
     let errors = rules_in(&v, "errors");
@@ -165,7 +165,7 @@ fn broken_entries_are_reported() {
         "tree:life/notes.md",
         "tree:life/locations/empty-place",
         "persona-plain:persona/LOOK.md",
-        "supersede:life/lessons/old.md",
+        "supersede:life/insights/old.md",
         "generated:life/events/_index.md",
     ] {
         assert!(
@@ -191,7 +191,7 @@ fn memory_budget_and_dupes_warn() {
     .unwrap();
     let passage = "the tide came in fast and we pulled the boat up past the stones together";
     fs::write(dir.join("life/journal/2026-06-14_salt.md"), format!("---\ntype: journal\ntitle: Salt\nstatus: canon\ncreated: 2026-06-14\nupdated: 2026-06-14\ndate: 2026-06-14\n---\n# Salt\n\n{passage}\n")).unwrap();
-    fs::write(dir.join("life/log/2026-06-14.md"), format!("---\ntype: log\ntitle: Sailing day\nstatus: canon\ncreated: 2026-06-14\nupdated: 2026-06-14\ndate: 2026-06-14\n---\n# Sailing day\n\n- [[First Sail]] {passage}\n")).unwrap();
+    fs::write(dir.join("life/log/2026-06-14.md"), format!("---\ntype: daily-log\ntitle: Sailing day\nstatus: canon\ncreated: 2026-06-14\nupdated: 2026-06-14\ndate: 2026-06-14\n---\n# Sailing day\n\n- [[First Sail]] {passage}\n")).unwrap();
     let v = lint_json(tmp.path(), &["budget", "memory-reflection", "dupes"]);
     let warnings = rules_in(&v, "warnings");
     assert!(
@@ -235,7 +235,7 @@ fn add_creates_entries_at_deterministic_paths() {
     );
     add(&["event", "The Café Night", "--date", "2026-10-25"]);
     add(&["journal", "Two beds", "--date", "2026-10-28"]);
-    add(&["project", "API Server"]);
+    add(&["project-readme", "API Server"]);
     let note = owo(tmp.path())
         .args([
             "-i",
@@ -243,7 +243,7 @@ fn add_creates_entries_at_deterministic_paths() {
             "--project",
             "api-server",
             "add",
-            "note",
+            "project-note",
             "Release steps",
             "--date",
             "2026-11-12",
@@ -259,7 +259,7 @@ fn add_creates_entries_at_deterministic_paths() {
         "life/locations/joes-apartment/overview.md",
         "life/events/the-cafe-night.md",
         "life/journal/2026-10-28_two-beds.md",
-        "work/projects/api-server/project.md",
+        "work/projects/api-server/README.md",
     ] {
         assert!(dir.join(rel).is_file(), "{rel}");
     }
@@ -276,11 +276,11 @@ fn add_creates_entries_at_deterministic_paths() {
         .assert()
         .code(1);
     owo(tmp.path())
-        .args(["-i", "thea", "add", "log", "--date", "2026-10-25"])
+        .args(["-i", "thea", "add", "daily-log", "--date", "2026-10-25"])
         .assert()
         .success();
     owo(tmp.path())
-        .args(["-i", "thea", "add", "log", "--date", "2026-10-25"])
+        .args(["-i", "thea", "add", "daily-log", "--date", "2026-10-25"])
         .assert()
         .success();
 
@@ -383,7 +383,7 @@ fn templates_list_show_and_override() {
     let row = |n: &str| list.iter().find(|r| r["name"] == n).unwrap().clone();
     assert!(row("character")["override"].is_string());
     assert!(row("persona/IDENTITY.md")["override"].is_string());
-    assert!(row("work/README.md")["override"].is_null());
+    assert!(row("work/PROFILE.md")["override"].is_null());
     owo(tmp.path())
         .args(["templates", "show", "character"])
         .assert()
@@ -396,7 +396,7 @@ fn templates_list_show_and_override() {
         fs::read_to_string(dir.join("persona/IDENTITY.md")).unwrap(),
         "# Custom identity\n"
     );
-    assert!(!fs::read_to_string(dir.join("work/README.md"))
+    assert!(!fs::read_to_string(dir.join("work/PROFILE.md"))
         .unwrap()
         .contains("notes about this folder"));
     owo(tmp.path())
@@ -418,9 +418,9 @@ fn add_defaults_and_escapes() {
             .args(args)
             .assert()
     };
-    add(&["log", "--date", "2026-01-01"]).success();
-    add(&["log", "--date", "2026-01-02"]).success();
-    add(&["project", "API Server"]).success();
+    add(&["daily-log", "--date", "2026-01-01"]).success();
+    add(&["daily-log", "--date", "2026-01-02"]).success();
+    add(&["project-readme", "API Server"]).success();
     add(&[
         "character",
         "Q",
@@ -443,7 +443,7 @@ fn add_defaults_and_escapes() {
         .args(["-i", "zed", "resolve", "api-server"])
         .assert()
         .success()
-        .stdout("work/projects/api-server/project.md\n");
+        .stdout("work/projects/api-server/README.md\n");
     owo(tmp.path())
         .args(["-i", "zed", "resolve", r"back\slash"])
         .assert()
@@ -548,7 +548,7 @@ fn owo_toml_in_a_parent_sets_identity_and_project() {
     let tmp = copy_example("reviewer");
     copy_tree(&examples().join("nicole"), &tmp.path().join("nicole"));
     owo(tmp.path())
-        .args(["-i", "reviewer", "add", "project", "Mural"])
+        .args(["-i", "reviewer", "add", "project-readme", "Mural"])
         .args(["--kb", "../repo/kb/mural"])
         .assert()
         .success();

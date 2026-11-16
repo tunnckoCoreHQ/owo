@@ -1,5 +1,5 @@
 ---
-type: lesson
+type: insight
 title: "Small Diffs Win"
 aliases: []
 summary: "Small diffs get real reviews."

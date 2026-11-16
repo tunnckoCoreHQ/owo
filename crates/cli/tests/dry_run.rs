@@ -90,7 +90,7 @@ fn dry_run_names_what_each_writing_command_writes() {
     for args in [
         &["write", "persona/SOUL.md", "--content", "# Soul\n\nNew.\n"][..],
         &["add", "character", "Mara Voss"],
-        &["add", "project", "Big Thing"],
+        &["add", "project-readme", "Big Thing"],
         &["index"],
         &["stamp"],
         &["reflect", "done"],

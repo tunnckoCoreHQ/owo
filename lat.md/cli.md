@@ -8,7 +8,7 @@ With `--json` every command prints `{ "ok", "data", "warnings", "errors" }`, and
 
 With `--quiet` commands drop their confirmation lines: the path `add` and `write` print, `stamp`, `index`, `lint` and `sync` summaries, `wrote <file>`. Output that is the result itself (`show`, `search`, `context` and the like), warnings and problems still print. Lint also drops its warning diagnostics.
 
-Exit codes: 0 success, 1 problems found (lint errors, exists, unknown template, stale check), 2 usage error (clap, including a date that is not YYYY-MM-DD), 3 config error (no identity selected, identity folder missing, project that is not a slug or has no `project.md`, `auto_ingest` with no ingest command for the agent), 4 I/O error. A closed stdout (`owo search x | head`) ends the process quietly, except in `owo mcp` and `owo acp`, where a closed pipe is a write error.
+Exit codes: 0 success, 1 problems found (lint errors, exists, unknown template, stale check), 2 usage error (clap, including a date that is not YYYY-MM-DD), 3 config error (no identity selected, identity folder missing, project that is not a slug or has no `README.md`, `auto_ingest` with no ingest command for the agent), 4 I/O error. A closed stdout (`owo search x | head`) ends the process quietly, except in `owo mcp` and `owo acp`, where a closed pipe is a write error.
 
 ## Dry run
 
@@ -27,18 +27,18 @@ The ACP proxy takes `--dry-run` too: `owo acp --dry-run -- <agent command>` stor
 Each command with its flags and exit behavior.
 
 - `owo new <name> [--slug]` creates an identity from templates, writes indexes and state files. Exits 1 when anything, even a broken symlink, is at the identity path, and leaves it alone. When a later write fails, it removes the folder it created and nothing else.
-- `owo add <type> <title> [--date] [--parent] [--alias]... [--kb]` creates one entry at its deterministic path; `--date` and the `created` and `updated` fields default to the local day. Uses `--project` for notes; `--parent` is only for location-detail and `--kb` only for project. A second `add log` for the same day succeeds and prints `exists <path>`; for other types an existing path exits 1 with an `exists` error.
+- `owo add <type> <title> [--date] [--parent] [--alias]... [--kb]` creates one entry at its deterministic path; `--date` and the `created` and `updated` fields default to the local day. Uses `--project` for project notes; `--parent` is only for location-detail and `--kb` only for project-readme. A second `add daily-log` for the same day succeeds and prints `exists <path>`; for other types an existing path exits 1 with an `exists` error.
 - `owo write <path> [--content <text>]` replaces the full text of one authored file under persona/, life/ or work/, from `--content` or stdin; it refuses empty text, generated files (after it drops `.` parts of the path) and paths outside the identity.
 - `owo lint [--rule <code>]...` runs [[lint]] rules. Exits 1 when any error is found.
 - `owo index [--check]` writes generated files, or reports stale ones and exits 1.
 - `owo stamp [--check]` refreshes state files from hashes; see [[decisions#Stamp touches frontmatter]].
-- `owo resolve <name> [--type]` prints the path a name resolves to (a file path works too, absolute or relative to the working folder); on a miss it exits 1 with up to five candidates. The name is required: with no name it is a usage error (exit 2), before the root and identity resolve, so it is the same error in a root with one identity or more. An empty or blank name has no candidates. The error is `"<name>" does not resolve to one entry` with the candidates on the lines below; `show`, `links` and the other commands that take a name use the same sentence with `; candidates: <paths>` appended. The `--type` value is a kind name such as `character`, `persona` or `work-profile` (the kind of `work/README.md`); an unknown one is a usage error (exit 2), here and in `search`.
+- `owo resolve <name> [--type]` prints the path a name resolves to (a file path works too, absolute or relative to the working folder); on a miss it exits 1 with up to five candidates. The name is required: with no name it is a usage error (exit 2), before the root and identity resolve, so it is the same error in a root with one identity or more. An empty or blank name has no candidates. The error is `"<name>" does not resolve to one entry` with the candidates on the lines below; `show`, `links` and the other commands that take a name use the same sentence with `; candidates: <paths>` appended. The `--type` value is a kind name such as `character`, `persona` or `work-profile` (the kind of `work/PROFILE.md`); an unknown one is a usage error (exit 2), here and in `search`.
 - `owo show <name> [--section]` prints an entry or one section at any heading level; a `kb:<p>:<path>` name prints a file from the project KB.
 - `owo links <name> [--in] [--out]` lists backlinks and outlinks; `owo links --orphans` lists unlinked entries.
 - `owo context [--voice] [--look] [--with <name>]... [--notes N] [--format paths]` prints the load set as text, or the file list with `--format paths`; see [[cli#Context]].
-- `owo state [--days N]` prints the derived Now block, plus the last update and recent notes with `--project`.
+- `owo state [--days N]` prints the derived Now block, plus the last update and recent project notes with `--project`.
 - `owo search <query> [--scope persona|life|work] [--type <t>]... [--since <date>] [--limit N]` ranks entries with BM25; no hits gives `ok: false` and exit 1. See [[decisions#Search is in-crate BM25]].
-- `owo reflect` prints the reflection digest; see [[cli#Reflect]]. `owo reflect done [--through <date>]` records a finished reflection: `last_reflected`, `reflected_through` (default: newest date of a non-blank log, an event or a journal entry) and the MEMORY.md hash.
+- `owo reflect` prints the reflection digest; see [[cli#Reflect]]. `owo reflect done [--through <date>]` records a finished reflection: `last_reflected`, `reflected_through` (default: newest date of a non-blank daily log, an event or a journal entry) and the MEMORY.md hash.
 - `owo persona [--id] [--soul] [--voice] [--look] [--memory]` prints `persona/IDENTITY.md` and `persona/SOUL.md`, or only the persona files the flags name, in that order, each after an `<!-- owo: <path> -->` line. A missing one exits 1. See [[decisions#Persona prints persona files without the load set]].
 - `owo persona change <file> --change <text> --evidence <name>...` appends to `persona/state.json` `changelog`. Evidence must resolve; a `#Section` or `|label` part is kept in the record and ignored for resolution; fewer than two links and no defining event gives a warning. `owo persona changelog [file]` prints the persona changelog; its text shows the string evidence of an array that also holds other values. A persona change written by hand comes back as written, also one with a field of the wrong type, so the last persona change is always the newest one.
 - `owo changes [--since | --days N]` lists changes by day; `--days N` starts N days before the local day; see [[decisions#Changes read Git, else stamps]]. `owo lint --changed` keeps diagnostics for changed files only.
@@ -55,13 +55,13 @@ Each command with its flags and exit behavior.
 
 - core, always: `persona/IDENTITY.md`, `persona/SOUL.md`, `persona/MEMORY.md`.
 - voice and look: `persona/VOICE.md` and `persona/LOOK.md` with `--voice` and `--look`.
-- project, with `--project <p>`: `work/README.md`, `project.md`, the newest N notes, and the KB pointer.
+- work, with `--project <p>`: `work/PROFILE.md`, the project readme `work/projects/<p>/README.md`, the newest N project notes, and the KB pointer.
 - with, for each `--with <name>`: the entry it resolves to, unless the load set already holds that file.
-- now, always: the Now block (last activity per scope, last project, recent days, recent events (counted back from the newest non-blank log or event date), open threads and conflicts, reflection status, where to look next).
+- now, always: the Now block (last activity per scope, last project, recent days, recent events (counted back from the newest non-blank daily log or event date), open threads and conflicts, reflection status, where to look next).
 
 Both formats put the Now block last, after the KB pointer.
 
-The KB path comes from `project.md` `kb`, relative to the identity folder, with `~/` as the home folder. See [[decisions#KB pointer is always emitted]]. `owo context` writes nothing; the last project is the one with the newest file stamp under `work/projects/`.
+The KB path comes from `kb` in the project readme, relative to the identity folder, with `~/` as the home folder. See [[decisions#KB pointer is always emitted]]. `owo context` writes nothing; the last project is the one with the newest file stamp under `work/projects/`.
 
 
 ## Reflect
@@ -70,9 +70,9 @@ The KB path comes from `project.md` `kb`, relative to the identity folder, with 
 
 - current MEMORY.md, its word count, and whether it changed outside a reflection
 - files whose stamp moved after `last_reflected` (MEMORY.md excluded), with type, summary, word count, and Git `+added -removed` lines when the root is a repo
-- log days after `reflected_through`, with their bodies
-- events and journal entries dated after `reflected_through`, lessons among the changed files
-- open threads and conflicts, three-word phrases, each inside one line, on three or more of those log days that start and end with a content word, the last persona change
+- daily logs after `reflected_through`, with their bodies
+- events and journal entries dated after `reflected_through`, insights among the changed files
+- open threads and conflicts, three-word phrases, each inside one line, on three or more of those daily logs that start and end with a content word, the last persona change
 
 ## Export
 
@@ -83,11 +83,11 @@ The KB path comes from `project.md` `kb`, relative to the identity folder, with 
 | `description` | IDENTITY.md body, LOOK.md under `## Look` with its headings one level down |
 | `system_prompt` | IDENTITY "Who she/he/they is/are" section, then VOICE.md |
 | `personality` | SOUL.md body |
-| `scenario` | with `--project`: project.md summary and body |
+| `scenario` | with `--project`: the project readme summary and body |
 | `first_mes`, `alternate_greetings` | `persona/examples/greetings.md`, one per `##` (headings inside fenced code do not count); text before the first `##` is left out |
 | `mes_example` | `persona/examples/good.md`, prefixed `<START>` |
 | `tags`, `creator`, `character_version` | `persona/soul.json` |
-| `character_book` | MEMORY.md as a constant entry, then characters, locations, cultures, factions, eras, events, lessons, and that project; keys are title plus aliases; content is the summary plus `## Key facts`, or the body without its `# ` headings and without an `Identifiers` or `Sources` section at any level (headings inside fenced code do not count) when an entry has no key facts or an empty `## Key facts` |
+| `character_book` | MEMORY.md as a constant entry, then characters, locations, cultures, factions, eras, events, insights, and that project; keys are title plus aliases; content is the summary plus `## Key facts`, or the body without its `# ` headings and without an `Identifiers` or `Sources` section at any level (headings inside fenced code do not count) when an entry has no key facts or an empty `## Key facts` |
 
 V3 adds `nickname` (`identity.json` `nickname`), `assets` (default icon), `creation_date`, `modification_date`, `source`, `group_only_greetings`, `creator_notes_multilingual`.
 

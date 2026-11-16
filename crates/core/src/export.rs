@@ -84,8 +84,8 @@ fn order(kind: Kind) -> Option<i64> {
         Kind::Location | Kind::LocationDetail => 30,
         Kind::Culture | Kind::Faction => 40,
         Kind::Era | Kind::Event => 50,
-        Kind::Lesson => 60,
-        Kind::Project => 70,
+        Kind::Insight => 60,
+        Kind::ProjectReadme => 70,
         _ => return None,
     })
 }
@@ -174,7 +174,7 @@ pub fn card(
         .entries
         .iter()
         .filter(|e| match e.kind {
-            Kind::Project => project_md.is_some_and(|p| p.rel == e.rel),
+            Kind::ProjectReadme => project_md.is_some_and(|p| p.rel == e.rel),
             k => order(k).is_some(),
         })
         .collect();
@@ -366,7 +366,7 @@ Add `--look` when visuals matter.
 
 ## Write
 
-- New entries: `owo -i {slug} add <type> <title>`; small things: `owo -i {slug} add log`.
+- New entries: `owo -i {slug} add <type> <title>`; small things: `owo -i {slug} add daily-log`.
 - Edit existing entries in place (with file tools, or `owo -i {slug} write <path>` with the full text); each fact has one home.
 - MEMORY.md and persona changes happen in a reflection.
 - Session end: `owo -i {slug} stamp && owo -i {slug} index && owo -i {slug} lint --changed`.

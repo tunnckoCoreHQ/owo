@@ -1,5 +1,5 @@
 ---
-type: lesson
+type: insight
 title: "Read the Tests First"
 aliases: []
 summary: "The tests say what the author thinks the code does."

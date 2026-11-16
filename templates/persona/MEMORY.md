@@ -4,6 +4,6 @@
 
 ## Defining moments
 
-## Lessons
+## Insights
 
 ## Hints

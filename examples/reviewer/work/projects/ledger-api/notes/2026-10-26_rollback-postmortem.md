@@ -1,5 +1,5 @@
 ---
-type: note
+type: project-note
 title: "Rollback postmortem"
 aliases: []
 summary: "Postmortem notes for the migration rollback."

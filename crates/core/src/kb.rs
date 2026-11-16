@@ -38,7 +38,7 @@ pub fn pointer(id: &Identity, p: &str) -> (Option<Kb>, Option<String>) {
         return (
             None,
             Some(format!(
-                "project {p} has no KB path (set kb in work/projects/{p}/project.md)"
+                "project {p} has no KB path (set kb in work/projects/{p}/README.md)"
             )),
         );
     };

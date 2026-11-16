@@ -27,7 +27,7 @@ pub struct ReflectionStatus {
     pub days_since: Option<i64>,
     pub every_days: i64,
     pub due: bool,
-    pub unreflected_log_days: usize,
+    pub unreflected_daily_logs: usize,
     pub memory_changed_outside_reflection: bool,
 }
 
@@ -37,7 +37,7 @@ pub struct CurrentState {
     pub last_activity: Option<String>,
     pub last_activity_by_scope: Vec<(String, String)>,
     pub last_project: Option<(String, String)>,
-    pub recent_logs: Vec<Link>,
+    pub recent_daily_logs: Vec<Link>,
     pub recent_events: Vec<Link>,
     pub open_threads: Vec<Link>,
     pub open_conflicts: Vec<Link>,
@@ -58,7 +58,12 @@ pub fn project(id: &Identity, slug: &str) -> ProjectState {
     ProjectState {
         slug: slug.into(),
         last_updated: project_stamps(id).remove(slug),
-        notes: id.notes(slug).into_iter().take(5).map(Link::of).collect(),
+        notes: id
+            .project_notes(slug)
+            .into_iter()
+            .take(5)
+            .map(Link::of)
+            .collect(),
     }
 }
 
@@ -135,19 +140,19 @@ pub(crate) fn open_links(id: &Identity, kind: Kind) -> Vec<Link> {
         .collect()
 }
 
-pub fn compute(id: &Identity, days: i64, logs: usize) -> CurrentState {
+pub fn compute(id: &Identity, days: i64, daily_logs: usize) -> CurrentState {
     let today = Utc::now().date_naive();
     let story_today = id
         .entries
         .iter()
-        .filter(|e| matches!(e.kind, Kind::Log | Kind::Event))
-        .filter(|e| !(e.kind == Kind::Log && e.is_blank()))
+        .filter(|e| matches!(e.kind, Kind::DailyLog | Kind::Event))
+        .filter(|e| !(e.kind == Kind::DailyLog && e.is_blank()))
         .filter_map(|e| date_of(&e.field_str("date")?))
         .max()
         .unwrap_or(today);
     let since = story_today - Duration::days(days);
     let reflection = crate::state::reflection(id);
-    let log_entries: Vec<&Entry> = by_date_desc(id, Kind::Log)
+    let log_entries: Vec<&Entry> = by_date_desc(id, Kind::DailyLog)
         .into_iter()
         .filter(|e| !e.is_blank())
         .collect();
@@ -161,7 +166,11 @@ pub fn compute(id: &Identity, days: i64, logs: usize) -> CurrentState {
         last_activity: by_scope.iter().map(|(_, t)| t.clone()).max(),
         last_activity_by_scope: by_scope,
         last_project: last_project(id),
-        recent_logs: log_entries.iter().take(logs).map(|e| Link::of(e)).collect(),
+        recent_daily_logs: log_entries
+            .iter()
+            .take(daily_logs)
+            .map(|e| Link::of(e))
+            .collect(),
         recent_events: by_date_desc(id, Kind::Event)
             .into_iter()
             .filter(|e| {
@@ -180,7 +189,7 @@ pub fn compute(id: &Identity, days: i64, logs: usize) -> CurrentState {
             days_since: reflection.days_since,
             every_days: reflection.every_days,
             due: reflection.due,
-            unreflected_log_days: unreflected,
+            unreflected_daily_logs: unreflected,
             memory_changed_outside_reflection: reflection.memory_changed,
         },
         project: None,
@@ -215,7 +224,10 @@ pub fn now_block(s: &CurrentState, project: Option<&str>) -> String {
     if let Some((p, t)) = &s.last_project {
         lines.push(format!("- Last project: {p} ({})", crate::state::day(t)));
     }
-    lines.push(format!("- Recent days: {}", join_links(&s.recent_logs)));
+    lines.push(format!(
+        "- Recent days: {}",
+        join_links(&s.recent_daily_logs)
+    ));
     lines.push(format!("- Recent events: {}", join_links(&s.recent_events)));
     lines.push(format!("- Open threads: {}", join_links(&s.open_threads)));
     if !s.open_conflicts.is_empty() {
@@ -234,8 +246,8 @@ pub fn now_block(s: &CurrentState, project: Option<&str>) -> String {
         ),
     };
     lines.push(format!(
-        "- Reflection: {reflection}, {} log days since the last reflection",
-        r.unreflected_log_days
+        "- Reflection: {reflection}, {} daily logs since the last reflection",
+        r.unreflected_daily_logs
     ));
     let notes = project
         .map(|p| format!(", work/projects/{p}/notes/"))

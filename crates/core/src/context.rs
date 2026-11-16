@@ -76,11 +76,11 @@ pub fn build(id: &Identity, req: &Request, project: Option<&str>) -> Result<Cont
     let mut warnings = vec![];
     let mut kb = None;
     if let Some(p) = project {
-        let project_md = format!("work/projects/{p}/project.md");
-        items.push(item("project", "work/README.md", "work profile"));
-        items.push(item("project", &project_md, "role on this project"));
-        for n in id.notes(p).into_iter().take(req.notes) {
-            items.push(item("project", &n.rel, "recent project note"));
+        let readme = format!("work/projects/{p}/README.md");
+        items.push(item("work", "work/PROFILE.md", "work profile"));
+        items.push(item("work", &readme, "role on this project"));
+        for n in id.project_notes(p).into_iter().take(req.notes) {
+            items.push(item("work", &n.rel, "recent project note"));
         }
         let (pointer, warning) = crate::kb::pointer(id, p);
         kb = pointer;

@@ -537,7 +537,7 @@ pub struct AddRequest {
 impl Default for AddRequest {
     fn default() -> Self {
         Self {
-            kind: Kind::Log,
+            kind: Kind::DailyLog,
             title: String::new(),
             date: None,
             parent: None,
@@ -558,7 +558,10 @@ impl Request for AddRequest {
                 b.kind,
             ),
             title: r.words(
-                Field::new("title", "Title (a log without one is titled by its date)"),
+                Field::new(
+                    "title",
+                    "Title (a daily log without one is titled by its date)",
+                ),
                 b.title,
             ),
             date: r.day(
@@ -889,7 +892,7 @@ impl Request for ReflectDoneRequest {
             through: r.day(
                 Field::new(
                     "through",
-                    "Last story day covered (default: newest log, event or journal date)",
+                    "Last story day covered (default: newest daily log, event or journal date)",
                 ),
                 b.through,
             ),

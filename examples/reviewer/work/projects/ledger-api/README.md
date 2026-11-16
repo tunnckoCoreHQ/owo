@@ -1,5 +1,5 @@
 ---
-type: project
+type: project-readme
 title: "Ledger API"
 aliases: []
 summary: "Payments ledger service; I review every schema change."
@@ -13,6 +13,10 @@ sources: []
 ---
 
 # Ledger API
+
+## About
+
+The service that records every payment as entries in a double-entry ledger.
 
 ## What I do here
 

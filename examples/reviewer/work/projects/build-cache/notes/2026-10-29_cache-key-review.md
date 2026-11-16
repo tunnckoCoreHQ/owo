@@ -1,5 +1,5 @@
 ---
-type: note
+type: project-note
 title: "Cache key review"
 aliases: []
 summary: "The cache key leaves out the toolchain version."

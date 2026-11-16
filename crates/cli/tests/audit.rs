@@ -178,11 +178,11 @@ fn card(root: &Path) -> Value {
 fn a_blank_log_does_not_hide_recent_events() {
     let tmp = thea();
     add(tmp.path(), &["event", "Storm", "--date", "2020-05-01"]);
-    add(tmp.path(), &["log", "--date", "2020-05-03"]);
+    add(tmp.path(), &["daily-log", "--date", "2020-05-03"]);
     let log = tmp.path().join("thea/life/log/2020-05-03.md");
     let text = fs::read_to_string(&log).unwrap();
     fs::write(&log, format!("{text}\n- Rowed out.\n")).unwrap();
-    add(tmp.path(), &["log", "--date", "2020-06-01"]);
+    add(tmp.path(), &["daily-log", "--date", "2020-06-01"]);
     let out = owo(tmp.path())
         .args(["-i", "thea", "state"])
         .output()
@@ -349,7 +349,7 @@ fn stamp_with_a_broken_soul_json_touches_no_entry() {
 fn recurring_phrases_stay_inside_one_line() {
     let tmp = thea();
     for day in ["2026-01-01", "2026-01-02", "2026-01-03"] {
-        add(tmp.path(), &["log", "--date", day]);
+        add(tmp.path(), &["daily-log", "--date", day]);
         let log = tmp.path().join(format!("thea/life/log/{day}.md"));
         let text = fs::read_to_string(&log).unwrap();
         fs::write(&log, format!("{text}\n- Fed cat\n- Walked home\n")).unwrap();
@@ -406,8 +406,8 @@ fn an_ambiguous_link_is_not_two_pieces_of_evidence() {
         ])
         .assert()
         .success();
-    add(tmp.path(), &["lesson", "Other"]);
-    let lesson = tmp.path().join("thea/life/lessons/other.md");
+    add(tmp.path(), &["insight", "Other"]);
+    let lesson = tmp.path().join("thea/life/insights/other.md");
     let text = fs::read_to_string(&lesson).unwrap();
     fs::write(
         &lesson,

@@ -1,5 +1,5 @@
 ---
-type: project
+type: project-readme
 title: "Mobile Sync"
 aliases: []
 summary: "Offline sync for the mobile app; I review merge logic."
@@ -13,6 +13,10 @@ sources: []
 ---
 
 # Mobile Sync
+
+## About
+
+The service that keeps the mobile app usable offline and merges its changes when it reconnects.
 
 ## What I do here
 

@@ -1,5 +1,5 @@
 ---
-type: project
+type: project-readme
 title: Docs Site
 aliases: []
 summary: I write and review the product docs.

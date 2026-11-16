@@ -144,7 +144,7 @@ impl Text {
                 if *created {
                     self.say(path);
                 } else {
-                    self.result_line_if(*kind != Kind::Log, format!("exists {path}"));
+                    self.result_line_if(*kind != Kind::DailyLog, format!("exists {path}"));
                 }
             }
             Outcome::Stamp { report, .. } => {
@@ -210,7 +210,7 @@ impl Text {
                 if let Some(p) = &s.project {
                     let last = p.last_updated.as_deref().map(day).unwrap_or("never");
                     self.line(format!(
-                        "- Project {}: last {last}, notes {}",
+                        "- Project {}: last {last}, project notes {}",
                         p.slug,
                         join_links(&p.notes)
                     ));
@@ -258,10 +258,10 @@ impl Text {
                 let through = record.reflected_through.as_deref().unwrap_or("-");
                 self.say(format!("reflection recorded through {through}"))
             }
-            Outcome::PersonaChange(note) => self.say(format!(
+            Outcome::PersonaChange(change) => self.say(format!(
                 "noted {}: {}",
-                note.record.file.as_deref().unwrap_or(""),
-                note.record.change.as_deref().unwrap_or("")
+                change.record.file.as_deref().unwrap_or(""),
+                change.record.change.as_deref().unwrap_or("")
             )),
             Outcome::PersonaChangelog(list) => {
                 for r in list {
@@ -372,7 +372,7 @@ impl Text {
             ));
         }
         self.line(format!(
-            "\n## Log days since the last reflection ({})",
+            "\n## Daily logs since the last reflection ({})",
             p.unreflected_days.len()
         ));
         for d in &p.unreflected_days {
@@ -388,8 +388,8 @@ impl Text {
             join_links(&p.events)
         ));
         self.line(format!(
-            "\n## Lessons changed\n\n{}",
-            join_links(&p.lessons)
+            "\n## Insights changed\n\n{}",
+            join_links(&p.insights)
         ));
         let journal = if p.journal.is_empty() {
             "none".into()

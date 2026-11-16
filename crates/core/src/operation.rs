@@ -524,7 +524,7 @@ impl Outcome {
                 path,
                 created,
             } => {
-                let ok = *created || *kind == Kind::Log;
+                let ok = *created || *kind == Kind::DailyLog;
                 Envelope::new(ok, json!({ "path": path, "created": created }))
                     .with_errors((!ok).then(|| format!("exists: {path}")))
             }
@@ -566,8 +566,8 @@ impl Outcome {
                     .collect();
                 Envelope::ok(json!({ "files": files }))
             }
-            Outcome::PersonaChange(note) => {
-                Envelope::ok(value(&note.record)).with_warnings(note.warning.clone())
+            Outcome::PersonaChange(change) => {
+                Envelope::ok(value(&change.record)).with_warnings(change.warning.clone())
             }
             Outcome::PersonaChangelog(list) => Envelope::ok(json!({ "changelog": list })),
             Outcome::Changes(c) => Envelope::ok(value(c)),

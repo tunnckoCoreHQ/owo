@@ -29,7 +29,7 @@ fn migrate_v1_fixture() {
         "life/log/2026-01-01.md",
         "life/log/2026-01-02.md",
         "life/journal/2026-01-01_tired.md",
-        "life/lessons/trim-the-wick.md",
+        "life/insights/trim-the-wick.md",
         "life/conflicts/ferry-day.md",
         "life/locations/the-lighthouse/overview.md",
         "life/locations/the-lighthouse/lamp-room.md",

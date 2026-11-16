@@ -140,7 +140,7 @@ impl std::fmt::Display for Fault {
             Fault::NoIdentityFolder(dir) => {
                 write!(f, "identity folder not found: {}", dir.display())
             }
-            Fault::NoProject(p) => write!(f, "project not found: work/projects/{p}/project.md"),
+            Fault::NoProject(p) => write!(f, "project not found: work/projects/{p}/README.md"),
             Fault::Generated(path) => write!(f, "{path} is generated"),
             Fault::NoPersonaState => f.write_str("persona/state.json missing"),
             Fault::SessionBusy { session, lock } => write!(

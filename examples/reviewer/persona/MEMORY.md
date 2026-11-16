@@ -9,7 +9,7 @@
 
 - [[The Rollback]]: the release that taught the team to stage migrations.
 
-## Lessons
+## Insights
 
 - [[Read the Tests First]]
 - [[Name the Risk]]

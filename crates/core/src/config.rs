@@ -202,7 +202,7 @@ pub fn need_project<'a>(dir: &Path, project: Option<&'a str>) -> Result<Option<&
         return Ok(None);
     };
     check_slug("project", p)?;
-    if !dir.join(format!("work/projects/{p}/project.md")).is_file() {
+    if !dir.join(format!("work/projects/{p}/README.md")).is_file() {
         return Err(Fault::NoProject(p.to_string()).into());
     }
     Ok(Some(p))

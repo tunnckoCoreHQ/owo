@@ -1,21 +1,14 @@
 ---
-type: project
+type: daily-log
 title: "{{title_yaml}}"
 aliases: []
 summary: ""
 status: canon
 created: {{today}}
 updated: {{today}}
-kb: ""
-repo: ""
-started: {{date}}
+date: {{date}}
 sources: []
 ---
 
 # {{title}}
 
-## What I do here
-
-## Who I work with
-
-## Where things live

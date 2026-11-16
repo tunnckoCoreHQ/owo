@@ -171,7 +171,7 @@ fn normalize(
         _ => {}
     }
     let cites: Vec<String> = match kind {
-        "lesson" => {
+        "insight" => {
             merge(&mut map, "evidence", links);
             cites.into_iter().filter(|c| !c.contains("[[")).collect()
         }
@@ -405,9 +405,9 @@ fn fill(src: &Path, refs: &Path, root: &Path, slug: &str, manifest: &Value) -> R
     let groups: &[(&str, &str, &str, bool)] = &[
         ("characters", "life/characters", "character", false),
         ("history/events", "life/events", "event", true),
-        ("memory/daily", "life/log", "log", true),
+        ("memory/daily", "life/log", "daily-log", true),
         ("memory/journal", "life/journal", "journal", true),
-        ("memory/lessons", "life/lessons", "lesson", false),
+        ("memory/lessons", "life/insights", "insight", false),
         ("cultures", "life/cultures", "culture", false),
         ("factions", "life/factions", "faction", false),
         ("eras", "life/eras", "era", false),
@@ -456,7 +456,7 @@ fn fill(src: &Path, refs: &Path, root: &Path, slug: &str, manifest: &Value) -> R
                 rest.clone()
             };
             let name = match *kind {
-                "log" => format!("{}.md", date.clone().unwrap_or_default()),
+                "daily-log" => format!("{}.md", date.clone().unwrap_or_default()),
                 "journal" => format!(
                     "{}_{}.md",
                     date.clone().unwrap_or_default(),
@@ -551,7 +551,7 @@ fn fill(src: &Path, refs: &Path, root: &Path, slug: &str, manifest: &Value) -> R
     r.checklist = vec![
         "Move MEMORY \"Moments\" into event links under \"Defining moments\".".into(),
         "Move open promises and plans into life/threads/ (`owo add thread`).".into(),
-        "Replace repeated accounts and quotes in logs with event links (`owo lint --rule dupes`).".into(),
+        "Replace repeated accounts and quotes in daily logs with event links (`owo lint --rule dupes`).".into(),
         "Move exact personal identifiers into each character's `## Identifiers` (`owo lint --rule identifiers`).".into(),
         "Name account kinds in IDENTITY.md and keep handles in identity.json accounts.".into(),
         "Fill empty summaries, and link each room from its location overview.".into(),

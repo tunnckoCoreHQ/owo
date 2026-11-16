@@ -29,7 +29,7 @@ An identity is created once, then grows through sessions, ingest and reflection.
 1. Create: `owo new`, then owo create (the create path of the `owo` skill) fills the persona files, the work profile and characters when they apply, and a first MEMORY, and runs `owo reflect done` to record the first MEMORY hash.
 2. Session: the host loads `owo context` (see [[cli#Context]]); the agent embodies the identity and reads more with `resolve`, `show`, `search` and `links`; it writes only when the user asks, because sync and ingest record the session. The embody path of the `owo` skill holds this, and its entry file the checkpoint.
 3. Ingest: owo ingest (the ingest path of the `owo` skill) turns a source, such as a slice, into entries that cite it. See [[cli#Sync]].
-4. Reflection: when `owo state` shows a reflection is due, owo review (the review path of the `owo` skill) reads `owo reflect` (see [[cli#Reflect]]), writes lessons, recompiles MEMORY, closes threads, and changes persona files only past the evidence threshold, recording each change with `owo persona change`.
+4. Reflection: when `owo state` shows a reflection is due, owo review (the review path of the `owo` skill) reads `owo reflect` (see [[cli#Reflect]]), writes insights, recompiles MEMORY, closes threads, and changes persona files only past the evidence threshold, recording each change with `owo persona change`.
 
 Conflicts between sources become `life/conflicts/` entries; the rules of the `owo` skill describe how they open and resolve.
 

@@ -110,7 +110,7 @@ fn context_with_project_points_at_missing_kb() {
             "persona/VOICE.md"
         ]
     );
-    assert!(paths.contains(&"work/README.md"));
+    assert!(paths.contains(&"work/PROFILE.md"));
     assert!(paths.contains(&"work/projects/ledger-api/notes/2026-10-26_rollback-postmortem.md"));
     assert!(v["data"]["kb"]["path"]
         .as_str()
@@ -314,7 +314,7 @@ fn reflect_digest_then_done() {
         .unwrap()
         .contains("## Patterns"));
     owo_as(tmp.path(), "reviewer")
-        .args(["add", "log", "Pairing", "--date", "2026-11-04"])
+        .args(["add", "daily-log", "Pairing", "--date", "2026-11-04"])
         .assert()
         .success();
     let log = tmp.path().join("reviewer/life/log/2026-11-04.md");
@@ -480,13 +480,13 @@ fn changes_and_lint_changed_read_git() {
 fn reflect_lists_unstamped_files() {
     let tmp = copy_example("reviewer");
     owo_as(tmp.path(), "reviewer")
-        .args(["add", "lesson", "Fresh Lesson"])
+        .args(["add", "insight", "Fresh Lesson"])
         .assert()
         .success();
     let p = json(owo_as(tmp.path(), "reviewer").arg("reflect"));
     assert!(p["data"]
         .to_string()
-        .contains("life/lessons/fresh-lesson.md"));
+        .contains("life/insights/fresh-lesson.md"));
     owo_as(tmp.path(), "reviewer")
         .args(["state", "--days", "99999"])
         .assert()
@@ -594,7 +594,7 @@ fn flags_list_search_state_add_kb() {
         "search",
         "review",
         "--type",
-        "note",
+        "project-note",
         "--since",
         "2026-10-29",
     ]));
@@ -648,7 +648,7 @@ fn flags_list_search_state_add_kb() {
         "-i",
         "nicole",
         "add",
-        "project",
+        "project-readme",
         "Mural",
         "--kb",
         "../kb/mural",
@@ -772,7 +772,7 @@ fn kb_path_expands_home() {
             "-i",
             "nicole",
             "add",
-            "project",
+            "project-readme",
             "Mural",
             "--kb",
             "~/kb/mural",

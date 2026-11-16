@@ -54,9 +54,9 @@ Outside a repo `--since` takes only a `YYYY-MM-DD` day and exits 1 on anything e
 
 ## Reflection window uses two cursors
 
-Files count as changed when their stamp is newer than `last_reflected`. Log days, events and journal count as new for a reflection when their story date is after `reflected_through`. Stamps track edits; story dates track the life.
+Files count as changed when their stamp is newer than `last_reflected`. Daily logs, events and journal count as new for a reflection when their story date is after `reflected_through`. Stamps track edits; story dates track the life.
 
-`owo reflect done` sets `reflected_through` to the newest date of a non-blank log, an event or a journal entry, not today, because story time can run behind or ahead of real time.
+`owo reflect done` sets `reflected_through` to the newest date of a non-blank daily log, an event or a journal entry, not today, because story time can run behind or ahead of real time.
 
 ## Lint reuses find
 
@@ -76,7 +76,7 @@ While a run is pending, new user turns count from its end, so the turns that fol
 
 `owo migrate v1` does only file moves and frontmatter fills; judgment work goes to a printed checklist.
 
-It builds a fresh identity with `owo new`, copies persona files (STYLE becomes VOICE), adds missing frontmatter fields to world files (a body `## Sources` section joins `sources`, its links a lesson's `evidence`), splits `conflicts.md` by `##`, copies `sources/`, then indexes and stamps. It reports files with no home and prints the judgment work as a checklist.
+It builds a fresh identity with `owo new`, copies persona files (STYLE becomes VOICE), adds missing frontmatter fields to world files (a body `## Sources` section joins `sources`, its links an insight's `evidence`), splits `conflicts.md` by `##`, copies `sources/`, then indexes and stamps. It reports files with no home and prints the judgment work as a checklist.
 
 Migrate never overwrites: a file whose target already exists is reported as skipped, including files under `sources/`, which is copied with its subfolders. v1 `index.md` files are dropped, since owo generates its own, and a status outside canon, disputed and superseded becomes canon. An event file named only by a date takes its slug from its title. A file whose frontmatter does not parse is reported as skipped and not written. When migrate fails partway, it removes the identity folder and the `sources/<slug>/` folder it created, so a rerun starts clean.
 
@@ -88,7 +88,7 @@ Embedding a card only appends `tEXt` chunks before `IEND`, so `export.rs` walks 
 
 ## Working project versus project filter
 
-The working project resolves from `--project`, `OWO_PROJECT`, then `.owo.toml`; `context`, `add note`, `state` and `sync` use it. `search` and `export card` narrow to a project only with an explicit `--project` flag.
+The working project resolves from `--project`, `OWO_PROJECT`, then `.owo.toml`; `context`, `add project-note`, `state` and `sync` use it. `search` and `export card` narrow to a project only with an explicit `--project` flag.
 
 A filter hides results, so it comes from the command line and never from the environment. Inside a project checkout, `owo search` still finds life and persona entries, and `owo export card` still exports the whole identity.
 
@@ -160,7 +160,7 @@ The flags give the agent only what an ingest needs without a person to answer pr
 
 ## Writes are all or nothing
 
-Every file write goes through `write::Writes`: a temporary file `<name>.tmp` next to the file, synced, then a rename. The temporary file is made new, so an existing `<name>.tmp` or a symlink of that name fails the write and stays; it takes the mode of the file it replaces. A file the caller cannot write is refused before any write, and a symlink whose file is missing is an error, so no rename replaces the link. A command that writes several files builds one `Writes` and commits it once; the commit writes every temporary file before the first rename, and on an error it removes the temporary files, puts back the files it replaced, and removes the files and folders it made. `index` writes its stale files as one set; `stamp` its touched entries, the three `state.json` files and `persona/soul.json`; `sync start` the slice, the prompt and the bookmark; `sync push` the stored turns with those; `export soulspec` the whole package; `new` its template files and folders, then its indexes, then its state files, and it removes the identity folder when a later step fails. `owo add project` makes the entry and its `notes/` folder together. The sync lock removes the `.owo/sessions` folders it made when they are empty again, so a failed sync step leaves none. Migrate writes each file this way and keeps its own cleanup. See [ADR-0006](../docs/adr/0006-every-write-is-all-or-nothing.md).
+Every file write goes through `write::Writes`: a temporary file `<name>.tmp` next to the file, synced, then a rename. The temporary file is made new, so an existing `<name>.tmp` or a symlink of that name fails the write and stays; it takes the mode of the file it replaces. A file the caller cannot write is refused before any write, and a symlink whose file is missing is an error, so no rename replaces the link. A command that writes several files builds one `Writes` and commits it once; the commit writes every temporary file before the first rename, and on an error it removes the temporary files, puts back the files it replaced, and removes the files and folders it made. `index` writes its stale files as one set; `stamp` its touched entries, the three `state.json` files and `persona/soul.json`; `sync start` the slice, the prompt and the bookmark; `sync push` the stored turns with those; `export soulspec` the whole package; `new` its template files and folders, then its indexes, then its state files, and it removes the identity folder when a later step fails. `owo add project-readme` makes the project readme and its `notes/` folder together. The sync lock removes the `.owo/sessions` folders it made when they are empty again, so a failed sync step leaves none. Migrate writes each file this way and keeps its own cleanup. See [ADR-0006](../docs/adr/0006-every-write-is-all-or-nothing.md).
 
 ## Dry run keeps writes in memory
 

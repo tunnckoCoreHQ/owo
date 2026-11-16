@@ -155,10 +155,14 @@ fn timeline(identity: &Identity) -> String {
 }
 
 fn work(identity: &Identity) -> String {
-    let mut lines = vec!["- [Profile](README.md)".to_string()];
-    for project in identity.entries.iter().filter(|e| e.kind == Kind::Project) {
-        let notes = identity.notes(&project.stem_key()).len();
-        lines.push(format!("{} ({notes} notes)", line(project)));
+    let mut lines = vec!["- [Profile](PROFILE.md)".to_string()];
+    for project in identity
+        .entries
+        .iter()
+        .filter(|e| e.kind == Kind::ProjectReadme)
+    {
+        let notes = identity.project_notes(&project.stem_key()).len();
+        lines.push(format!("{} ({notes} project notes)", line(project)));
     }
     doc("Work", &lines)
 }

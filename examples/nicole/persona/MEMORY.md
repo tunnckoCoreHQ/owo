@@ -8,7 +8,7 @@
 
 - [[First Firing]]: the first kiln load that came out whole.
 
-## Lessons
+## Insights
 
 - [[Let It Dry]]
 

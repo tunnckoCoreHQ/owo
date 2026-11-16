@@ -234,9 +234,9 @@ pub fn orphans(id: &Identity) -> Vec<usize> {
         Kind::Era,
         Kind::Thread,
         Kind::Conflict,
-        Kind::Lesson,
+        Kind::Insight,
         Kind::Writing,
-        Kind::Project,
+        Kind::ProjectReadme,
     ];
     (0..id.entries.len())
         .filter(|i| WATCHED.contains(&id.entries[*i].kind) && inbound[*i] == 0)

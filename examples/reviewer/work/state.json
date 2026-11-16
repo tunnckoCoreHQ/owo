@@ -1,36 +1,36 @@
 {
   "files": {
-    "README.md": {
+    "PROFILE.md": {
       "updated": "2026-11-04T03:34:02Z",
       "hash": "b3:a169bcb6358f28cee949ba8a524ca186e7663a8eac719aafc0be900f76afa623"
     },
     "projects/build-cache/notes/2026-10-29_cache-key-review.md": {
       "updated": "2026-11-04T03:33:55Z",
-      "hash": "b3:9e175c4edda884b05b07e7d559ee82162cee26e2582e279dc850d0d37ababdf3"
+      "hash": "b3:8314abcbcc70a39b2b92199ef81e2eda43a680c9b1250bceb29e9588a634fc3e"
     },
-    "projects/build-cache/project.md": {
+    "projects/build-cache/README.md": {
       "updated": "2026-11-04T03:33:55Z",
-      "hash": "b3:bda5d2203e8f3eb6cee2b6892413e0f791b3461677feb40ff4ab2a0770da0224"
+      "hash": "b3:edff615e3fb2f35bbc665bffa56bfadd6482e8019f9483a767a9b48846cf9903"
     },
     "projects/ledger-api/notes/2026-10-23_idempotency-keys.md": {
       "updated": "2026-11-04T03:46:34Z",
-      "hash": "b3:488db5dc6125bec1599e21b883400b7f631ab8e1915aa3a69bc52837f32bb260"
+      "hash": "b3:a9277693715777b59ac69f9faab62386cd202c14546f9660f361dbbd1b86e3b0"
     },
     "projects/ledger-api/notes/2026-10-26_rollback-postmortem.md": {
       "updated": "2026-11-04T03:33:55Z",
-      "hash": "b3:5e48561ca4f7fc31f2dd8af9275f55791dc645cc6c6d724c5df53648ed20665c"
+      "hash": "b3:f52398bc3960e5f51da7667aeb032575b40f20f7d2c65c4f59131e4182038287"
     },
-    "projects/ledger-api/project.md": {
+    "projects/ledger-api/README.md": {
       "updated": "2026-11-04T03:33:55Z",
-      "hash": "b3:0b64d19f0a6192452b614a1d253ac0312f60f495b90cb72aff8e315e25af7079"
+      "hash": "b3:6ed1838f154aefc252311d1f8679d8285aeaa505ab4cb7594f0543ed38fd8d77"
     },
     "projects/mobile-sync/notes/2026-11-02_conflict-merge-rules.md": {
       "updated": "2026-11-04T03:33:55Z",
-      "hash": "b3:4f7ab4de063d00da7b65a3945a8a3d52c6a9847f264f18274721ee19b6486932"
+      "hash": "b3:a683226c176989949e5168046be9b60a9e58dfa700b77d10a824a0fead99bff9"
     },
-    "projects/mobile-sync/project.md": {
+    "projects/mobile-sync/README.md": {
       "updated": "2026-11-04T03:33:55Z",
-      "hash": "b3:4470c1393c19ebd8589183b97dbcc2d877b593e58ec3f0d90298d7717f903220"
+      "hash": "b3:657fe7a2cbfe4d159204bcb204b84f7471f96e15f0cde4fa742ecf5e707190a1"
     }
   }
 }

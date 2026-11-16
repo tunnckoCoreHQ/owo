@@ -1,17 +1,18 @@
 ---
-type: lesson
+type: project-note
 title: "{{title_yaml}}"
 aliases: []
 summary: ""
 status: canon
 created: {{today}}
 updated: {{today}}
-evidence: []
+date: {{date}}
+project: "{{project_yaml}}"
 sources: []
 ---
 
 # {{title}}
 
-## What I learned
+## What I did
 
-## Guidance
+## What I learned

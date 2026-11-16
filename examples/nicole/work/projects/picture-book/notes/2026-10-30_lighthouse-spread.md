@@ -1,5 +1,5 @@
 ---
-type: note
+type: project-note
 title: "Lighthouse spread"
 aliases: []
 summary: "Finished the thumbnail for the lighthouse spread."

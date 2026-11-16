@@ -1,5 +1,5 @@
 ---
-type: lesson
+type: insight
 title: Hold the Sheet
 aliases: []
 summary: Hold what you can steer.
