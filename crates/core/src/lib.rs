@@ -53,7 +53,9 @@ pub use review::{Changed, LogDay, ReviewPacket, ReviewRecord, SoulChange, SoulCh
 pub use search::{Hit as SearchHit, Scope};
 pub use stamp::Report as StampReport;
 pub use state::{day, parse_day};
-pub use status::{join_links, now_block, Link, ListedIdentity, Now, ProjectState, ReviewStatus};
+pub use status::{
+    join_links, now_block, CurrentState, Link, ListedIdentity, ProjectState, ReviewStatus,
+};
 pub use sync::{
     parse_turns, Bookmark, Format as SyncFormat, PendingRun, PendingSession, Role, SyncReport, Turn,
 };
@@ -383,7 +385,7 @@ impl Identity {
         context::render_text(self, ctx)
     }
 
-    pub fn state(&self, req: &StateRequest) -> Result<Now> {
+    pub fn state(&self, req: &StateRequest) -> Result<CurrentState> {
         req.check()?;
         let mut s = status::compute(self, req.days, 5);
         if let Some(p) = self.working_project()? {

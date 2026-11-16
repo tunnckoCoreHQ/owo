@@ -404,7 +404,7 @@ pub enum Outcome {
         context: Context,
         text: String,
     },
-    State(Now),
+    State(CurrentState),
     Search(Vec<SearchHit>),
     Synced(SyncReport),
     SyncDone {

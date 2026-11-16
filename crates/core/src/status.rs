@@ -32,7 +32,7 @@ pub struct ReviewStatus {
 }
 
 #[derive(Debug, Serialize)]
-pub struct Now {
+pub struct CurrentState {
     pub identity: String,
     pub last_activity: Option<String>,
     pub last_activity_by_scope: Vec<(String, String)>,
@@ -135,7 +135,7 @@ pub(crate) fn open_links(id: &Identity, kind: Kind) -> Vec<Link> {
         .collect()
 }
 
-pub fn compute(id: &Identity, days: i64, logs: usize) -> Now {
+pub fn compute(id: &Identity, days: i64, logs: usize) -> CurrentState {
     let today = Utc::now().date_naive();
     let story_today = id
         .entries
@@ -156,7 +156,7 @@ pub fn compute(id: &Identity, days: i64, logs: usize) -> Now {
         .filter(|e| review.unreviewed(e.field_str("date").as_deref()))
         .count();
     let by_scope = scope_activity(id);
-    Now {
+    CurrentState {
         identity: id.slug.clone(),
         last_activity: by_scope.iter().map(|(_, t)| t.clone()).max(),
         last_activity_by_scope: by_scope,
@@ -198,7 +198,7 @@ pub fn join_links(links: &[Link]) -> String {
     }
 }
 
-pub fn now_block(s: &Now, project: Option<&str>) -> String {
+pub fn now_block(s: &CurrentState, project: Option<&str>) -> String {
     let scopes: Vec<String> = s
         .last_activity_by_scope
         .iter()
