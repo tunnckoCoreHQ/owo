@@ -4,7 +4,7 @@ Run a Reflection: compile `persona/MEMORY.md` again, and change the Persona from
 
 ## Read
 
-Run `owo reflect`. It prints the Reflection Digest: the current MEMORY, the Entries changed since the last Reflection, the Daily Logs since then, Events, Journal paths, open Threads and Conflicts, phrases that repeat, and the last Persona Change. `--json` gives the same data. Read the Entries in the digest that matter, with `owo show <name>`.
+Run `owo reflect`. It prints the Reflection Digest: the current MEMORY, the Entries changed since the last Reflection, the Daily Logs since then, the Events and Journal paths since then, the Insights that changed, open Threads and Conflicts, phrases that repeat, and the last Persona Change. `--json` gives the same data. Read the Entries in the digest that matter, with `owo show <name>`.
 
 ## Compile
 

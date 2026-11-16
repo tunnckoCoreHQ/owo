@@ -14,7 +14,7 @@ The core Tier always loads. Each flag adds one more Tier:
 
 - `--voice` adds the voice Tier, how the Identity talks and writes. Add it when you talk or write as the Identity.
 - `--look` adds the look Tier, how the Identity looks. Add it when the thread is about images, scenes or video.
-- `--project <p>` adds the work Tier: the Work Profile, the Project Readme, recent Project Notes and the Project Wiki Path. Add it for work on a Project, and take the facts of the Project from its Project Wiki.
+- `--project <p>` adds the work Tier: the Work Profile, the Project Readme, recent Project Notes and the Project Wiki Path. Add it for work on a Project, and take the facts of the Project from its Project Wiki, with `owo show wiki:<p>:<path>`.
 
 When the Host already put the Identity in the prompt, or told you how to load it, do that instead.
 

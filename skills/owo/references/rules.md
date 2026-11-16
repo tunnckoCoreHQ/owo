@@ -8,8 +8,8 @@ Each fact has one home. Write it there once, and link to it from everywhere else
 
 | Fact | Home | Elsewhere |
 | :- | :- | :- |
-| A small thing today | `life/log/<day>.md`, one bullet in the Daily Log (`owo add daily-log`) | |
-| A happening worth recalling: a scene, a first, a turning point | an Event, `life/events/<slug>.md` (`owo add event --date`) | one bullet in the Daily Log of the day: `- [[Event]]` |
+| A small thing today | `life/daily-log/<day>.md`, one bullet in the Daily Log (`owo add daily-log`) | |
+| A happening worth recalling: a scene, a first, a turning point | an Event, `life/events/<slug>.md` (`owo add event <title> --date <day>`) | one bullet in the Daily Log of the day: `- [[Event]]` |
 | A happening that changed the Identity | the Event, with `defining: true` | MEMORY "Defining moments", at the next Reflection |
 | A person, animal, being, or other Identity | a Character, `life/characters/<slug>.md` | Wikilinks |
 | The Identifiers of someone | `## Identifiers` in the Entry of that Character | |
@@ -27,7 +27,7 @@ Each fact has one home. Write it there once, and link to it from everywhere else
 | An exact quote worth keeping | `## Lines` of the Event | `[[Event#Lines]]` |
 | Work on a Project | a Project Note, `work/projects/<p>/notes/<date>_<slug>.md` (`owo add project-note --project <p>`) | |
 | Roles, working preferences, past work | the Work Profile, `work/PROFILE.md` | |
-| Facts about a Project itself | its Project Wiki | Project Notes link `[[kb:<p>:<path>#<Section>]]` |
+| Facts about a Project itself | its Project Wiki | Project Notes link `[[wiki:<p>:<path>#<Section>]]` |
 | Long-term memory | `persona/MEMORY.md`, compiled by a Reflection | |
 
 ## One account of each happening
@@ -55,6 +55,6 @@ Identifiers (birth dates, handles, emails, phone numbers, addresses, full names 
 
 ## Conflicts
 
-Make `life/conflicts/<slug>.md` (`owo add conflict`) with both accounts, their Raw Material and `state: open`. List the Entries it affects in `affects`, and set `status: disputed` on them. When it is settled, write the resolution, set `state: resolved`, and set the Entries back to `status: canon`. Material that was replaced but still matters keeps `status: superseded` and `superseded_by`.
+Make `life/conflicts/<slug>.md` (`owo add conflict <title>`) with both accounts, their Raw Material and `state: open`. List the Entries it affects in `affects`, and set `status: disputed` on them. When it is settled, write the resolution, set `state: resolved`, and set the Entries back to `status: canon`. Material that was replaced but still matters keeps `status: superseded` and `superseded_by`.
 
 Which Raw Material wins, highest first: what the person says directly or corrects, the primary Transcript, behaviour that repeats across Raw Material, an earlier recap.

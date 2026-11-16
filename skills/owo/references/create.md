@@ -21,7 +21,7 @@ Take what the user has said about the Identity. When a key choice is missing, as
 
 ## The rest, when it applies
 
-- When the Identity has a Work side, fill its Work Profile, `work/PROFILE.md`, with its roles, how it works and its past work. Add each Project with `owo add project-readme <title>`. In its Project Readme, `work/projects/<project>/README.md`, write the About section and the role of the Identity, and set the Project Wiki Path in the `kb` field.
+- When the Identity has a Work side, fill its Work Profile, `work/PROFILE.md`, with its roles, how it works and its past work. Add each Project with `owo add project-readme <title> --wiki <path>`. The `--wiki` value is the Project Wiki Path, relative to the Identity folder, and owo writes it to the `wiki` field of the Project Readme, `work/projects/<project>/README.md`. In that Project Readme, write `## About` and `## What I do here`, the role of the Identity.
 - When the Identity has a relationship with the user, add the user as a Character with `owo add character <title>`.
 - When the user names other people or places while defining the Identity, add them with `owo add character <title>` or `owo add location <title>`.
 
