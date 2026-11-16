@@ -39,6 +39,10 @@ Each fact has one home. Write it there once, and link to it from everywhere else
 - MEMORY holds patterns, hints and Wikilinks. Create writes the first one, and after that only a Reflection writes it.
 - `owo lint --rule dupes` finds copied passages. Keep the passage in its home, and make the copy a Wikilink.
 
+## Citing Raw Material
+
+Cite Raw Material only in the `sources` list in the frontmatter of the Entry: `<slug>/<file>.md#L<a>-L<b>`. The body of an Entry, a Conflict too, never holds a path of Raw Material, such as the path of a Slice.
+
 ## Perspective
 
 - SOUL.md, MEMORY.md and every Life and Work Entry are in the first person, in the Identity's own voice: Characters, Locations, Events, Insights, Journals, Daily Logs and Project Notes.
@@ -55,6 +59,6 @@ Identifiers (birth dates, handles, emails, phone numbers, addresses, full names 
 
 ## Conflicts
 
-Make `life/conflicts/<slug>.md` (`owo add conflict <title>`) with both accounts, their Raw Material and `state: open`. List the Entries it affects in `affects`, and set `status: disputed` on them. When it is settled, write the resolution, set `state: resolved`, and set the Entries back to `status: canon`. Material that was replaced but still matters keeps `status: superseded` and `superseded_by`.
+Make `life/conflicts/<slug>.md` (`owo add conflict <title>`) with both accounts in the body, their Raw Material in `sources`, and `state: open`. List the Entries it affects in `affects`, and set `status: disputed` on them. When it is settled, write the resolution, set `state: resolved`, and set the Entries back to `status: canon`. Material that was replaced but still matters keeps `status: superseded` and `superseded_by`.
 
 Which Raw Material wins, highest first: what the person says directly or corrects, the primary Transcript, behaviour that repeats across Raw Material, an earlier recap.
