@@ -48,10 +48,6 @@ impl Rule {
     pub fn all() -> impl Iterator<Item = Rule> {
         (0..CHECKS.len()).map(Rule)
     }
-
-    pub fn name(self) -> &'static str {
-        CHECKS[self.0].0
-    }
 }
 
 impl crate::Named for Rule {

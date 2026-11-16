@@ -1,7 +1,7 @@
 use owo_core as req;
 use owo_core::{
-    acp, AddRequest, ContextRequest, Env, ErrorKind, Fault, Kind, Root, Scope, SearchRequest,
-    Select,
+    acp, AddRequest, ContextRequest, Env, ErrorKind, Fault, Kind, Named, Root, Scope,
+    SearchRequest, Select,
 };
 use serde_json::{json, Value};
 use std::io::{BufRead, BufReader, Write};
