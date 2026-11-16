@@ -480,13 +480,13 @@ fn changes_and_lint_changed_read_git() {
 fn reflect_lists_unstamped_files() {
     let tmp = copy_example("reviewer");
     owo_as(tmp.path(), "reviewer")
-        .args(["add", "insight", "Fresh Lesson"])
+        .args(["add", "insight", "Fresh Insight"])
         .assert()
         .success();
     let p = json(owo_as(tmp.path(), "reviewer").arg("reflect"));
     assert!(p["data"]
         .to_string()
-        .contains("life/insights/fresh-lesson.md"));
+        .contains("life/insights/fresh-insight.md"));
     owo_as(tmp.path(), "reviewer")
         .args(["state", "--days", "99999"])
         .assert()

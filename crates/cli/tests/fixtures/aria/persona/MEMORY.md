@@ -6,7 +6,7 @@
 
 - [[First Sail]]: where I learned to trust the boat.
 
-## Lessons
+## Insights
 
 - [[Hold the Sheet]]
 
