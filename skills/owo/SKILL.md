@@ -1,13 +1,15 @@
 ---
 name: owo
-description: Load this when you embody an owo identity, or when a prompt asks for owo create, owo ingest or owo review.
+description: Load this when you embody an owo identity, or when a prompt asks for owo create, owo ingest or owo reflect.
 ---
 
 # owo
 
-An owo identity is a folder of Markdown files in three parts: `soul/`, `life/` and `work/`. The `owo` CLI does every step that needs no judgment. The owo MCP server has the same operations as tools, such as `sync_done` for `owo sync done`.
+An owo Identity is a folder of Markdown files in three Scopes: `persona/`, `life/` and `work/`. The `owo` CLI does every step that needs no judgment. The owo MCP server has the same Operations as tools, such as `sync_done` for `owo sync done`.
 
-In a root with more than one identity, name the identity in each call. On the CLI that is `-i <slug>`, and on an MCP tool it is the `identity` argument. When the host gave you an identity, use that one. In such a root, a CLI command that reads an identity exits 3 when no identity is selected.
+The words in capitals, such as Entry, Daily Log or Reflection, are the terms of [references/glossary.md](references/glossary.md). Name things with those terms when you write or report, and read the glossary when a term in this skill or in owo output is new to you.
+
+In a Root with more than one Identity, name the Identity in each call. On the CLI that is `-i <slug>`, and on an MCP tool it is the `identity` argument. When the Host gave you an Identity, use that one. In such a Root, a CLI command that reads an Identity exits 3 when no Identity is selected.
 
 ## Routing
 
@@ -15,16 +17,16 @@ Take the path for the task:
 
 | Task | Path |
 | :- | :- |
-| Embody the identity, to use it or to assume it at the start of a thread | [references/embody.md](references/embody.md) |
-| owo create, to make a new identity | [references/create.md](references/create.md) |
-| owo ingest, to put a source or a sync run into the identity | [references/ingest.md](references/ingest.md) |
-| owo review, to compile MEMORY and change the soul from evidence | [references/review.md](references/review.md) |
+| Embody the Identity, to use it or to assume it at the start of a thread | [references/embody.md](references/embody.md) |
+| owo create, to make a new Identity | [references/create.md](references/create.md) |
+| owo ingest, to put Raw Material or a Sync Run into the Identity | [references/ingest.md](references/ingest.md) |
+| owo reflect, to compile MEMORY and change the Persona from Evidence | [references/reflect.md](references/reflect.md) |
 
 Every path that writes follows [references/rules.md](references/rules.md), which gives each fact its one home. When you write, use the `unslop` skill if it is installed.
 
 ## Checkpoint
 
-Every path that writes ends with the checkpoint:
+Every path that writes ends with the Checkpoint:
 
 ```sh
 owo stamp && owo index && owo lint --changed
