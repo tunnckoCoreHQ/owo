@@ -70,7 +70,6 @@ pub struct Env {
     pub owo_project: Option<String>,
     pub cwd: PathBuf,
     pub home: Option<PathBuf>,
-    pub xdg_config_home: Option<PathBuf>,
     pub xdg_data_home: Option<PathBuf>,
 }
 

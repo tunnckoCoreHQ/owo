@@ -43,7 +43,7 @@ fn origin(o: &Origin) -> String {
         Origin::Flag => "flag".into(),
         Origin::Env => "environment".into(),
         Origin::LocalConfig(file) => format!("local config {}", file.display()),
-        Origin::UserConfig(file) => format!("user config {}", file.display()),
+        Origin::GlobalConfig(file) => format!("global config {}", file.display()),
         Origin::Default => "default".into(),
         Origin::OnlyIdentity => "only identity".into(),
     }

@@ -95,7 +95,6 @@ fn env() -> owo_core::Env {
         owo_project: non_empty("OWO_PROJECT"),
         cwd: std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")),
         home: std::env::var_os("HOME").map(PathBuf::from),
-        xdg_config_home: non_empty("XDG_CONFIG_HOME").map(PathBuf::from),
         xdg_data_home: non_empty("XDG_DATA_HOME").map(PathBuf::from),
     }
 }

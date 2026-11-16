@@ -72,13 +72,13 @@ fn globals() -> [Arg; 5] {
             .value_name("ROOT")
             .global(true)
             .value_parser(value_parser!(PathBuf))
-            .help("Identities root (else OWO_ROOT, .owo.toml, user config, XDG default)"),
+            .help("Identities root (else OWO_ROOT, .owo.toml, XDG default)"),
         Arg::new("identity")
             .short('i')
             .long("identity")
             .value_name("IDENTITY")
             .global(true)
-            .help("Identity slug (else OWO_IDENTITY, .owo.toml, user config, the only identity)"),
+            .help("Identity slug (else OWO_IDENTITY, .owo.toml, owo.toml in the root, the only identity)"),
         Arg::new("project")
             .long("project")
             .value_name("PROJECT")

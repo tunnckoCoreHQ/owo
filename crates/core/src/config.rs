@@ -5,6 +5,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 pub const LOCAL_CONFIG: &str = ".owo.toml";
+pub const GLOBAL_CONFIG: &str = "owo.toml";
 
 #[derive(Debug, Default, Deserialize)]
 pub struct FileConfig {
@@ -22,7 +23,7 @@ pub enum Origin {
     Flag,
     Env,
     LocalConfig(PathBuf),
-    UserConfig(PathBuf),
+    GlobalConfig(PathBuf),
     Default,
     OnlyIdentity,
 }
@@ -85,42 +86,39 @@ pub fn resolve(select: &Select, env: &Env) -> Result<Resolved> {
         .home
         .as_deref()
         .filter(|h| h.to_str().is_some_and(|s| !s.is_empty()));
-    let xdg = |dir: &Option<PathBuf>, under_home: &str| {
-        dir.clone().or_else(|| home.map(|h| h.join(under_home)))
-    };
-    let configs = [
-        load(find_local_config(&env.cwd), Origin::LocalConfig)?,
-        load(
-            xdg(&env.xdg_config_home, ".config")
-                .map(|d| d.join("owo").join("config.toml"))
-                .filter(|p| p.is_file()),
-            Origin::UserConfig,
-        )?,
-    ];
+    let local = load(find_local_config(&env.cwd), Origin::LocalConfig)?;
 
     let root_flag = select
         .root
         .as_ref()
         .map(|p| p.to_string_lossy().into_owned());
-    let (root, root_source) = match lookup(root_flag, env.owo_root.as_ref(), &configs, |c| {
-        c.root.as_ref()
-    }) {
+    let (root, root_source) = match lookup(
+        root_flag,
+        env.owo_root.as_ref(),
+        std::slice::from_ref(&local),
+        |c| c.root.as_ref(),
+    ) {
         Some((value, origin)) => {
             let base = match &origin {
-                Origin::LocalConfig(p) | Origin::UserConfig(p) => {
-                    p.parent().unwrap_or(Path::new("."))
-                }
+                Origin::LocalConfig(p) => p.parent().unwrap_or(Path::new(".")),
                 _ => env.cwd.as_path(),
             };
             (base.join(expand_home(&value, home)), origin)
         }
         None => (
-            xdg(&env.xdg_data_home, ".local/share")
+            env.xdg_data_home
+                .clone()
+                .or_else(|| home.map(|h| h.join(".local/share")))
                 .ok_or(Fault::NoRoot)?
                 .join("owo"),
             Origin::Default,
         ),
     };
+    let global = load(
+        Some(root.join(GLOBAL_CONFIG)).filter(|p| p.is_file()),
+        Origin::GlobalConfig,
+    )?;
+    let configs = [local, global];
 
     let (identity, identity_source) = lookup(
         select.identity.clone(),
@@ -130,11 +128,11 @@ pub fn resolve(select: &Select, env: &Env) -> Result<Resolved> {
     )
     .or_else(|| only_identity(&root).map(|slug| (slug, Origin::OnlyIdentity)))
     .unzip();
-    let [local_config, _user_config] = &configs;
+    let [local, _global] = &configs;
     let project = lookup(
         select.project.clone(),
         env.owo_project.as_ref(),
-        std::slice::from_ref(local_config),
+        std::slice::from_ref(local),
         |c| c.project.as_ref(),
     )
     .map(|(value, _)| value);
@@ -238,23 +236,30 @@ mod tests {
     }
 
     #[test]
-    fn precedence_flag_env_project_user() {
+    fn precedence_flag_env_local_global() {
         let tmp = tempfile::tempdir().unwrap();
-        let cfg = tmp.path().join("home/.config/owo");
-        fs::create_dir_all(&cfg).unwrap();
+        let data = tmp.path().join("home/.local/share/owo");
+        fs::create_dir_all(&data).unwrap();
         fs::write(
-            cfg.join("config.toml"),
-            "root = \"~/ids\"\nidentity = \"user-pick\"\n",
+            data.join(GLOBAL_CONFIG),
+            "root = \"~/ids\"\nidentity = \"global-pick\"\nsync_every = 3\n",
         )
         .unwrap();
         let mut s = Select::default();
         let mut e = env(tmp.path());
         let r = resolve(&s, &e).unwrap();
-        assert_eq!(r.root, tmp.path().join("home/ids"));
-        assert_eq!(r.identity.as_deref(), Some("user-pick"));
+        assert_eq!(r.root, data, "the global config sets no root");
+        assert_eq!(r.identity.as_deref(), Some("global-pick"));
+        assert_eq!(r.sync_every, Some(3));
 
         let proj = tmp.path().join("proj/sub");
         fs::create_dir_all(&proj).unwrap();
+        fs::create_dir_all(tmp.path().join("proj/ids")).unwrap();
+        fs::write(
+            tmp.path().join("proj/ids").join(GLOBAL_CONFIG),
+            "identity = \"global-two\"\nsync_every = 4\n",
+        )
+        .unwrap();
         fs::write(
             tmp.path().join("proj/.owo.toml"),
             "root = \"ids\"\nidentity = \"thea\"\nproject = \"api\"\n",
@@ -265,6 +270,7 @@ mod tests {
         assert_eq!(r.root, tmp.path().join("proj/ids"));
         assert_eq!(r.identity.as_deref(), Some("thea"));
         assert_eq!(r.project.as_deref(), Some("api"));
+        assert_eq!(r.sync_every, Some(4), "the global config of that root");
 
         e.owo_root = Some("/env/root".into());
         e.owo_identity = Some("env-id".into());

@@ -528,7 +528,6 @@ fn owo_in(cwd: &Path, home: &Path) -> assert_cmd::Command {
         .env_remove("OWO_IDENTITY")
         .env_remove("OWO_PROJECT")
         .env("HOME", home)
-        .env("XDG_CONFIG_HOME", home.join(".config"))
         .env("XDG_DATA_HOME", home.join(".local/share"));
     cmd
 }

@@ -124,6 +124,8 @@ fn says(fault: &Fault) -> String {
             format!("--until {until} is past the {seen} messages the last `sync start` read")
         }
         Fault::OutOfRange { .. } | Fault::Conflict(..) | Fault::Needs(..) => fault.to_string(),
-        Fault::NoIngestCommand(_) => format!("{fault} (set it in .owo.toml or the user config)"),
+        Fault::NoIngestCommand(_) => {
+            format!("{fault} (set it in .owo.toml or the owo.toml of the root)")
+        }
     }
 }

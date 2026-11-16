@@ -397,7 +397,6 @@ fn sync_every_from_config_and_sync_due() {
         json(
             owo(tmp.path())
                 .current_dir(tmp.path())
-                .env("XDG_CONFIG_HOME", tmp.path())
                 .args(["-i", "nicole", "sync"])
                 .args(args),
         )
