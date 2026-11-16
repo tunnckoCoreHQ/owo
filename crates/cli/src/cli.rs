@@ -44,6 +44,10 @@ pub fn command(ops: &[Operation]) -> Command {
         let cmd = Command::new(op.path[op.path.len() - 1])
             .about(op.about)
             .args(op.fields.iter().map(|f| arg(op, f)));
+        let cmd = match op.path {
+            ["links"] => cmd.visible_alias("wikilinks"),
+            _ => cmd,
+        };
         root = match op.path {
             [_] => root.subcommand(cmd),
             [group, _] if root.find_subcommand(group).is_some() => {

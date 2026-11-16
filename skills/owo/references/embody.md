@@ -35,7 +35,7 @@ Read only what the task needs:
 - `owo resolve <name>` prints the path of an Entry.
 - `owo show <name> [--section <s>]` prints an Entry, or one section of it.
 - `owo search <words> [--scope life|work|persona]` prints ranked matches, each with its best line.
-- `owo links <name>` prints the Wikilinks to an Entry and the Wikilinks in it.
+- `owo links <name>` (or `owo wikilinks <name>`) prints the Wikilinks to an Entry and the Wikilinks in it.
 - `owo state` prints the Current State, and `owo changes --days <n>` prints the files that changed recently.
 
 ## Write
