@@ -1,4 +1,6 @@
-use crate::{CardSpec, Error, ErrorKind, Fault, Kind, Result, Rule, Scope, SyncFormat};
+use crate::{
+    CardSpec, ContextFormat, Error, ErrorKind, Fault, Kind, Result, Rule, Scope, SyncFormat,
+};
 use chrono::NaiveDate;
 use serde_json::{Map, Value};
 use std::collections::BTreeMap;
@@ -389,16 +391,18 @@ impl<'a> Reader<'a> {
         }
     }
 
-    pub fn pick<T>(
+    pub fn choice_in<T: Named>(
         &mut self,
         f: Field,
-        values: impl IntoIterator<Item = &'static str>,
-        from: fn(&str) -> Option<T>,
+        values: impl IntoIterator<Item = T>,
         base: T,
     ) -> T {
-        let ty = Type::Choice(values.into_iter().collect());
+        let ty = Type::Choice(values.into_iter().map(T::name).collect());
         match self.declare(f, ty, given(true)) {
-            Some((name, a)) => self.one(name, a).and_then(|s| from(&s)).unwrap_or(base),
+            Some((name, a)) => self
+                .one(name, a)
+                .and_then(|s| T::from_name(&s))
+                .unwrap_or(base),
             None => base,
         }
     }
@@ -546,12 +550,11 @@ impl Default for AddRequest {
 impl Request for AddRequest {
     fn read(r: &mut Reader, b: Self) -> Self {
         Self {
-            kind: r.pick(
+            kind: r.choice_in(
                 Field::positional("kind", "Entry type")
                     .required()
                     .value_name("TYPE"),
                 crate::entry_types(),
-                Kind::from_type,
                 b.kind,
             ),
             title: r.words(
@@ -757,7 +760,7 @@ pub struct ContextRequest {
     pub look: bool,
     pub with: Vec<String>,
     pub notes: usize,
-    pub paths: bool,
+    pub format: ContextFormat,
 }
 
 impl Default for ContextRequest {
@@ -767,7 +770,7 @@ impl Default for ContextRequest {
             look: false,
             with: vec![],
             notes: 3,
-            paths: false,
+            format: ContextFormat::Text,
         }
     }
 }
@@ -786,15 +789,13 @@ impl Request for ContextRequest {
                 Field::new("notes", "Recent project notes to include").default(d.notes),
                 b.notes,
             ),
-            paths: r.pick(
+            format: r.choice(
                 Field::new(
                     "format",
                     "text: file contents concatenated; paths: the list",
                 )
                 .default("text"),
-                ["paths", "text"],
-                |s| Some(s == "paths"),
-                b.paths,
+                b.format,
             ),
         }
     }

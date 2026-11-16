@@ -1,3 +1,4 @@
+use crate::Named;
 use regex::{Captures, Regex};
 use std::collections::BTreeMap;
 use std::fs;
@@ -9,6 +10,7 @@ macro_rules! template {
         include_str!(concat!("../../../templates/", $f))
     };
 }
+pub(crate) use template;
 
 pub const IDENTITY_FILES: &[(&str, &str)] = &[
     ("identity.json", template!("identity.json")),
@@ -27,26 +29,15 @@ pub const IDENTITY_FILES: &[(&str, &str)] = &[
     ("work/README.md", template!("work-README.md")),
 ];
 
-macro_rules! entries {
-    ($($n:literal)*) => {
-        &[$(($n, template!(concat!("entries/", $n, ".md")))),*]
-    };
-}
-
-pub const ENTRY_TEMPLATES: &[(&str, &str)] = entries![
-    "character" "location" "location-detail" "culture" "faction" "era" "event" "thread" "conflict"
-    "lesson" "writing" "log" "journal" "project" "note"
-];
-
 pub fn all() -> Vec<(&'static str, String, &'static str)> {
     IDENTITY_FILES
         .iter()
         .map(|(n, t)| (*n, n.to_string(), *t))
-        .chain(
-            ENTRY_TEMPLATES
-                .iter()
-                .map(|(n, t)| (*n, format!("{n}.md"), *t)),
-        )
+        .chain(crate::identity::entry_types().map(|k| {
+            let n = k.name();
+            let t = k.template().expect("an entry type has a template");
+            (n, format!("{n}.md"), t)
+        }))
         .collect()
 }
 
@@ -112,7 +103,8 @@ mod tests {
 
     #[test]
     fn every_entry_template_has_frontmatter() {
-        for (name, text) in ENTRY_TEMPLATES {
+        for kind in crate::identity::entry_types() {
+            let (name, text) = (kind.name(), kind.template().expect("a template"));
             assert!(text.starts_with("---\n"), "{name}");
             assert!(text.contains(&format!("type: {name}\n")), "{name}");
         }

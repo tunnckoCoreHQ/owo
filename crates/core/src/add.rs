@@ -92,10 +92,9 @@ pub fn add(id: &Identity, req: &Request, project: Option<&str>) -> Result<(Strin
     if path.exists() {
         return Ok((rel, false));
     }
-    let builtin = templates::ENTRY_TEMPLATES
-        .iter()
-        .find(|(n, _)| *n == name)
-        .map(|(_, t)| *t)
+    let builtin = req
+        .kind
+        .template()
         .expect("every entry type has a template");
     let root = id.dir.parent().unwrap_or(&id.dir);
     let mut text = templates::fill(

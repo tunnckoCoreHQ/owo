@@ -234,7 +234,7 @@ pub fn operations() -> Vec<Operation> {
             |r, s| {
                 let id = s.identity()?;
                 let context = id.context(&r)?;
-                let text = if r.paths {
+                let text = if r.format == ContextFormat::Paths {
                     context.paths_text()
                 } else {
                     id.context_text(&context)

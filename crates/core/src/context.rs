@@ -6,6 +6,15 @@ use std::fs;
 
 use crate::ContextRequest as Request;
 
+named! {
+    #[derive(Default)]
+    pub enum Format {
+        Paths = "paths",
+        #[default]
+        Text = "text",
+    }
+}
+
 #[derive(Debug, Serialize)]
 pub struct Item {
     pub tier: &'static str,

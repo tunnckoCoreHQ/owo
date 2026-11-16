@@ -13,24 +13,28 @@ pub const SOUL_FILES: &[&str] = &["IDENTITY.md", "SOUL.md", "VOICE.md", "LOOK.md
 struct KindRow {
     kind: Kind,
     name: &'static str,
-    typed: bool,
+    template: Option<&'static str>,
     category: Option<&'static str>,
 }
 
-const fn typed(kind: Kind, name: &'static str, category: Option<&'static str>) -> KindRow {
-    KindRow {
-        kind,
-        name,
-        typed: true,
-        category,
-    }
+macro_rules! typed {
+    ($kind:ident, $name:literal, $category:expr) => {
+        KindRow {
+            kind: Kind::$kind,
+            name: $name,
+            template: Some(crate::templates::template!(concat!(
+                "entries/", $name, ".md"
+            ))),
+            category: $category,
+        }
+    };
 }
 
 const fn untyped(kind: Kind, name: &'static str) -> KindRow {
     KindRow {
         kind,
         name,
-        typed: false,
+        template: None,
         category: None,
     }
 }
@@ -38,21 +42,21 @@ const fn untyped(kind: Kind, name: &'static str) -> KindRow {
 const KIND_ROWS: [KindRow; Kind::Unknown as usize + 1] = [
     untyped(Kind::Soul, "soul"),
     untyped(Kind::Example, "example"),
-    typed(Kind::Character, "character", Some("characters")),
-    typed(Kind::Location, "location", Some("locations")),
-    typed(Kind::LocationDetail, "location-detail", None),
-    typed(Kind::Culture, "culture", Some("cultures")),
-    typed(Kind::Faction, "faction", Some("factions")),
-    typed(Kind::Event, "event", Some("events")),
-    typed(Kind::Era, "era", Some("eras")),
-    typed(Kind::Thread, "thread", Some("threads")),
-    typed(Kind::Conflict, "conflict", Some("conflicts")),
-    typed(Kind::Lesson, "lesson", Some("lessons")),
-    typed(Kind::Writing, "writing", Some("writing")),
-    typed(Kind::Log, "log", Some("log")),
-    typed(Kind::Journal, "journal", Some("journal")),
-    typed(Kind::Project, "project", None),
-    typed(Kind::Note, "note", None),
+    typed!(Character, "character", Some("characters")),
+    typed!(Location, "location", Some("locations")),
+    typed!(LocationDetail, "location-detail", None),
+    typed!(Culture, "culture", Some("cultures")),
+    typed!(Faction, "faction", Some("factions")),
+    typed!(Event, "event", Some("events")),
+    typed!(Era, "era", Some("eras")),
+    typed!(Thread, "thread", Some("threads")),
+    typed!(Conflict, "conflict", Some("conflicts")),
+    typed!(Lesson, "lesson", Some("lessons")),
+    typed!(Writing, "writing", Some("writing")),
+    typed!(Log, "log", Some("log")),
+    typed!(Journal, "journal", Some("journal")),
+    typed!(Project, "project", None),
+    typed!(Note, "note", None),
     untyped(Kind::WorkProfile, "work-profile"),
     untyped(Kind::Generated, "generated"),
     untyped(Kind::Unknown, "unknown"),
@@ -71,6 +75,13 @@ const _: () = {
 
 pub fn life_categories() -> impl Iterator<Item = (&'static str, Kind)> {
     KIND_ROWS.iter().filter_map(|r| Some((r.category?, r.kind)))
+}
+
+pub fn entry_types() -> impl Iterator<Item = Kind> {
+    KIND_ROWS
+        .iter()
+        .filter(|r| r.template.is_some())
+        .map(|r| r.kind)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -108,20 +119,17 @@ impl Kind {
         &KIND_ROWS[self as usize]
     }
 
-    pub fn from_type(name: &str) -> Option<Kind> {
-        KIND_ROWS
-            .iter()
-            .find(|r| r.typed && r.name == name)
-            .map(|r| r.kind)
-    }
-
     pub fn type_name(self) -> Option<&'static str> {
         let r = self.kind_row();
-        r.typed.then_some(r.name)
+        r.template.map(|_| r.name)
     }
 
     pub fn has_frontmatter(self) -> bool {
-        self.kind_row().typed
+        self.kind_row().template.is_some()
+    }
+
+    pub fn template(self) -> Option<&'static str> {
+        self.kind_row().template
     }
 
     pub fn dated(self) -> Option<bool> {
@@ -435,8 +443,7 @@ mod tests {
 
     #[test]
     fn add_paths_classify_to_their_kind() {
-        for (name, _) in crate::templates::ENTRY_TEMPLATES {
-            let kind = Kind::from_type(name).expect("an entry type");
+        for kind in entry_types() {
             let rel = kind
                 .rel("x", "2026-11-01", Some("flat"), Some("owo"))
                 .expect("an add path");

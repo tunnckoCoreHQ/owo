@@ -1,7 +1,7 @@
 use owo_core as req;
 use owo_core::{
-    acp, AddRequest, ContextRequest, Env, ErrorKind, Fault, Kind, Named, Root, Scope,
-    SearchRequest, Select,
+    acp, AddRequest, ContextFormat, ContextRequest, Env, ErrorKind, Fault, Kind, Named, Root,
+    Scope, SearchRequest, Select,
 };
 use serde_json::{json, Value};
 use std::io::{BufRead, BufReader, Write};
@@ -127,7 +127,7 @@ fn read_side_calls_return_typed_results() {
             look: false,
             with: vec![],
             notes: 3,
-            paths: false,
+            format: ContextFormat::Text,
         })
         .unwrap();
     let paths: Vec<&str> = ctx.items.iter().map(|i| i.path.as_str()).collect();
@@ -281,7 +281,7 @@ fn free_functions_need_no_root() {
     assert!(
         matches!(owo_core::slug(&req::SlugRequest { text: "!!".into() }), Err(e) if e.kind == ErrorKind::Failed)
     );
-    assert!(owo_core::entry_types().any(|t| t == "event"));
+    assert!(owo_core::entry_types().any(|t| t == Kind::Event));
     assert!(owo_core::Rule::all().any(|r| r.name() == "links"));
 }
 struct Session {
@@ -473,7 +473,7 @@ fn acp_inject_puts_the_context_in_the_first_prompt() {
             look: false,
             with: vec![],
             notes: 3,
-            paths: false,
+            format: ContextFormat::Text,
         })
         .unwrap(),
     );

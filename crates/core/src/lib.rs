@@ -31,12 +31,12 @@ mod write;
 
 pub use changes::{Change, Changes};
 pub use config::{Origin, Resolved};
-pub use context::{Context, Item as ContextItem};
+pub use context::{Context, Format as ContextFormat, Item as ContextItem};
 pub use create::Created;
 pub use error::{Error, ErrorKind, Fault, Result};
 pub use export::{CardSpec, SoulspecReport};
 pub use find::{Hit, LinkRef};
-pub use identity::{Identity, Kind};
+pub use identity::{entry_types, Identity, Kind};
 pub use kb::Kb;
 pub use lint::Rule;
 pub use migrate::Report as MigrateReport;
@@ -96,10 +96,6 @@ pub fn slug(req: &SlugRequest) -> Result<String> {
 
 fn utf8(path: &Path) -> PathBuf {
     PathBuf::from(path.to_string_lossy().into_owned())
-}
-
-pub fn entry_types() -> impl Iterator<Item = &'static str> {
-    templates::ENTRY_TEMPLATES.iter().map(|(n, _)| *n)
 }
 
 pub fn migrate_v1(req: &MigrateRequest, cwd: &Path) -> Result<MigrateReport> {
