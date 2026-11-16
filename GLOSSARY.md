@@ -1,329 +1,335 @@
 # owo
 
-owo keeps a living agent identity as a folder of plain files. Hosts load the identity, record their sessions into it and review it, so one identity lasts across hosts and projects.
+owo keeps a living agent identity as a folder of plain files. Hosts load the identity, record their sessions into it and reflect on it, so one identity lasts across hosts and projects.
 
-## Language
-
-### Identity
+## Identity
 
 **Root**:
-The folder that holds every identity, the sources and the session data.
-_Avoid_: identities root, home, workspace
+The folder that holds every Identity, the Raw Material, the Global Config and the session data. It comes from the flag, the environment or the Local Config, and otherwise it is the default data folder.
+_Avoid: identities root, home, workspace_
 
 **Identity**:
-One persona that an agent takes on, with its own soul, life and work. It is one folder in the root.
-_Avoid_: agent, persona, character, profile
+Who an agent can be, kept as one whole folder in the Root, such as `thea/`. It has three Scopes: Persona, Life and Work.
+_Avoid: agent, persona, character, profile_
 
 **Slug**:
-The lowercase, hyphenated form of a name. It names an identity, a project and an entry on disk.
-_Avoid_: id, key, handle
+The lowercase, hyphenated form of a name. It names an Identity, a Project and an Entry on disk.
+_Avoid: id, key, handle_
 
 **Scope**:
-One of the three parts of an identity: soul, life or work.
-_Avoid_: part, side, section
+One of the three parts of an Identity: Persona, Life or Work.
+_Avoid: part, side, section_
 
-**Soul**:
-The scope that says who the identity is. It changes slowly, and only through a review, with evidence.
-_Avoid_: personality, persona, core
+**Persona**:
+The Scope that says who the Identity is, kept in the `persona/` folder. It changes slowly, and only through a Reflection, with Evidence.
+_Avoid: soul, identity, personality, core_
 
 **Life**:
-The scope that holds what the identity lived and knows, written in its own voice.
-_Avoid_: world, lore, memory
+The Scope that holds what the Identity lived and knows, written in its own voice.
+_Avoid: world, lore, memory_
 
 **Work**:
-The scope that holds the professional side of the identity: its profile and its own experience of each project.
-_Avoid_: job, career
+The Scope that holds the professional side of the Identity: its Work Profile and its own experience of each Project.
+_Avoid: job, career_
 
-**Soul file**:
-One of the five entries of the soul: IDENTITY, SOUL, VOICE, LOOK and MEMORY.
-_Avoid_: soul entry, core file
+**Persona File**:
+One of the five Entries of the Persona: IDENTITY, SOUL, VOICE, LOOK and MEMORY.
+_Avoid: soul file, persona entry, core file_
+
+**Soul**:
+The Persona File that holds the beliefs, the wants and the boundaries of the Identity, in the first person. Soul means only this file, `SOUL.md`, and never the whole Persona.
+_Avoid: persona, personality, soul file_
 
 **MEMORY**:
-The soul file that holds the compiled long-term memory of the identity. Only a review writes it.
-_Avoid_: memories, memory file
+The Persona File that holds the compiled long-term memory of the Identity. Only a Reflection writes it.
+_Avoid: memories, memory file_
 
-### Entries
+## Entries
 
 **Entry**:
-One Markdown file that a person or an agent writes in an identity. A soul file, a character and a project note are all entries.
-_Avoid_: document, page, record, item
+One Markdown file that a person or an agent writes in an Identity. A Persona File, a Character and a Project Note are all Entries.
+_Avoid: document, page, record, item_
 
 **Kind**:
-What an entry is, such as character, event, note or soul. The path of the entry decides it.
-_Avoid_: type, category, class
+What an Entry is, such as a Character, an Event or an Insight. The path of the Entry decides it.
+_Avoid: type, category, class_
 
 **Type**:
-The kind that a life or work entry declares in its frontmatter. It must equal the kind that the path gives.
-_Avoid_: kind, category
+The Kind that a Life or Work Entry declares in its frontmatter. It must equal the Kind that the path gives.
+_Avoid: kind, category_
 
 **Category**:
-A folder of life that holds the entries of one kind, such as characters or events.
-_Avoid_: collection, section, type
+A folder of Life that holds the Entries of one Kind, such as characters or events.
+_Avoid: collection, section, type_
 
 **Status**:
-How far an entry stands as fact: canon, disputed or superseded.
-_Avoid_: state
+How far an Entry stands as fact: canon, disputed or superseded.
+_Avoid: state_
 
 **Summary**:
-The one-line description in the frontmatter of an entry. Indexes, search and the Now block show it.
-_Avoid_: description, abstract
+The one-line description in the frontmatter of an Entry. Every Index, search and the Current State show it.
+_Avoid: description, abstract_
 
-**Link**:
-A wiki-link from one entry to another, by title, alias or slug.
-_Avoid_: reference, pointer, wikilink
+**Wikilink**:
+A `[[...]]` link from one Entry to another, by title, alias or Slug.
+_Avoid: link, reference, pointer, wiki-link_
 
-**Source**:
-A raw file outside every identity that entries cite: a transcript, a note or a slice.
-_Avoid_: reference, evidence, raw material
+**Raw Material**:
+The files outside every Identity that Entries cite, such as a Transcript, a note or a Slice.
+_Avoid: source, reference, evidence_
 
 **Evidence**:
-The links that support a lesson or a soul change.
-_Avoid_: source, proof, citation
+The Wikilinks that support an Insight or a Persona Change.
+_Avoid: raw material, proof, citation_
 
 **Identifier**:
-An exact personal value of a character, such as a birth date, a handle or an address. It is written only in the entry of that character.
-_Avoid_: PII, id, personal data
+An exact personal value of a Character, such as a birth date, a handle or an address. It is written only in the Entry of that Character.
+_Avoid: PII, id, personal data_
 
-**Generated file**:
-A file that owo builds from entry content and that no person or agent edits: an index or the timeline.
-_Avoid_: derived file, cache, output
+**Generated File**:
+A file that owo builds from Entry content and that no person or agent edits: an Index or the Timeline.
+_Avoid: derived file, cache, output_
 
 **Index**:
-The generated list of the entries of one category or one scope, with their summaries.
-_Avoid_: table of contents, catalog
+The generated list of the Entries of one Category or one Scope, with their Summaries.
+_Avoid: table of contents, catalog_
 
 **Timeline**:
-The generated list of events in story time, grouped under eras.
-_Avoid_: history, chronology
+The generated list of Events in Story Time, grouped under Eras.
+_Avoid: history, chronology_
 
-### Kinds of entry
+## Kinds of entry
 
 **Character**:
-A person, an animal, a being or another identity in the life of the identity. The person it works with is a character too.
-_Avoid_: person, user, contact
+A person, an animal, a being or another Identity in the Life of the Identity. The person it works with is a Character too.
+_Avoid: person, user, contact_
 
 **Location**:
-A place in the life of the identity. Its rooms and angles are location details beside it.
-_Avoid_: place, room, scene
+A place in the Life of the Identity. Its rooms and angles are location details beside it.
+_Avoid: place, room, scene_
 
 **Event**:
-A happening worth recalling, with its story date. A defining event is one that changed the identity.
-_Avoid_: memory, moment, scene
+A happening worth recalling, with its story date. A defining Event is one that changed the Identity.
+_Avoid: memory, moment, scene_
 
 **Era**:
-A named span of story time that groups events.
-_Avoid_: period, chapter, phase
+A named span of Story Time that groups Events.
+_Avoid: period, chapter, phase_
 
 **Thread**:
 A promise, a plan or a running bit that stays open until someone closes it.
-_Avoid_: todo, task, session, conversation
+_Avoid: todo, task, session, conversation_
 
 **Conflict**:
-Two sources that disagree about a fact. It stays open until one account wins.
-_Avoid_: dispute, contradiction, merge conflict
+Two pieces of Raw Material that disagree about a fact. It stays open until one account wins.
+_Avoid: dispute, contradiction, merge conflict_
 
-**Lesson**:
-An interpretation of experience, with the evidence for it.
-_Avoid_: insight, takeaway, learning
+**Insight**:
+An interpretation of experience, with the Evidence for it, kept in `life/insights/`.
+_Avoid: lesson, takeaway, learning_
 
-**Log**:
-The bullet list of the small things of one story day. Each day has one log.
-_Avoid_: diary, daily note, journal
+**Daily Log**:
+The bullet list of the small things of one story day. Each day has one Daily Log.
+_Avoid: log, diary, daily note, journal_
 
 **Journal**:
-A dated entry of private feelings about a day. Only journal entries link to it.
-_Avoid_: diary, log
+A private diary Entry that the Identity writes whenever it wants, with a file name that starts with its date. Only another Journal links to it.
+_Avoid: daily log, log_
 
 **Project**:
-A piece of work that the identity takes part in. Its entry and its notes are in work.
-_Avoid_: repo, workspace, job
+A piece of work that the Identity takes part in. Its Project Readme and its Project Notes are in Work.
+_Avoid: repo, workspace, job_
 
-**Note**:
-A dated entry of the identity's own experience of work on one project.
-_Avoid_: memo, log, soul note
+**Project Readme**:
+The Entry of one Project, `work/projects/<project>/README.md`. It holds a description of the Project in one or two sentences, the role of the Identity on it and the Project Wiki Path.
+_Avoid: project file, project entry, project profile_
 
-**Profile**:
-The entry in work that holds the roles, the working preferences and the past work of the identity.
-_Avoid_: work readme, resume, bio
+**Project Note**:
+A dated Entry of the Identity's own experience on one Project.
+_Avoid: note, memo, daily log_
 
-**KB**:
-The knowledge base of a project, kept outside the identity. Facts about the project itself live there.
-_Avoid_: docs, wiki, project memory
+**Work Profile**:
+The Entry `work/PROFILE.md`, which holds the roles, the working preferences and the past work of the Identity.
+_Avoid: profile, work readme, resume, bio_
 
-### State and review
+**Project Wiki**:
+The knowledge base of a Project, kept outside the Identity. Facts about the Project itself live there.
+_Avoid: KB, docs, project memory_
+
+**Project Wiki Path**:
+The line that tells the agent where the Project Wiki of a Project is. The Project Readme holds it, and the Context repeats it for the Working Project.
+_Avoid: KB pointer, wiki link, wiki pointer_
+
+## State and reflection
 
 **Stamp**:
-The time the text of an entry last changed, recorded with the hash of that text. It moves only when the hash changes.
-_Avoid_: timestamp, state timestamp, mtime
+The time the text of an Entry last changed, recorded with the hash of that text. It moves only when the hash changes.
+_Avoid: timestamp, state timestamp, mtime_
 
-**State file**:
-The file of one scope that holds the stamps of its entries.
-_Avoid_: state, status, cache
+**State File**:
+The file of one Scope that holds the Stamps of its Entries, such as `persona/state.json`, `life/state.json` and `work/state.json`.
+_Avoid: state, status, cache_
 
-**Story time**:
-The calendar inside the life of the identity. The date of an entry is a story date, not the day of the chat.
-_Avoid_: real time, chat time, timestamp
+**Story Time**:
+The calendar inside the Life of the Identity. The date of an Entry is a story date, not the day of the chat.
+_Avoid: real time, chat time, timestamp_
 
 **Context**:
-What a host loads at the start of a session so that the agent can be the identity: the load set, then the Now block.
-_Avoid_: prompt, system prompt, memory
+What a Host loads at the start of a Session so that the agent can be the Identity: the Load Set, then the Current State.
+_Avoid: prompt, system prompt, memory_
 
-**Load set**:
-The entries that the context holds, each in a tier.
-_Avoid_: bundle, file list
+**Load Set**:
+The Entries that the Context holds, each in a Tier.
+_Avoid: bundle, file list_
 
 **Tier**:
-A group of the load set with one reason to load, such as core, voice or project.
-_Avoid_: level, layer
+A group of the Load Set with one reason to load. The Tiers are core, voice, look and work.
+_Avoid: level, layer_
 
-**Now block**:
-The generated summary of where the identity stands: last activity, recent days and events, open threads and conflicts, and the review status.
-_Avoid_: state, status, current state
+**Current State**:
+The generated overview of where the Identity stands: last activity, recent days and Events, open Threads and Conflicts, and when the last Reflection was.
+_Avoid: now block, state, status_
 
-**KB pointer**:
-The line in the context that tells the agent where the KB of the working project is.
-_Avoid_: KB link, KB path
+**Reflection**:
+The pass that reads what changed since the last Reflection, writes Insights, compiles MEMORY again and changes the Persona when the Evidence is enough. An agent runs it with `owo reflect` and finishes it with `owo reflect done`.
+_Avoid: review, consolidation, compaction_
 
-**Review**:
-The pass that reads what changed since the last review, writes lessons, compiles MEMORY again and changes the soul when the evidence is enough.
-_Avoid_: reflection, consolidation, compaction
+**Reflection Digest**:
+What a Reflection reads: MEMORY, the Entries that changed, the Daily Logs since the last Reflection, and the open Threads and Conflicts.
+_Avoid: review packet, packet, report_
 
-**Review packet**:
-What a review reads: MEMORY, the entries that changed, the unreviewed log days, and the open threads and conflicts.
-_Avoid_: report, digest
+**Persona Change**:
+One recorded change to a Persona File, with its Evidence.
+_Avoid: soul change, soul note, history record, edit_
 
-**Soul change**:
-One recorded change to a soul file, with its evidence.
-_Avoid_: history record, soul note, edit
+**Persona Changelog**:
+The list of the Persona Changes of an Identity, oldest first.
+_Avoid: soul history, trail, audit log_
 
-**Soul history**:
-The list of the soul changes of an identity, oldest first.
-_Avoid_: trail, changelog, audit log
-
-### Sessions and sync
+## Sessions and sync
 
 **Host**:
-A program that runs an agent in sessions, such as Claude Code or a hosted chat.
-_Avoid_: harness, client, platform
+A program that runs an agent in Sessions, such as Claude Code or a hosted chat.
+_Avoid: harness, client, platform_
 
 **Session**:
-One chat between a user and an agent on a host, named by the session id of the host.
-_Avoid_: conversation, chat, thread
+One chat between a user and an agent on a Host, named by the session id of the Host.
+_Avoid: conversation, chat, thread_
 
 **Transcript**:
-The record that a host keeps of a session, as a file on this machine.
-_Avoid_: history, chat log
+The record that a Host keeps of a Session, as a file on the machine.
+_Avoid: history, chat log_
 
 **Turn**:
-One text that the user or the assistant wrote in a session, with its role and its turn id.
-_Avoid_: message, exchange
+One text that the user or the assistant wrote in a Session, with its role and its turn id.
+_Avoid: message, exchange_
 
-**User turn**:
-A turn that the user wrote. Sync counts user turns.
-_Avoid_: prompt, user message
+**User Turn**:
+A Turn that the user wrote. Sync counts User Turns.
+_Avoid: prompt, user message_
 
 **Sync**:
-The work that records a session into an identity: it finds the new turns, writes a slice and gives it to an ingest.
-_Avoid_: save, capture, import
+The work that records a Session into an Identity. It finds the new Turns, writes a Slice and gives it to an Ingest.
+_Avoid: save, capture, import_
 
-**Sync run**:
-One ingest of one slice of a session. It starts when the session is due, and it ends when the ingest agent reports it done. The short form is "run".
-_Avoid_: job, batch, ingest run
+**Sync Run**:
+One Ingest of one Slice of a Session. It starts when the Session is Due, and it ends when the Ingest Agent reports it done. The short form is "run".
+_Avoid: job, batch, ingest run_
 
-**Run size**:
-The count of new user turns at which a session is due.
-_Avoid_: interval, threshold, batch size
+**Run Size**:
+The count of new User Turns at which a Session is Due, 6 by default.
+_Avoid: interval, threshold, batch size_
 
 **Due**:
-A session is due when its new user turns reach the run size. The next sync starts a run.
-_Avoid_: ready, pending
+A Session is Due when its new User Turns reach the Run Size. The next Sync starts a Sync Run.
+_Avoid: ready, pending_
 
-**Pending run**:
-A run that has started and is not done.
-_Avoid_: due run, open run
+**Pending Run**:
+A Sync Run that has started and is not done.
+_Avoid: due run, open run_
 
-**Bookmark**:
-The record of how far the ingest of a session has reached, with the pending run when there is one.
-_Avoid_: cursor, offset, checkpoint
+**Sync Cursor**:
+The record of how far the Ingest of a Session has reached, with the Pending Run when there is one.
+_Avoid: bookmark, offset, checkpoint_
 
 **Slice**:
-The turns of one sync run, with two earlier user turns as overlap, written as a source.
-_Avoid_: session slice, sync slice, chunk
+The Turns of one Sync Run, with two earlier User Turns as overlap, written as Raw Material.
+_Avoid: session slice, sync slice, chunk_
 
 **Push**:
-One hand-over of turns from a host to sync, for a session with no transcript on this machine.
-_Avoid_: store, job, upload
+One hand-over of Turns from a Host to Sync, for a Session with no Transcript on the machine.
+_Avoid: store, job, upload_
 
-**Turns file**:
-The file that holds the pushed turns of one session, in push order.
-_Avoid_: store, store file
+**Turns File**:
+The file that holds the pushed Turns of one Session, in Push order.
+_Avoid: store, store file_
 
 **Ingest**:
-The agent task that turns a source into entries that cite it.
-_Avoid_: import, extraction, memory write
+The agent task that turns Raw Material into Entries that cite it.
+_Avoid: import, extraction, memory write_
 
-**Ingest prompt**:
-The text that gives an ingest agent the whole task of one sync run.
-_Avoid_: prompt file, task file
+**Ingest Prompt**:
+The text that gives an Ingest Agent the whole task of one Sync Run.
+_Avoid: prompt file, task file_
 
-**Ingest agent**:
-The agent that runs one ingest prompt.
-_Avoid_: background agent, worker
+**Ingest Agent**:
+The agent that runs one Ingest Prompt.
+_Avoid: background agent, worker_
 
-**Ingest command**:
-The command line that starts an ingest agent.
-_Avoid_: harness command, worker command
+**Ingest Command**:
+The command line that starts an Ingest Agent.
+_Avoid: harness command, worker command_
 
 **Checkpoint**:
-The three steps that an agent runs after it writes entries: stamp, index and lint.
-_Avoid_: bookmark, save point
+The three steps that an agent runs after it writes Entries: it refreshes the Stamps, builds the Generated Files again and runs the lint.
+_Avoid: sync cursor, save point_
 
-### Commands and hosts
+## Commands and hosts
 
 **Operation**:
-One thing that owo does, such as add or review done. Each operation is a CLI command and an MCP tool.
-_Avoid_: action, endpoint
+One thing that owo does, such as add or reflect done. Each Operation is a CLI command and an MCP tool.
+_Avoid: action, endpoint_
 
 **Envelope**:
-The JSON result of an operation: ok, data, warnings and errors.
-_Avoid_: response, payload
+The JSON result of an Operation: ok, data, warnings and errors.
+_Avoid: response, payload_
 
-**Dry run**:
-A run of an operation that writes nothing and reports the files it would write.
-_Avoid_: preview, simulation
+**Dry Run**:
+A run of an Operation that writes nothing and reports the files it would write.
+_Avoid: preview, simulation_
 
-**Selected identity**:
-The identity that an operation acts on. It comes from the flag, the environment, the config, or the only identity in the root.
-_Avoid_: current identity, active identity, picked identity
+**Selected Identity**:
+The Identity that an Operation acts on. It comes from the flag, the environment, the Local Config, the Global Config, or the only Identity in the Root.
+_Avoid: current identity, active identity, picked identity, selected persona_
 
-**Local config**:
-The `.owo.toml` file that owo finds from the working folder up. It can set the root, the identity and the project.
-_Avoid_: project file, project config
+**Local Config**:
+The `.owo.toml` file that owo finds from the working folder up. It can set the Root, the Selected Identity and the Working Project.
+_Avoid: project file, project config_
 
-**User config**:
-The config file in the user's config folder. It can set the root and the identity, but not the project.
-_Avoid_: global config
+**Global Config**:
+The config file in the Root. It can set the Selected Identity and other values, but not the Root.
+_Avoid: user config, root config_
 
-**Working project**:
-The project that context, state, sync and a new note use. It comes from the flag, the environment or the config.
-_Avoid_: current project, active project
+**Working Project**:
+The Project that the Context, the Current State, Sync and a new Project Note use. It comes from the flag, the environment or the Local Config.
+_Avoid: current project, active project_
 
-**Project filter**:
-A project that narrows the result of a search or a card export. It comes only from the command line.
-_Avoid_: project scope, working project
+**Project Filter**:
+A Project that narrows the result of a search or of a Persona Card. It comes only from the command line.
+_Avoid: project scope, working project_
 
-**Identity block**:
-The text that the ACP proxy puts first in a prompt to give the agent the identity of the session.
-_Avoid_: intro, text block, injection
+**Identity Block**:
+The text that the ACP proxy puts first in a prompt to give the agent the Identity of the Session.
+_Avoid: intro, text block, injection_
 
 **Export**:
-A copy of an identity in another format: a character card, a SoulSpec package or a skill wrapper.
-_Avoid_: dump, backup
+A copy of an Identity in another format: a Persona Card, a SoulSpec package or a skill wrapper.
+_Avoid: dump, backup_
 
-**Character card**:
-An export of an identity in the Character Card V2 or V3 format.
-_Avoid_: card file, persona card
+**Persona Card**:
+An Export of an Identity in the Character Card V2 or V3 format.
+_Avoid: character card, card file_
 
 **SoulSpec**:
-The outside format for a soul package. The soul manifest follows it, and an identity exports to it.
-_Avoid_: soul format, spec
+The outside format for a packaged Persona. The manifest of the Persona follows it, and an Identity exports to it.
+_Avoid: soul format, spec_
