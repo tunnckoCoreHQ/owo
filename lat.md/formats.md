@@ -114,7 +114,7 @@ The global config is `<root>/owo.toml`, read after the root resolves. It takes e
 
 Identity resolves from `-i`, `OWO_IDENTITY`, `.owo.toml`, the global config, then the only identity in the root. Project resolves from `--project`, `OWO_PROJECT`, `.owo.toml`; see [[decisions#Working project versus project filter]]. A relative `root` value resolves against the folder of the `.owo.toml`; `~/` expands to `$HOME`. The run size of `sync` (`sync_every`, a number) resolves from `.owo.toml`, then the global config, then 6; an explicit `every` wins over it.
 
-Two fields set the auto-ingest of `owo acp`, and each resolves from `.owo.toml`, then the global config: `auto_ingest` (true or false, false by default) turns it on, and `ingest_command` (an array of strings, such as `["claude", "-p"]`) is the ingest command, which gets the ingest prompt as its last argument. Without `ingest_command` the proxy takes the ingest command from the ACP agent command; see [[decisions#ACP proxy runs the ingest in the background]].
+Two fields set the auto-ingest of `owo acp`, and each resolves from `.owo.toml`, then the global config: `auto_ingest` (true or false, false by default) turns it on, and `ingest_command` (an array of strings, such as `["claude", "--permission-mode", "acceptEdits", "--allowedTools", "Bash(owo:*)", "-p"]`) is the ingest command, which gets the ingest prompt as its last argument. Without `ingest_command` the proxy takes the ingest command from the ACP agent command; see [[decisions#ACP proxy runs the ingest in the background]].
 
 ## Templates
 
