@@ -19,7 +19,9 @@ Run `owo context` and `owo state` first, so you know the Identity and its Curren
 - When it does not exist, make it with `owo add <kind> <title> [--date <day>] [--project <p>]`, and fill the template.
 - Add the Raw Material to the `sources` list in the frontmatter of the Entry, with the lines it came from: `<slug>/<file>.md#L<a>-L<b>`.
 - Put a small thing as one bullet in the Daily Log of the day it happened. Run `owo add daily-log --date <day>`, which makes the Daily Log or prints `exists <path>` when it is there already. Then add the bullet to that file. An Event gets one bullet in that Daily Log, with a Wikilink to it.
-- When the Raw Material disagrees with an Entry, record a Conflict with `owo add conflict <title>`, and keep the Entry as it is.
+- When the Raw Material corrects or settles an Entry, for example a later finding that answers an open guess, update the Entry and cite the new Raw Material.
+- When two accounts both still stand and nothing decides between them, record a Conflict with `owo add conflict <title>`, and keep the Entry as it is.
+- When the Raw Material shows that a Thread is done, set `state: closed` on it and cite the Raw Material.
 - The Persona Files, MEMORY included, change only on the [reflect path](reflect.md).
 
 ## Finish

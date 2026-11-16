@@ -22,7 +22,7 @@ Each fact has one home. Write it there once, and link to it from everywhere else
 | Biography, roles, the frame of its world | `persona/IDENTITY.md` | |
 | An interpretation of experience | an Insight, `life/insights/<slug>.md`, with `evidence` | MEMORY links it, at a Reflection |
 | Private feelings about a day | a Journal, `life/journal/<date>_<slug>.md` | Insights and the Soul get the abstraction |
-| Two pieces of Raw Material that disagree | a Conflict, `life/conflicts/<slug>.md` | `status: disputed` on the Entries it affects |
+| Two accounts that both still stand, with nothing to decide between them | a Conflict, `life/conflicts/<slug>.md` | `status: disputed` on the Entries it affects |
 | A correction | the Entry that owns the fact, edited in place | the Daily Log of the day: `- correction: [[Entry]]` |
 | An exact quote worth keeping | `## Lines` of the Event | `[[Event#Lines]]` |
 | Work on a Project | a Project Note, `work/projects/<p>/notes/<date>_<slug>.md` (`owo add project-note --project <p>`) | |
