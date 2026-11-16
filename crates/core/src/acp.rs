@@ -220,8 +220,8 @@ impl Ingest {
     }
 
     /// Starts the agent for the run whose prompt file is `prompt`, unless an agent runs. Its
-    /// output goes nowhere, so the client never sees it. A failure, or a run still pending when
-    /// the agent exits, is one warning line.
+    /// output goes nowhere, so the client never sees it. Each failure, a failed check of the
+    /// pending runs included, and a run still pending when the agent exits, is a warning line.
     fn start(&self, prompt: &str, owo: &Arc<Owo>) {
         if self.busy.swap(true, Ordering::SeqCst) {
             return;
@@ -256,7 +256,7 @@ impl Ingest {
                 Ok(runs) => runs.into_iter().find(|r| r.prompt == prompt),
                 Err(e) => {
                     owo.warn(&format!(
-                        "the ingest of {prompt} ended, but its run could not be checked: {e}"
+                        "the ingest of {prompt} ended, but its run could not be checked: {e:#}"
                     ));
                     None
                 }
