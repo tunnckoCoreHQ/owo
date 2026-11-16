@@ -43,6 +43,10 @@ fn migrate_v1_fixture() {
         .path()
         .join("sources/lumen/2026-01-01_session.md")
         .is_file());
+    assert_eq!(
+        fs::read_to_string(out.join("persona/VOICE.md")).unwrap(),
+        fs::read_to_string(src.join("references/soul/STYLE.md")).unwrap()
+    );
     let skipped = v["data"]["skipped"].to_string();
     assert!(skipped.contains("changelog.md") && skipped.contains("notes.txt"));
     let room = fs::read_to_string(out.join("life/locations/the-lighthouse/lamp-room.md")).unwrap();
