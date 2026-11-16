@@ -58,9 +58,8 @@ impl crate::Named for Rule {
 
 pub fn run(id: &Identity, rules: &[Rule]) -> Vec<Diagnostic> {
     let mut out = vec![];
-    for rule in Rule::all() {
-        if rules.is_empty() || rules.contains(&rule) {
-            let (name, check) = CHECKS[rule.0];
+    for (i, (name, check)) in CHECKS.iter().enumerate() {
+        if rules.is_empty() || rules.contains(&Rule(i)) {
             let start = out.len();
             check(id, &mut out);
             for d in &mut out[start..] {
@@ -321,16 +320,17 @@ fn check_entry_schema(e: &Entry, out: &mut Vec<Diagnostic>) {
 }
 
 fn soul_plain(id: &Identity, out: &mut Vec<Diagnostic>) {
-    for e in id
-        .entries
-        .iter()
-        .filter(|e| e.kind == Kind::Soul && e.text.starts_with("---"))
-    {
-        out.push(err(
-            &e.rel,
-            "soul files are plain Markdown; stamps live in soul/state.json",
-        ));
-    }
+    out.extend(
+        id.entries
+            .iter()
+            .filter(|e| e.kind == Kind::Soul && e.text.starts_with("---"))
+            .map(|e| {
+                err(
+                    &e.rel,
+                    "soul files are plain Markdown; stamps live in soul/state.json",
+                )
+            }),
+    );
 }
 
 fn links(id: &Identity, out: &mut Vec<Diagnostic>) {

@@ -23,20 +23,18 @@ pub fn dry_run<T>(f: impl FnOnce() -> T) -> (T, Vec<String>) {
     let kept = KEPT.take().unwrap_or_default();
     drop(reset);
     let mut paths: Vec<String> = vec![];
-    for t in kept {
+    for path in kept.iter().flat_map(|t| {
         let dir = match t.bytes {
             Some(_) => t.path.parent(),
             None => Some(t.path.as_path()),
         };
         let folders = dir.map(missing).unwrap_or_default().into_iter().rev();
-        let mut add: Vec<String> = folders.map(|d| format!("{}/", d.display())).collect();
-        if t.bytes.is_some() {
-            add.push(t.path.display().to_string());
-        }
-        for path in add {
-            if !paths.contains(&path) {
-                paths.push(path);
-            }
+        folders
+            .map(|d| format!("{}/", d.display()))
+            .chain(t.bytes.is_some().then(|| t.path.display().to_string()))
+    }) {
+        if !paths.contains(&path) {
+            paths.push(path);
         }
     }
     (out, paths)

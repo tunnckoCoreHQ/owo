@@ -38,9 +38,10 @@ macro_rules! named {
     };
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub enum Type {
     Switch,
+    #[default]
     Text,
     Int,
     Day,
@@ -49,7 +50,7 @@ pub enum Type {
     Json,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct Field {
     pub name: &'static str,
     pub help: &'static str,
@@ -70,16 +71,7 @@ impl Field {
         Self {
             name,
             help,
-            ty: Type::Text,
-            positional: false,
-            many: false,
-            required: false,
-            default: None,
-            value_name: None,
-            hyphen: false,
-            range: None,
-            conflicts: None,
-            requires: None,
+            ..Default::default()
         }
     }
 

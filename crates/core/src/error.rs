@@ -222,15 +222,11 @@ impl From<Fault> for Error {
 
 impl From<anyhow::Error> for Error {
     fn from(e: anyhow::Error) -> Self {
-        if let Some(fault) = e.downcast_ref::<Fault>() {
-            return fault.clone().into();
+        match e.downcast_ref::<Fault>() {
+            Some(fault) => fault.clone().into(),
+            None if e.is::<std::io::Error>() => Self::new(ErrorKind::Io, format!("{e:#}")),
+            None => Self::new(ErrorKind::Failed, format!("{e:#}")),
         }
-        let kind = if e.downcast_ref::<std::io::Error>().is_some() {
-            ErrorKind::Io
-        } else {
-            ErrorKind::Failed
-        };
-        Self::new(kind, format!("{e:#}"))
     }
 }
 

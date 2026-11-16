@@ -20,6 +20,22 @@ impl Report {
     fn skip(&mut self, what: impl Display, why: impl Display) {
         self.skipped.push(format!("{what} ({why})"));
     }
+
+    fn place<B: Into<Vec<u8>>>(
+        &mut self,
+        target: &Path,
+        from: String,
+        to: String,
+        body: impl FnOnce() -> Result<B>,
+    ) -> Result<()> {
+        if crate::write::exists(target) {
+            self.skip(from, format!("target {to} exists; merge by hand"));
+            return Ok(());
+        }
+        crate::write::file(target, body()?)?;
+        self.moved.push((from, to));
+        Ok(())
+    }
 }
 
 const SOUL: &[(&str, &str)] = &[
@@ -227,18 +243,17 @@ fn migrate_locations(
             r.skip(rel(from), e);
             return anyhow::Ok(());
         }
-        let target = dir.join(&to);
-        if crate::write::exists(&target) {
-            r.skip(rel(from), format!("target {to} exists; merge by hand"));
-            return anyhow::Ok(());
-        }
-        let stem = stem_of(from);
-        crate::write::file(
-            &target,
-            normalize(text, kind, &stem, None, parent, today, slug),
-        )?;
-        r.moved.push((rel(from), to));
-        anyhow::Ok(())
+        r.place(&dir.join(&to), rel(from), to, || {
+            Ok(normalize(
+                text,
+                kind,
+                &stem_of(from),
+                None,
+                parent,
+                today,
+                slug,
+            ))
+        })
     };
     let loose: Vec<PathBuf> = md_files(locs)
         .into_iter()
@@ -450,24 +465,22 @@ fn fill(src: &Path, refs: &Path, root: &Path, slug: &str, manifest: &Value) -> R
                 _ if !slugify(&rest).is_empty() => format!("{}.md", slugify(&rest)),
                 _ => format!("{}.md", slugify(&title_of(&text, &label))),
             };
-            let target = dir.join(to).join(&name);
-            if crate::write::exists(&target) {
-                r.skip(rel(&p), format!("target {to}/{name} exists; merge by hand"));
-                continue;
-            }
-            crate::write::file(
-                &target,
-                normalize(
-                    &text,
-                    kind,
-                    &label,
-                    date.as_deref().filter(|_| *dated),
-                    None,
-                    &today,
-                    slug,
-                ),
+            r.place(
+                &dir.join(to).join(&name),
+                rel(&p),
+                format!("{to}/{name}"),
+                || {
+                    Ok(normalize(
+                        &text,
+                        kind,
+                        &label,
+                        date.as_deref().filter(|_| *dated),
+                        None,
+                        &today,
+                        slug,
+                    ))
+                },
             )?;
-            r.moved.push((rel(&p), format!("{to}/{name}")));
         }
     }
     migrate_locations(&world.join("locations"), &dir, &today, slug, &rel, &mut r)?;
@@ -513,15 +526,12 @@ fn fill(src: &Path, refs: &Path, root: &Path, slug: &str, manifest: &Value) -> R
     {
         let name = e.path().strip_prefix(&from).expect("under sources");
         let name = name.to_string_lossy().replace('\\', "/");
-        let target = root.join("sources").join(slug).join(&name);
-        if crate::write::exists(&target) {
-            let why = format!("target <root>/sources/{slug}/{name} exists; merge by hand");
-            r.skip(rel(e.path()), why);
-            continue;
-        }
-        crate::write::file(&target, fs::read(e.path())?)?;
-        r.moved
-            .push((rel(e.path()), format!("<root>/sources/{slug}/{name}")));
+        r.place(
+            &root.join("sources").join(slug).join(&name),
+            rel(e.path()),
+            format!("<root>/sources/{slug}/{name}"),
+            || Ok(fs::read(e.path())?),
+        )?;
     }
     let known: Vec<String> = r.moved.iter().map(|(f, _)| f.clone()).collect();
     for e in walkdir::WalkDir::new(refs)

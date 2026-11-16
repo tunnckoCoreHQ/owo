@@ -102,10 +102,7 @@ fn templates(_: (), s: &mut Call) -> Result<Outcome> {
 }
 
 fn push_turns(checked: &SessionSync, r: SyncPushRequest, s: &mut Call) -> Result<Outcome> {
-    let text = match r.turns {
-        Some(t) => t,
-        None => s.input()?,
-    };
+    let text = r.turns.map_or_else(|| s.input(), Ok)?;
     let turns = parse_turns(&text)?;
     Ok(Outcome::Synced(
         checked.push(&r.session, &turns, &r.options)?,
@@ -443,7 +440,7 @@ pub enum Outcome {
     },
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Default, Serialize)]
 pub struct Envelope {
     pub ok: bool,
     pub data: Value,
@@ -458,9 +455,7 @@ impl Envelope {
         Self {
             ok,
             data,
-            warnings: vec![],
-            errors: vec![],
-            would_write: None,
+            ..Self::default()
         }
     }
 

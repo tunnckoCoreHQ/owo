@@ -87,14 +87,11 @@ fn says(fault: &Fault) -> String {
         Fault::NoRoot => format!("{fault}: pass --root or set OWO_ROOT"),
         Fault::NoIdentity(_) => format!("{fault}: pass -i <slug> or set OWO_IDENTITY"),
         Fault::NeedsTitle(kind) => format!("`owo add {}` needs a title", kind.name()),
-        Fault::KindNeeds { kind, field } => {
-            let value = if *field == "parent" {
-                "location"
-            } else {
-                field
-            };
-            format!("{} needs --{field} <{value}>", kind.name())
-        }
+        Fault::KindNeeds {
+            kind,
+            field: "parent",
+        } => format!("{} needs --parent <location>", kind.name()),
+        Fault::KindNeeds { kind, field } => format!("{} needs --{field} <{field}>", kind.name()),
         Fault::TemplateLacks {
             template,
             line,

@@ -169,9 +169,9 @@ pub fn list_identities(root: &Path) -> Vec<String> {
 }
 
 fn only_identity(root: &Path) -> Option<String> {
-    let slugs = list_identities(root);
+    let mut slugs = list_identities(root);
     if slugs.len() == 1 {
-        slugs.into_iter().next()
+        slugs.pop()
     } else {
         None
     }
