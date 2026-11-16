@@ -76,7 +76,7 @@ fn globals() -> [Arg; 5] {
             .value_name("ROOT")
             .global(true)
             .value_parser(value_parser!(PathBuf))
-            .help("Identities root (else OWO_ROOT, .owo.toml, XDG default)"),
+            .help("Root (else OWO_ROOT, .owo.toml, XDG default)"),
         Arg::new("identity")
             .short('i')
             .long("identity")

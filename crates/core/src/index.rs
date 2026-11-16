@@ -160,7 +160,7 @@ fn timeline(identity: &Identity) -> String {
 }
 
 fn work(identity: &Identity) -> String {
-    let mut lines = vec!["- [Profile](PROFILE.md)".to_string()];
+    let mut lines = vec!["- [Work Profile](PROFILE.md)".to_string()];
     for project in identity
         .entries
         .iter()

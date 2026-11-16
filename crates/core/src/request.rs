@@ -911,7 +911,7 @@ impl Request for PersonaChangeRequest {
     fn read(r: &mut Reader, b: Self) -> Self {
         Self {
             file: r.string(
-                Field::positional("file", "Soul file, for example SOUL.md").required(),
+                Field::positional("file", "Persona file, for example SOUL.md").required(),
                 b.file,
             ),
             change: r.string(
@@ -961,7 +961,7 @@ impl Request for PersonaChangelogRequest {
             file: r.text(
                 Field::positional(
                     "file",
-                    "Soul file, for example SOUL.md (default: every file)",
+                    "Persona file, for example SOUL.md (default: every file)",
                 ),
                 b.file,
             ),

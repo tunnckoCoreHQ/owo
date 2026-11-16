@@ -252,9 +252,15 @@ impl Ingest {
                 Ok(status) => Some(status.to_string()),
                 Err(e) => Some(e.to_string()),
             };
-            let pending = crate::sync::due(&root, None)
-                .ok()
-                .and_then(|runs| runs.into_iter().find(|r| r.prompt == prompt));
+            let pending = match crate::sync::due(&root, None) {
+                Ok(runs) => runs.into_iter().find(|r| r.prompt == prompt),
+                Err(e) => {
+                    owo.warn(&format!(
+                        "the ingest of {prompt} ended, but its run could not be checked: {e}"
+                    ));
+                    None
+                }
+            };
             match (pending, failed) {
                 (Some(run), failed) => owo.warn(&format!(
                     "the ingest of session {} {} and its run is still pending: {prompt}",
