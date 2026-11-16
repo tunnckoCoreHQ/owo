@@ -1,5 +1,5 @@
 use owo_core::{
-    current_state_text, day, join_links, Diagnostic, Hit, Kind, Level, Origin, Outcome,
+    current_state_text, day, join_wikilinks, Diagnostic, Hit, Kind, Level, Origin, Outcome,
     ReflectionDigest, SyncReport,
 };
 
@@ -50,9 +50,9 @@ fn origin(o: &Origin) -> String {
 }
 
 fn sync(s: &SyncReport) -> String {
-    match &s.source {
+    match &s.slice {
         Some(src) => format!(
-            "due {} {}-{}\nsource {src}\nprompt {}",
+            "due {} {}-{}\nslice {src}\nprompt {}",
             s.identity,
             s.from,
             s.until,
@@ -212,7 +212,7 @@ impl Text {
                     self.line(format!(
                         "- Project {}: last {last}, project notes {}",
                         p.slug,
-                        join_links(&p.notes)
+                        join_wikilinks(&p.notes)
                     ));
                 }
                 if s.reflection.memory_changed_outside_reflection {
@@ -231,7 +231,7 @@ impl Text {
                 if let Some(n) = s.added {
                     self.say(format!("added {n}"));
                 }
-                self.result_line_if(s.source.is_some(), sync(s));
+                self.result_line_if(s.slice.is_some(), sync(s));
             }
             Outcome::SyncDone { session, until, .. } => {
                 self.say(format!("session {session} synced until {until}"))
@@ -385,11 +385,11 @@ impl Text {
         }
         self.line(format!(
             "\n## Events in window\n\n{}",
-            join_links(&p.events)
+            join_wikilinks(&p.events)
         ));
         self.line(format!(
             "\n## Insights changed\n\n{}",
-            join_links(&p.insights)
+            join_wikilinks(&p.insights)
         ));
         let journal = if p.journal.is_empty() {
             "none".into()
@@ -399,8 +399,8 @@ impl Text {
         self.line(format!("\n## Journal in window\n\n{journal}"));
         self.line(format!(
             "\n## Open\n\n- Threads: {}\n- Conflicts: {}",
-            join_links(&p.open_threads),
-            join_links(&p.open_conflicts)
+            join_wikilinks(&p.open_threads),
+            join_wikilinks(&p.open_conflicts)
         ));
         if !p.recurring.is_empty() {
             self.line("\n## Recurring phrases\n");

@@ -212,10 +212,10 @@ fn check_entry_schema(e: &Entry, out: &mut Vec<Diagnostic>) {
         out.push(err(rel, "title is missing"));
     }
     for name in e.title.iter().chain(&e.aliases) {
-        if name.contains(crate::markdown::LINK_BREAKERS) {
+        if name.contains(crate::markdown::WIKILINK_BREAKERS) {
             out.push(err(
                 rel,
-                format!("{name:?} holds # | [ or ], which break a [[link]] to it"),
+                format!("{name:?} holds # | [ or ], which break a [[wikilink]] to it"),
             ));
         }
     }
@@ -335,8 +335,8 @@ fn persona_plain(id: &Identity, out: &mut Vec<Diagnostic>) {
 
 fn links(id: &Identity, out: &mut Vec<Diagnostic>) {
     for e in id.entries.iter().filter(|e| !e.is_generated()) {
-        for (line, link) in crate::find::file_links(e) {
-            let hits = id.resolve_link(&link.target);
+        for (line, link) in crate::find::file_wikilinks(e) {
+            let hits = id.resolve_wikilink(&link.target);
             let d = match hits.len() {
                 0 => err(&e.rel, format!("[[{}]] does not resolve", link.target)),
                 1 => {
@@ -460,19 +460,19 @@ fn journal(id: &Identity, out: &mut Vec<Diagnostic>) {
         .iter()
         .filter(|e| e.kind != Kind::Journal && !e.is_generated())
     {
-        for (line, link) in crate::find::raw_links(e) {
-            let hits = id.resolve_link(&link.target);
+        for (line, link) in crate::find::raw_wikilinks(e) {
+            let hits = id.resolve_wikilink(&link.target);
             if hits.iter().any(|&i| id.entries[i].kind == Kind::Journal) {
-                out.push(err(&e.rel, format!("[[{}]] links into life/journal/; journal links stay between journal entries", link.target)).at(line));
+                out.push(err(&e.rel, format!("[[{}]] links into life/journal/; journal wikilinks stay between journal entries", link.target)).at(line));
             }
         }
     }
 }
 
-fn link_hits(id: &Identity, value: &str) -> Vec<usize> {
-    markdown::links(value)
+fn wikilink_hits(id: &Identity, value: &str) -> Vec<usize> {
+    markdown::wikilinks(value)
         .iter()
-        .filter_map(|l| match id.resolve_link(&l.target)[..] {
+        .filter_map(|l| match id.resolve_wikilink(&l.target)[..] {
             [one] => Some(one),
             _ => None,
         })
@@ -485,16 +485,16 @@ fn supersede(id: &Identity, out: &mut Vec<Diagnostic>) {
         .iter()
         .filter(|e| e.kind == Kind::Conflict && e.field_str("state").as_deref() == Some("open"))
         .flat_map(|e| {
-            crate::find::raw_links(e)
+            crate::find::raw_wikilinks(e)
                 .into_iter()
-                .flat_map(|(_, l)| id.resolve_link(&l.target))
+                .flat_map(|(_, l)| id.resolve_wikilink(&l.target))
         })
         .collect();
     for (idx, e) in id.entries.iter().enumerate() {
         match e.field_str("status").as_deref() {
             Some("superseded") => {
                 let target = e.field_str("superseded_by").unwrap_or_default();
-                if link_hits(id, &target).is_empty() {
+                if wikilink_hits(id, &target).is_empty() {
                     out.push(err(
                         &e.rel,
                         "superseded entries need superseded_by: \"[[Replacement]]\" that resolves",
@@ -620,7 +620,7 @@ fn orphans(id: &Identity, out: &mut Vec<Diagnostic>) {
     out.extend(
         crate::find::orphans(id)
             .into_iter()
-            .map(|i| warn(&id.entries[i].rel, "zero inbound links")),
+            .map(|i| warn(&id.entries[i].rel, "zero inbound wikilinks")),
     );
 }
 
@@ -633,7 +633,7 @@ fn persona_evidence(id: &Identity, out: &mut Vec<Diagnostic>) {
                 items
                     .iter()
                     .filter_map(Json::as_str)
-                    .flat_map(|v| link_hits(id, v))
+                    .flat_map(|v| wikilink_hits(id, v))
                     .collect()
             })
             .unwrap_or_default();
@@ -644,7 +644,7 @@ fn persona_evidence(id: &Identity, out: &mut Vec<Diagnostic>) {
         if evidence.len() < 2 && !defining {
             out.push(warn(
                 "persona/state.json",
-                format!("changelog[{n}] needs two evidence links or one defining event"),
+                format!("changelog[{n}] needs two evidence wikilinks or one defining event"),
             ));
         }
     }
@@ -673,7 +673,7 @@ fn reflection_due(id: &Identity, out: &mut Vec<Diagnostic>) {
 
 fn wiki_links(id: &Identity, out: &mut Vec<Diagnostic>) {
     for e in id.entries.iter().filter(|e| !e.is_generated()) {
-        for (line, link) in crate::find::raw_links(e) {
+        for (line, link) in crate::find::raw_wikilinks(e) {
             let full = link
                 .section
                 .as_ref()

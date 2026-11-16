@@ -35,7 +35,7 @@ pub use context::{Context, Format as ContextFormat, Item as ContextItem};
 pub use create::Created;
 pub use error::{Error, ErrorKind, Fault, Result};
 pub use export::{CardSpec, SoulspecReport};
-pub use find::{Hit, LinkRef};
+pub use find::{Hit, WikilinkRef};
 pub use identity::{entry_types, Identity, Kind};
 pub use lint::Rule;
 pub use migrate::Report as MigrateReport;
@@ -56,7 +56,7 @@ pub use search::{Hit as SearchHit, Scope};
 pub use stamp::Report as StampReport;
 pub use state::{day, parse_day};
 pub use status::{
-    current_state_text, join_links, CurrentState, Link, ListedIdentity, ProjectState,
+    current_state_text, join_wikilinks, CurrentState, Link, ListedIdentity, ProjectState,
     ReflectionStatus,
 };
 pub use sync::{
@@ -117,8 +117,8 @@ pub struct Template {
 #[derive(Debug)]
 pub struct Links {
     pub path: String,
-    pub inbound: Vec<LinkRef>,
-    pub outbound: Vec<LinkRef>,
+    pub inbound: Vec<WikilinkRef>,
+    pub outbound: Vec<WikilinkRef>,
 }
 
 #[derive(Debug)]

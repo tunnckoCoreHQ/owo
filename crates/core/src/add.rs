@@ -38,8 +38,8 @@ pub fn add(id: &Identity, req: &Request, project: Option<&str>) -> Result<(Strin
         t => t,
     };
     for name in std::iter::once(title).chain(req.aliases.iter().map(String::as_str)) {
-        if name.contains(crate::markdown::LINK_BREAKERS) {
-            bail!("{name:?} holds # | [ or ], which break a [[link]] to it");
+        if name.contains(crate::markdown::WIKILINK_BREAKERS) {
+            bail!("{name:?} holds # | [ or ], which break a [[wikilink]] to it");
         }
     }
     let slug = slugify(title);

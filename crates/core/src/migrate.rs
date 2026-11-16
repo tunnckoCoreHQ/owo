@@ -94,7 +94,7 @@ fn take_sources(body: &str, slug: &str) -> (Vec<String>, Vec<String>, String) {
         let Some(item) = line.trim().strip_prefix("- ") else {
             continue;
         };
-        let found = crate::markdown::links(item);
+        let found = crate::markdown::wikilinks(item);
         links.extend(found.iter().map(|l| match &l.section {
             Some(s) => format!("[[{}#{s}]]", l.target),
             None => format!("[[{}]]", l.target),
@@ -549,9 +549,9 @@ fn fill(src: &Path, refs: &Path, root: &Path, slug: &str, manifest: &Value) -> R
     crate::index::write_as(&id, &id.dir)?;
     crate::stamp::run(&id, false)?;
     r.checklist = vec![
-        "Move MEMORY \"Moments\" into event links under \"Defining moments\".".into(),
+        "Move MEMORY \"Moments\" into event wikilinks under \"Defining moments\".".into(),
         "Move open promises and plans into life/threads/ (`owo add thread`).".into(),
-        "Replace repeated accounts and quotes in daily logs with event links (`owo lint --rule dupes`).".into(),
+        "Replace repeated accounts and quotes in daily logs with event wikilinks (`owo lint --rule dupes`).".into(),
         "Move exact personal identifiers into each character's `## Identifiers` (`owo lint --rule identifiers`).".into(),
         "Name account kinds in IDENTITY.md and keep handles in identity.json accounts.".into(),
         "Fill empty summaries, and link each room from its location overview.".into(),

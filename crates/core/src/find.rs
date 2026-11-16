@@ -60,7 +60,7 @@ fn identity_rel(id: &Identity, name: &str) -> Option<String> {
 pub fn resolve(id: &Identity, name: &str, kind: Option<Kind>) -> Resolution {
     let matches_kind = |i: &usize| kind.is_none_or(|k| id.entries[*i].kind == k);
     let hits: Vec<usize> = id
-        .resolve_link(identity_rel(id, name).as_deref().unwrap_or(name))
+        .resolve_wikilink(identity_rel(id, name).as_deref().unwrap_or(name))
         .into_iter()
         .filter(matches_kind)
         .collect();
@@ -132,22 +132,22 @@ pub fn show(id: &Identity, name: &str, section: Option<&str>) -> anyhow::Result<
 }
 
 #[derive(Debug, Serialize)]
-pub struct LinkRef {
+pub struct WikilinkRef {
     pub path: String,
     pub line: usize,
     pub text: String,
     pub target: String,
 }
 
-pub fn backlinks(id: &Identity, idx: usize) -> Vec<LinkRef> {
+pub fn backlinks(id: &Identity, idx: usize) -> Vec<WikilinkRef> {
     let mut out = vec![];
     for (src, e) in id.entries.iter().enumerate() {
         if src == idx || e.is_generated() {
             continue;
         }
-        for (line, link) in file_links(e) {
-            if id.resolve_link(&link.target).contains(&idx) {
-                out.push(LinkRef {
+        for (line, link) in file_wikilinks(e) {
+            if id.resolve_wikilink(&link.target).contains(&idx) {
+                out.push(WikilinkRef {
                     path: e.rel.clone(),
                     line,
                     text: line_text(e, line),
@@ -159,17 +159,17 @@ pub fn backlinks(id: &Identity, idx: usize) -> Vec<LinkRef> {
     out
 }
 
-pub fn outlinks(id: &Identity, idx: usize) -> Vec<LinkRef> {
+pub fn outlinks(id: &Identity, idx: usize) -> Vec<WikilinkRef> {
     let e = &id.entries[idx];
-    file_links(e)
+    file_wikilinks(e)
         .into_iter()
         .map(|(line, link)| {
             let path = id
-                .resolve_link(&link.target)
+                .resolve_wikilink(&link.target)
                 .first()
                 .map(|i| id.entries[*i].rel.clone())
                 .unwrap_or_default();
-            LinkRef {
+            WikilinkRef {
                 path,
                 line,
                 text: line_text(e, line),
@@ -179,20 +179,20 @@ pub fn outlinks(id: &Identity, idx: usize) -> Vec<LinkRef> {
         .collect()
 }
 
-pub fn file_links(e: &Entry) -> Vec<(usize, markdown::Link)> {
-    let mut out = raw_links(e);
+pub fn file_wikilinks(e: &Entry) -> Vec<(usize, markdown::Wikilink)> {
+    let mut out = raw_wikilinks(e);
     out.retain(|(_, l)| !l.target.is_empty() && !l.target.starts_with("wiki:"));
     out
 }
 
-pub fn raw_links(e: &Entry) -> Vec<(usize, markdown::Link)> {
+pub fn raw_wikilinks(e: &Entry) -> Vec<(usize, markdown::Wikilink)> {
     let split = markdown::split(&e.text);
     let mut out = vec![];
     if let Some(fm) = split.frontmatter {
-        out.extend(markdown::links(fm).into_iter().map(|l| (l.line + 2, l)));
+        out.extend(markdown::wikilinks(fm).into_iter().map(|l| (l.line + 2, l)));
     }
     out.extend(
-        markdown::links(split.body)
+        markdown::wikilinks(split.body)
             .into_iter()
             .map(|l| (l.line + split.body_line, l)),
     );
@@ -216,8 +216,8 @@ pub fn orphans(id: &Identity) -> Vec<usize> {
         .enumerate()
         .filter(|(_, e)| !e.is_generated())
     {
-        for (_, link) in file_links(e) {
-            for hit in id.resolve_link(&link.target) {
+        for (_, link) in file_wikilinks(e) {
+            for hit in id.resolve_wikilink(&link.target) {
                 if hit != src {
                     inbound[hit] += 1;
                 }

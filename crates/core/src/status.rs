@@ -196,7 +196,7 @@ pub fn compute(id: &Identity, days: i64, daily_logs: usize) -> CurrentState {
     }
 }
 
-pub fn join_links(links: &[Link]) -> String {
+pub fn join_wikilinks(links: &[Link]) -> String {
     let wiki = |l: &Link| match &l.date {
         Some(d) if !l.title.starts_with(d.as_str()) => format!("[[{}]] ({d})", l.title),
         _ => format!("[[{}]]", l.title),
@@ -226,14 +226,20 @@ pub fn current_state_text(s: &CurrentState, project: Option<&str>) -> String {
     }
     lines.push(format!(
         "- Recent days: {}",
-        join_links(&s.recent_daily_logs)
+        join_wikilinks(&s.recent_daily_logs)
     ));
-    lines.push(format!("- Recent events: {}", join_links(&s.recent_events)));
-    lines.push(format!("- Open threads: {}", join_links(&s.open_threads)));
+    lines.push(format!(
+        "- Recent events: {}",
+        join_wikilinks(&s.recent_events)
+    ));
+    lines.push(format!(
+        "- Open threads: {}",
+        join_wikilinks(&s.open_threads)
+    ));
     if !s.open_conflicts.is_empty() {
         lines.push(format!(
             "- Open conflicts: {}",
-            join_links(&s.open_conflicts)
+            join_wikilinks(&s.open_conflicts)
         ));
     }
     let r = &s.reflection;

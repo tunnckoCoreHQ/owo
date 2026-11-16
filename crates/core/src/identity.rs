@@ -353,7 +353,7 @@ impl Identity {
             manifest,
             manifest_error,
             state,
-            keys: Self::link_keys(&entries),
+            keys: Self::wikilink_keys(&entries),
             home: None,
             cwd: PathBuf::new(),
             project: None,
@@ -373,7 +373,7 @@ impl Identity {
         self.entries.iter().find(|e| e.rel == rel)
     }
 
-    fn link_keys(entries: &[Entry]) -> BTreeMap<String, Vec<usize>> {
+    fn wikilink_keys(entries: &[Entry]) -> BTreeMap<String, Vec<usize>> {
         let mut keys: BTreeMap<String, Vec<usize>> = BTreeMap::new();
         for (idx, e) in entries.iter().enumerate() {
             if e.is_generated() {
@@ -401,7 +401,7 @@ impl Identity {
         keys
     }
 
-    pub fn resolve_link(&self, target: &str) -> Vec<usize> {
+    pub fn resolve_wikilink(&self, target: &str) -> Vec<usize> {
         let raw = target.trim().to_lowercase();
         let raw = raw.strip_suffix(".md").unwrap_or(&raw).to_string();
         if let Some(hit) = self.keys.get(&raw) {

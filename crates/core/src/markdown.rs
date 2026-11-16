@@ -111,26 +111,26 @@ pub fn section_text<'a>(body: &'a str, name: &str) -> Option<(&'a str, String)> 
 }
 
 #[derive(Debug, Clone)]
-pub struct Link {
+pub struct Wikilink {
     pub target: String,
     pub section: Option<String>,
     pub line: usize,
 }
 
-pub const LINK_BREAKERS: &[char] = &['#', '|', '[', ']'];
+pub const WIKILINK_BREAKERS: &[char] = &['#', '|', '[', ']'];
 
-fn link_re() -> &'static Regex {
+fn wikilink_re() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
     RE.get_or_init(|| {
         Regex::new(r"\[\[([^\[\]|#]*)(?:#([^\[\]|]*))?(?:\|[^\[\]]*)?\]\]").expect("valid regex")
     })
 }
 
-pub fn links(text: &str) -> Vec<Link> {
+pub fn wikilinks(text: &str) -> Vec<Wikilink> {
     let mut out = vec![];
     for (i, line, _) in unfenced(text).filter(|(_, _, open)| *open) {
-        for cap in link_re().captures_iter(&strip_inline_code(line)) {
-            out.push(Link {
+        for cap in wikilink_re().captures_iter(&strip_inline_code(line)) {
+            out.push(Wikilink {
                 target: cap[1].trim().to_string(),
                 section: cap.get(2).map(|m| m.as_str().trim().to_string()),
                 line: i,
@@ -179,14 +179,14 @@ mod tests {
     }
 
     #[test]
-    fn finds_links_outside_code() {
+    fn finds_wikilinks_outside_code() {
         let text = "See [[The Café|café]] and [[Joe#Identifiers]].\n`[[Not A Link]]`\n```\n[[Fenced]]\n```\n";
-        let found = links(text);
+        let found = wikilinks(text);
         assert_eq!(found.len(), 2);
         assert_eq!(found[0].target, "The Café");
         assert_eq!(found[1].target, "Joe");
         let text = "A ` typo, then [[Ghost]].\n~~~\n[[Fenced]]\n```\n~~~\n[[After]]\n";
-        let found: Vec<String> = links(text).into_iter().map(|l| l.target).collect();
+        let found: Vec<String> = wikilinks(text).into_iter().map(|l| l.target).collect();
         assert_eq!(found, ["Ghost", "After"]);
     }
 

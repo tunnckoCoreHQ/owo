@@ -116,11 +116,11 @@ fn timeline(identity: &Identity) -> String {
         .iter()
         .map(|ev| {
             let value = ev.field_str("era")?;
-            let target = crate::markdown::links(&value)
+            let target = crate::markdown::wikilinks(&value)
                 .first()
                 .map(|l| l.target.clone())
                 .unwrap_or(value);
-            match identity.resolve_link(&target)[..] {
+            match identity.resolve_wikilink(&target)[..] {
                 [i] if identity.entries[i].kind == Kind::Era => {
                     Some(identity.entries[i].rel.clone())
                 }

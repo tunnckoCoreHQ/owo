@@ -685,7 +685,7 @@ impl Request for ResolveRequest {
     fn read(r: &mut Reader, b: Self) -> Self {
         Self {
             name: r.words(
-                Field::new("name", "Entry name, alias, path or [[link]]").required(),
+                Field::new("name", "Entry name, alias, path or [[wikilink]]").required(),
                 b.name,
             ),
             kind: r.named(
@@ -708,7 +708,7 @@ impl Request for ShowRequest {
             name: r.words(
                 Field::new(
                     "name",
-                    "Entry name, alias, path, [[link]] or wiki:<project>:<path>",
+                    "Entry name, alias, path, [[wikilink]] or wiki:<project>:<path>",
                 ),
                 b.name,
             ),
@@ -737,16 +737,16 @@ impl Request for LinksRequest {
             name: r.words(
                 Field::new(
                     "name",
-                    "Entry name, alias, path or [[link]] (not needed with orphans)",
+                    "Entry name, alias, path or [[wikilink]] (not needed with orphans)",
                 ),
                 b.name,
             ),
             inbound: r.flag(
-                Field::new("in", "Only links pointing at the entry"),
+                Field::new("in", "Only wikilinks pointing at the entry"),
                 b.inbound,
             ),
             outbound: r.flag(
-                Field::new("out", "Only links going out of the entry"),
+                Field::new("out", "Only wikilinks going out of the entry"),
                 b.outbound,
             ),
             orphans: r.flag(
@@ -919,7 +919,10 @@ impl Request for PersonaChangeRequest {
                 b.change,
             ),
             evidence: r.list(
-                Field::new("evidence", "Evidence entry name or [[link]] (repeatable)"),
+                Field::new(
+                    "evidence",
+                    "Evidence entry name or [[wikilink]] (repeatable)",
+                ),
                 b.evidence,
             ),
         }

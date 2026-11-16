@@ -262,7 +262,7 @@ pub fn persona_change(
         }
     }
     let warning = (links.len() < 2 && !defining)
-        .then(|| "persona changes need two evidence links or one defining event".to_string());
+        .then(|| "persona changes need two evidence wikilinks or one defining event".to_string());
     let mut doc = id
         .read_object("persona/state.json")?
         .ok_or(crate::Fault::NoPersonaState)?;

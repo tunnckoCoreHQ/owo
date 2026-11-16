@@ -200,7 +200,7 @@ pub fn operations() -> Vec<Operation> {
         ),
         op::<ResolveRequest>(
             &["resolve"],
-            "Resolve a name to an entry path the way links do",
+            "Resolve a name to an entry path the way wikilinks do",
             |r, s| {
                 let found = s.identity()?.resolve(&r)?;
                 Ok(Outcome::Resolve {

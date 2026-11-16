@@ -8,7 +8,7 @@ const GROUPS: &[(&str, &str)] = &[
     ("export", "Export the identity to another format"),
     (
         "sync",
-        "Session sync: slice a host transcript into sources/ for ingest",
+        "Session sync: slice a host transcript into raw material in sources/ for ingest",
     ),
     ("migrate", "Migrate an identity from an older layout"),
 ];
@@ -152,7 +152,7 @@ fn help(op: &Operation, f: &Field) -> &'static str {
         (["index"], "check") => "Report stale generated files and exit 1 instead of writing",
         (["write"], "content") => "The file text; read from stdin when left out",
         (["templates", "show"], "name") => "Template name from `owo templates list`",
-        (["links"], "name") => "Entry name, alias, path or [[link]] (not needed with --orphans)",
+        (["links"], "name") => "Entry name, alias, path or [[wikilink]] (not needed with --orphans)",
         (["export", "persona-card"], "png") => "Embed the card in this PNG avatar (needs --out)",
         (["sync", "push"], "turns") => "JSON array of {\"id\", \"role\", \"text\"}; id is the turn id, the host's id for that message, and a stored turn id is skipped (default: stdin)",
         _ => f.help,

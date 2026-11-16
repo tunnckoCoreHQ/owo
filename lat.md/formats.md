@@ -7,7 +7,7 @@ The on-disk formats the code reads and writes.
 The root holds identity folders and shared working data. It works well as a Git repository; `owo changes` reads its history.
 
 - `<slug>/`: one identity per folder.
-- `sources/<slug>/`: raw source material (transcripts, notes, slices), outside every identity. Entries cite files here.
+- `sources/<slug>/`: raw material (transcripts, notes, slices), outside every identity. Entries cite files here.
 - `.owo/sessions/`: sync cursors (`<session>.json`), ingest prompts, locks and turns files (`<session>.turns.jsonl`).
 - `.templates/`: optional template overrides; see [[formats#Templates]].
 - `owo.toml`: the optional global config; see [[formats#Config resolution]].
@@ -30,7 +30,7 @@ Persona files are plain Markdown with no frontmatter; their stamps live in `pers
 - `SOUL.md`: first person. Beliefs, wants, emotional logic, boundaries.
 - `VOICE.md`: how the identity talks and writes, per medium.
 - `LOOK.md`: durable appearance, style, signature moves.
-- `MEMORY.md`: compiled long-term memory with sections Patterns, Defining moments, Insights and Hints. Defining moments and insights are links; hints point into `life/` and `work/`. Only a reflection writes it.
+- `MEMORY.md`: compiled long-term memory with sections Patterns, Defining moments, Insights and Hints. Defining moments and insights are wikilinks; hints point into `life/` and `work/`. Only a reflection writes it.
 - `examples/`: `good.md`, `bad.md`, and `greetings.md` with one `##` per greeting. Exports read them.
 
 ## Slugs and paths
@@ -39,19 +39,19 @@ One slug function turns a name into a path segment: transliterate to ASCII, lowe
 
 `Jay's Penthouse` becomes `jays-penthouse`. On a collision, add a short disambiguator to the slug and keep the short name as an alias. Daily logs are `YYYY-MM-DD.md`; journal, writing and project notes are `YYYY-MM-DD_<slug>.md`. Entry file names and project folder names must be slugs (the `schema` rule). A name gives a slug and a slug gives a path, so agents can predict a path and fall back to `owo resolve`.
 
-## Links
+## Wikilinks
 
-Links are Obsidian-style wiki-links: `[[Title]]`, `[[Title|shown text]]`, `[[Title#Section]]`. Resolution is in [[architecture#Link resolution]].
+Wikilinks are Obsidian-style links: `[[Title]]`, `[[Title|shown text]]`, `[[Title#Section]]`. Resolution is in [[architecture#Wikilink resolution]].
 
-Links inside inline code or fenced code do not count. A fence opens with three or more backticks or tildes and closes on a run of the same character at least as long. A backtick with no closing backtick on its line is plain text.
+Wikilinks inside inline code or fenced code do not count. A fence opens with three or more backticks or tildes and closes on a run of the same character at least as long. A backtick with no closing backtick on its line is plain text.
 
-Persona files link by name: `[[IDENTITY]]`, `[[SOUL]]`, `[[VOICE]]`, `[[LOOK]]`, `[[MEMORY]]`. Links into a project wiki are `[[wiki:<project>:<path>#<Section>]]`, resolved against the project wiki path in [[cli#Context]].
+Persona files link by name: `[[IDENTITY]]`, `[[SOUL]]`, `[[VOICE]]`, `[[LOOK]]`, `[[MEMORY]]`. Wikilinks into a project wiki are `[[wiki:<project>:<path>#<Section>]]`, resolved against the project wiki path in [[cli#Context]].
 
 ## Entry frontmatter
 
 Every life and work entry has YAML frontmatter with `type`, `title`, `aliases`, `summary`, `status`, `created`, `updated`, `sources`. Lists are block lists (`  - item`); an empty list is `[]`. A title or alias holds no `#`, `|`, `[` or `]`, because those break a `[[link]]` to it; `owo add` refuses them and the `schema` rule reports them.
 
-`summary` is one line; indexes, search, the current state and persona card lorebooks use it. Citations live only in frontmatter: `sources` (paths relative to `sources/`, optional `#L<a>-L<b>`, or plain text), insight `evidence` and thread `from` are links. Bodies have no Sources, Evidence or From section.
+`summary` is one line; indexes, search, the current state and persona card lorebooks use it. Citations live only in frontmatter: `sources` (paths relative to `sources/`, optional `#L<a>-L<b>`, or plain text), insight `evidence` and thread `from` are wikilinks. Bodies have no Sources, Evidence or From section.
 
 `type` must match the folder. `status` is `canon`, `disputed` (an open conflict links the entry) or `superseded` (with `superseded_by`). Dates are `YYYY-MM-DD` and are story time: the dates inside the identity's life, not chat timestamps. Dated types (daily-log, journal, writing, project-note) carry `date`, and the file name must start with it. Events need `date`; threads need `state: open|closed`; conflicts need `state: open|resolved`; location details need `parent`; project notes need `project` equal to their project folder.
 

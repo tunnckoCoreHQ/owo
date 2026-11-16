@@ -60,7 +60,7 @@ Files count as changed when their stamp is newer than `last_reflected`. Daily lo
 
 ## Lint reuses find
 
-Lint's link rules and orphan check call `find::raw_links` and `find::orphans`, so `owo links --orphans` and the `orphans` rule always agree.
+Lint's wikilink rules and orphan check call `find::raw_wikilinks` and `find::orphans`, so `owo links --orphans` and the `orphans` rule always agree.
 
 ## Skills live in the repo
 

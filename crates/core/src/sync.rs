@@ -34,7 +34,7 @@ pub struct SyncCursor {
 pub struct PendingRun {
     pub from: usize,
     pub until: usize,
-    pub source: String,
+    pub slice: String,
     pub prompt: String,
 }
 
@@ -135,7 +135,7 @@ pub struct SyncReport {
     pub from: usize,
     pub until: usize,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub source: Option<String>,
+    pub slice: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub prompt: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -143,7 +143,7 @@ pub struct SyncReport {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub added: Option<usize>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub source_text: Option<String>,
+    pub slice_text: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub prompt_text: Option<String>,
 }
@@ -346,8 +346,8 @@ pub fn push(req: &StartRequest, turns: &[Turn]) -> Result<SyncReport> {
         .and(writes)
         .commit()?;
     out.added = Some(added);
-    if let (Some(source), Some(prompt)) = (&out.source, &out.prompt) {
-        out.source_text = Some(crate::write::read_to_string(&req.root.join(source))?);
+    if let (Some(slice), Some(prompt)) = (&out.slice, &out.prompt) {
+        out.slice_text = Some(crate::write::read_to_string(&req.root.join(slice))?);
         out.prompt_text = Some(crate::write::read_to_string(&req.root.join(prompt))?);
     }
     Ok(out)
@@ -409,7 +409,7 @@ fn run(
     let mut writes = Writes::default();
     if due {
         let date = crate::state::now()[..10].to_string();
-        let source = format!(
+        let slice = format!(
             "sources/{}/{date}_{}_{from}-{until}.md",
             req.slug, req.session
         );
@@ -421,8 +421,8 @@ fn run(
                     .unwrap_or_default();
             body.push_str(&format!("\n## {} {}{id}\n\n{}\n", from + i, m.role, m.text));
         }
-        let slice = req.root.join(&source);
-        writes = writes.file(&slice, &slice, body);
+        let file = req.root.join(&slice);
+        writes = writes.file(&file, &file, body);
         let prompt = format!(".owo/sessions/{}.prompt.md", req.session);
         let project = req
             .project
@@ -431,20 +431,19 @@ fn run(
         let root = fs::canonicalize(req.root).unwrap_or_else(|_| req.root.to_path_buf());
         let quoted = format!("'{}'", root.display().to_string().replace('\'', "'\\''"));
         let text = format!(
-            "Use owo ingest (the ingest path of the owo skill) for identity `{slug}`{proj}.\n\nSource: `{source}` (relative to the identities root `{root}`).{earlier}\n\n1. `{owo} context{project}` and `{owo} state`.\n2. Route each durable fact in the source to its home; add `{cite}#L<a>-L<b>` to each entry's frontmatter `sources`.\n3. Run the checkpoint: `{owo} stamp && {owo} index && {owo} lint --changed`.\n4. Report changed paths or \"no changes\".\n5. When the checkpoint passes, finish the run with `owo --root {quoted} sync done --session {session} --until {until}`.\n",
+            "Use owo ingest (the ingest path of the owo skill) for identity `{slug}`{proj}.\n\nRaw material: the slice `{slice}` (relative to the identities root `{root}`).{earlier}\n\n1. `{owo} context{project}` and `{owo} state`.\n2. Route each durable fact in the slice to its home; add `{cite}#L<a>-L<b>` to each entry's frontmatter `sources`.\n3. Run the checkpoint: `{owo} stamp && {owo} index && {owo} lint --changed`.\n4. Report changed paths or \"no changes\".\n5. When the checkpoint passes, finish the run with `owo --root {quoted} sync done --session {session} --until {until}`.\n",
             slug = req.slug,
             earlier = if done == 0 { String::new() } else { format!(" Messages before {done} were ingested in an earlier run; the first part is overlap for context.") },
             root = root.display(),
             owo = format!("owo --root {quoted} -i {}", req.slug),
             proj = req.project.map(|p| format!(" on project `{p}`")).unwrap_or_default(),
-            cite = source.trim_start_matches("sources/"),
+            cite = slice.trim_start_matches("sources/"),
             session = req.session,
         );
         let file = req.root.join(&prompt);
         writes = writes.file(&file, &file, text);
-        doc["pending"] =
-            json!({ "from": from, "until": until, "source": source, "prompt": prompt });
-        out.source = Some(source);
+        doc["pending"] = json!({ "from": from, "until": until, "slice": slice, "prompt": prompt });
+        out.slice = Some(slice);
         out.prompt = Some(prompt);
     }
     let path = cursor_path(req.root, req.session);
@@ -479,7 +478,7 @@ pub fn due(root: &Path, slug: Option<&str>) -> Result<Vec<PendingSession>> {
         let cursor = SyncCursor::deserialize(&doc)
             .with_context(|| format!("{} does not parse; fix it by hand", path.display()))?;
         let of_identity =
-            |p: &PendingRun| prefix.as_ref().is_none_or(|pre| p.source.starts_with(pre));
+            |p: &PendingRun| prefix.as_ref().is_none_or(|pre| p.slice.starts_with(pre));
         if let Some(p) = cursor.pending.filter(of_identity) {
             out.push(PendingSession {
                 session: cursor.session,
