@@ -208,7 +208,7 @@ fn write_side_calls_change_the_identity() {
         date: None,
         parent: None,
         aliases: vec![],
-        kb: None,
+        wiki: None,
     };
     let (path, created) = id.add(&req).unwrap();
     assert_eq!(path, "life/threads/find-the-glaze-recipe.md");

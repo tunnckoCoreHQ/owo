@@ -531,7 +531,7 @@ pub struct AddRequest {
     pub date: Option<NaiveDate>,
     pub parent: Option<String>,
     pub aliases: Vec<String>,
-    pub kb: Option<String>,
+    pub wiki: Option<String>,
 }
 
 impl Default for AddRequest {
@@ -542,7 +542,7 @@ impl Default for AddRequest {
             date: None,
             parent: None,
             aliases: vec![],
-            kb: None,
+            wiki: None,
         }
     }
 }
@@ -579,12 +579,12 @@ impl Request for AddRequest {
                 Field::new("alias", "Alias (repeatable)").value_name("ALIASES"),
                 b.aliases,
             ),
-            kb: r.text(
+            wiki: r.text(
                 Field::new(
-                    "kb",
-                    "KB path for a project, relative to the identity folder",
+                    "wiki",
+                    "Project wiki path of a project readme, relative to the identity folder",
                 ),
-                b.kb,
+                b.wiki,
             ),
         }
     }
@@ -708,7 +708,7 @@ impl Request for ShowRequest {
             name: r.words(
                 Field::new(
                     "name",
-                    "Entry name, alias, path, [[link]] or kb:<project>:<path>",
+                    "Entry name, alias, path, [[link]] or wiki:<project>:<path>",
                 ),
                 b.name,
             ),

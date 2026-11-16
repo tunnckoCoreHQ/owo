@@ -14,4 +14,4 @@ sources: []
 # Idempotency keys
 
 Reviewed [[Mina Okafor]]'s retry change on [[Ledger API]]. The retry is safe only with an idempotency key per transfer. She added it the same day, with a test that replays a request twice.
-Background: [[kb:ledger-api:lat.md#Retries]].
+Background: [[wiki:ledger-api:lat.md#Retries]].

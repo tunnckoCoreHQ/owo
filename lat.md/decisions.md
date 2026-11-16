@@ -30,9 +30,9 @@ Templates are compiled in with `include_str!` so the binary works with no instal
 
 Title and aliases count three times, summary twice, body once. A query equal to a title or alias ranks that entry first. Each hit reports the body line with the most query terms (top-level headings skipped), else the best frontmatter line. Tantivy fits if identities grow past a few thousand files.
 
-## KB pointer is always emitted
+## Project wiki path is always emitted
 
-The project KB is a pointer for the agent to follow. `owo context` prints it when the path is missing too, with a warning, so a misconfigured path shows up at load time.
+The project wiki path is for the agent to follow. `owo context` prints it when the path is missing too, with a warning, so a misconfigured path shows up at load time.
 
 ## Persona prints persona files without the load set
 

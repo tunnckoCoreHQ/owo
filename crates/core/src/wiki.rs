@@ -6,7 +6,7 @@ use std::path::{Component, Path, PathBuf};
 pub fn root(id: &Identity, project: &str) -> Option<PathBuf> {
     let raw = id
         .project(project)
-        .and_then(|e| e.field_str("kb"))
+        .and_then(|e| e.field_str("wiki"))
         .filter(|s| !s.is_empty())?;
     let p = crate::config::expand_home(&raw, id.home.as_deref());
     Some(if p.is_absolute() { p } else { id.dir.join(p) })
@@ -27,18 +27,18 @@ fn normalize(p: &Path) -> PathBuf {
 }
 
 #[derive(Debug, Serialize)]
-pub struct Kb {
+pub struct WikiPath {
     pub path: String,
     pub exists: bool,
     pub entry: Option<String>,
 }
 
-pub fn pointer(id: &Identity, p: &str) -> (Option<Kb>, Option<String>) {
+pub fn path(id: &Identity, p: &str) -> (Option<WikiPath>, Option<String>) {
     let Some(path) = root(id, p) else {
         return (
             None,
             Some(format!(
-                "project {p} has no KB path (set kb in work/projects/{p}/README.md)"
+                "project {p} has no project wiki path (set wiki in work/projects/{p}/README.md)"
             )),
         );
     };
@@ -53,13 +53,13 @@ pub fn pointer(id: &Identity, p: &str) -> (Option<Kb>, Option<String>) {
             .find(|f| f.is_file())
             .map(|f| f.display().to_string())
     };
-    let warning = (!exists).then(|| format!("project KB not found at {}", path.display()));
-    let kb = Kb {
+    let warning = (!exists).then(|| format!("project wiki not found at {}", path.display()));
+    let wiki = WikiPath {
         path: path.display().to_string(),
         exists,
         entry,
     };
-    (Some(kb), warning)
+    (Some(wiki), warning)
 }
 
 #[derive(Debug)]
@@ -72,10 +72,10 @@ pub struct Link {
 }
 
 pub fn link(id: &Identity, target: &str) -> Option<Result<Link, String>> {
-    let rest = target.strip_prefix("kb:")?;
+    let rest = target.strip_prefix("wiki:")?;
     let Some((project, path)) = rest.split_once(':') else {
         return Some(Err(format!(
-            "[[{target}]] must be kb:<project>:<path>[#<Section>]"
+            "[[{target}]] must be wiki:<project>:<path>[#<Section>]"
         )));
     };
     let (path, section) = match path.split_once('#') {
@@ -89,7 +89,7 @@ pub fn link(id: &Identity, target: &str) -> Option<Result<Link, String>> {
         )
     }) {
         return Some(Err(format!(
-            "[[{target}]]: the path must stay inside the KB (no `..` or absolute path)"
+            "[[{target}]]: the path must stay inside the project wiki (no `..` or absolute path)"
         )));
     }
     if id.project(project).is_none() {
@@ -102,13 +102,13 @@ pub fn link(id: &Identity, target: &str) -> Option<Result<Link, String>> {
         section,
         section_exists: false,
     };
-    let Some(kb) = root(id, project) else {
+    let Some(wiki) = root(id, project) else {
         return Some(Ok(out));
     };
-    let base = if !kb.is_dir() && kb.extension().is_some_and(|x| x == "md") {
-        kb.parent().map(Path::to_path_buf).unwrap_or(kb.clone())
+    let base = if !wiki.is_dir() && wiki.extension().is_some_and(|x| x == "md") {
+        wiki.parent().map(Path::to_path_buf).unwrap_or(wiki.clone())
     } else {
-        kb.clone()
+        wiki.clone()
     };
     out.root_exists = base.is_dir();
     let mut file = base.join(path);
@@ -136,8 +136,8 @@ pub fn show(
     Some(link.map_err(anyhow::Error::msg).and_then(|k| {
         let file = k.file.clone().filter(|_| k.file_exists).ok_or_else(|| {
             anyhow::anyhow!(
-                "KB file not found: {}",
-                k.file.unwrap_or_else(|| "(no KB path)".into())
+                "project wiki file not found: {}",
+                k.file.unwrap_or_else(|| "(no project wiki path)".into())
             )
         })?;
         let text = std::fs::read_to_string(&file)?;

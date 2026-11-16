@@ -88,7 +88,7 @@ fn resolve_without_a_name_is_a_usage_error() {
 }
 
 #[test]
-fn context_with_project_points_at_missing_kb() {
+fn context_with_project_points_at_missing_wiki() {
     let v = json(owo_as(&examples(), "reviewer").args([
         "--project",
         "ledger-api",
@@ -112,12 +112,12 @@ fn context_with_project_points_at_missing_kb() {
     );
     assert!(paths.contains(&"work/PROFILE.md"));
     assert!(paths.contains(&"work/projects/ledger-api/notes/2026-10-26_rollback-postmortem.md"));
-    assert!(v["data"]["kb"]["path"]
+    assert!(v["data"]["wiki"]["path"]
         .as_str()
         .unwrap()
-        .ends_with("examples/kb/ledger-api/lat.md"));
-    assert_eq!(v["data"]["kb"]["exists"], false);
-    assert!(v["warnings"].to_string().contains("KB not found"));
+        .ends_with("examples/wiki/ledger-api/lat.md"));
+    assert_eq!(v["data"]["wiki"]["exists"], false);
+    assert!(v["warnings"].to_string().contains("project wiki not found"));
     let now = v["data"]["now"].as_str().unwrap();
     assert!(now.contains("[[Weekly hour]] (2026-11-03)"), "{now}");
     assert!(now.contains("Open threads: [[Flaky Cache Test]]"), "{now}");
@@ -526,18 +526,18 @@ fn card_greetings_and_lore_content() {
 }
 
 #[test]
-fn kb_links_lint_and_show() {
+fn wiki_links_lint_and_show() {
     let tmp = copy_example("reviewer");
-    let lint = |t: &TempDir| json(owo(t.path()).args(["-i", "reviewer", "lint", "--rule", "kb"]));
+    let lint = |t: &TempDir| json(owo(t.path()).args(["-i", "reviewer", "lint", "--rule", "wiki"]));
     assert_eq!(
         lint(&tmp)["warnings"].as_array().unwrap().len(),
         0,
-        "missing KB is skipped"
+        "a missing project wiki is skipped"
     );
-    let kb = tmp.path().join("kb/ledger-api");
-    fs::create_dir_all(&kb).unwrap();
+    let wiki = tmp.path().join("wiki/ledger-api");
+    fs::create_dir_all(&wiki).unwrap();
     fs::write(
-        kb.join("lat.md"),
+        wiki.join("lat.md"),
         "# Ledger\n\n## Retries\n\nRetries carry an idempotency key.\n\n## Schema\n\nx\n",
     )
     .unwrap();
@@ -548,14 +548,14 @@ fn kb_links_lint_and_show() {
     let text = fs::read_to_string(&note).unwrap();
     fs::write(
         &note,
-        format!("{text}See [[kb:ledger-api:lat.md#Nope]] and [[kb:nope:x.md]].\n"),
+        format!("{text}See [[wiki:ledger-api:lat.md#Nope]] and [[wiki:nope:x.md]].\n"),
     )
     .unwrap();
     let v = lint(&tmp);
     assert_eq!(v["warnings"].as_array().unwrap().len(), 1, "{v}");
     assert_eq!(v["errors"].as_array().unwrap().len(), 1, "{v}");
     let out = owo(tmp.path())
-        .args(["-i", "reviewer", "show", "kb:ledger-api:lat.md#Retries"])
+        .args(["-i", "reviewer", "show", "wiki:ledger-api:lat.md#Retries"])
         .output()
         .unwrap();
     let shown = String::from_utf8_lossy(&out.stdout);
@@ -580,7 +580,7 @@ fn export_skill_wrapper() {
 }
 
 #[test]
-fn flags_list_search_state_add_kb() {
+fn flags_list_search_state_add_wiki() {
     let root = examples();
     let v = json(owo(&root).arg("list"));
     let rows = v["data"]["identities"].as_array().unwrap();
@@ -650,8 +650,8 @@ fn flags_list_search_state_add_kb() {
         "add",
         "project-readme",
         "Mural",
-        "--kb",
-        "../kb/mural",
+        "--wiki",
+        "../wiki/mural",
     ]));
     let path = tmp
         .path()
@@ -659,7 +659,7 @@ fn flags_list_search_state_add_kb() {
         .join(v["data"]["path"].as_str().unwrap());
     assert!(fs::read_to_string(path)
         .unwrap()
-        .contains("kb: \"../kb/mural\""));
+        .contains("wiki: \"../wiki/mural\""));
 }
 
 fn chunks(png: &[u8]) -> Vec<(String, Vec<u8>)> {
@@ -763,10 +763,10 @@ fn section_links_are_checked() {
 }
 
 #[test]
-fn kb_path_expands_home() {
+fn wiki_path_expands_home() {
     let tmp = copy_example("nicole");
     let home = tmp.path().join("home");
-    fs::create_dir_all(home.join("kb/mural")).unwrap();
+    fs::create_dir_all(home.join("wiki/mural")).unwrap();
     owo(tmp.path())
         .args([
             "-i",
@@ -774,8 +774,8 @@ fn kb_path_expands_home() {
             "add",
             "project-readme",
             "Mural",
-            "--kb",
-            "~/kb/mural",
+            "--wiki",
+            "~/wiki/mural",
         ])
         .assert()
         .success();
@@ -786,7 +786,7 @@ fn kb_path_expands_home() {
         "mural",
         "context",
     ]));
-    assert_eq!(v["data"]["kb"]["exists"], true, "{v}");
+    assert_eq!(v["data"]["wiki"]["exists"], true, "{v}");
 }
 
 #[test]

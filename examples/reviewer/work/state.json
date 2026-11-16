@@ -10,11 +10,11 @@
     },
     "projects/build-cache/README.md": {
       "updated": "2026-11-04T03:33:55Z",
-      "hash": "b3:edff615e3fb2f35bbc665bffa56bfadd6482e8019f9483a767a9b48846cf9903"
+      "hash": "b3:619a7a108b81e5110b841a70759e65a9415971f1a1a3c0a04b058a8da88f8543"
     },
     "projects/ledger-api/notes/2026-10-23_idempotency-keys.md": {
       "updated": "2026-11-04T03:46:34Z",
-      "hash": "b3:a9277693715777b59ac69f9faab62386cd202c14546f9660f361dbbd1b86e3b0"
+      "hash": "b3:9d5d0ac8485aa328ace2562d917413e68d68771966bcde7f9d53dee97244cc31"
     },
     "projects/ledger-api/notes/2026-10-26_rollback-postmortem.md": {
       "updated": "2026-11-04T03:33:55Z",
@@ -22,7 +22,7 @@
     },
     "projects/ledger-api/README.md": {
       "updated": "2026-11-04T03:33:55Z",
-      "hash": "b3:6ed1838f154aefc252311d1f8679d8285aeaa505ab4cb7594f0543ed38fd8d77"
+      "hash": "b3:fdb85fc239093ee87f70567a87d3e6234cd9904cd90322c1f8961f358c2454c8"
     },
     "projects/mobile-sync/notes/2026-11-02_conflict-merge-rules.md": {
       "updated": "2026-11-04T03:33:55Z",
@@ -30,7 +30,7 @@
     },
     "projects/mobile-sync/README.md": {
       "updated": "2026-11-04T03:33:55Z",
-      "hash": "b3:657fe7a2cbfe4d159204bcb204b84f7471f96e15f0cde4fa742ecf5e707190a1"
+      "hash": "b3:ae2198cc303a9b800e95b4d2dae89c20da0a39363076c6fffea56b4fb5514f9e"
     }
   }
 }

@@ -8,7 +8,7 @@ An identity is a folder of Markdown and JSON that any agent host can load. It ha
 
 - `persona/` is who the identity is. It changes slowly, only through a reflection, with evidence.
 - `life/` is what the identity has lived and knows, written from its own perspective in one world. Every person, including the person it spends most time with, is a character.
-- `work/` is its professional side: a profile, and its own experience of each project. Facts about a project itself stay in that project's KB.
+- `work/` is its professional side: a profile, and its own experience of each project. Facts about a project itself stay in its project wiki.
 
 One identity works across many projects. The layout is in [[formats#Identity layout]].
 

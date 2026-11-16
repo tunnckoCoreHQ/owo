@@ -13,10 +13,10 @@ pub fn add(id: &Identity, req: &Request, project: Option<&str>) -> Result<(Strin
         .kind
         .type_name()
         .expect("`Identity::add` takes only entry types");
-    let (parent, kb) = (req.parent.is_some(), req.kb.is_some());
+    let (parent, wiki) = (req.parent.is_some(), req.wiki.is_some());
     for (set, field, noun, kind) in [
         (parent, "parent", "parent", Kind::LocationDetail),
-        (kb, "kb", "KB", Kind::ProjectReadme),
+        (wiki, "wiki", "project wiki path", Kind::ProjectReadme),
     ] {
         if set && req.kind != kind {
             return Err(Fault::OnlyFor {
@@ -125,9 +125,9 @@ pub fn add(id: &Identity, req: &Request, project: Option<&str>) -> Result<(Strin
             "alias",
         )?;
     }
-    if let (Some(kb), Kind::ProjectReadme) = (req.kb.as_deref(), req.kind) {
-        let to = format!("kb: \"{}\"", templates::yaml_escape(kb));
-        text = fill_line(&text, "kb: \"\"", &to, "kb")?;
+    if let (Some(wiki), Kind::ProjectReadme) = (req.wiki.as_deref(), req.kind) {
+        let to = format!("wiki: \"{}\"", templates::yaml_escape(wiki));
+        text = fill_line(&text, "wiki: \"\"", &to, "wiki")?;
     }
     let notes = path.with_file_name("notes");
     let writes = Writes::default().file(&path, &path, text);

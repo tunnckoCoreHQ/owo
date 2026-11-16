@@ -6,7 +6,7 @@ summary: "Remote build cache; I review cache-key and eviction changes."
 status: canon
 created: 2026-11-04
 updated: 2026-11-04
-kb: "../kb/build-cache/lat.md"
+wiki: "../wiki/build-cache/lat.md"
 repo: "example/build-cache"
 started: 2026-11-04
 sources: []

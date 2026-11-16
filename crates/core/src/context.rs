@@ -28,7 +28,7 @@ pub struct Context {
     pub project: Option<String>,
     pub items: Vec<Item>,
     pub now: String,
-    pub kb: Option<crate::kb::Kb>,
+    pub wiki: Option<crate::wiki::WikiPath>,
     pub warnings: Vec<String>,
 }
 
@@ -38,12 +38,12 @@ impl Context {
             .items
             .iter()
             .map(|it| format!("{:<8} {}  ({})\n", it.tier, it.path, it.reason));
-        let kb = self.kb.iter().map(|kb| {
-            let missing = if kb.exists { "" } else { "  (missing)" };
-            format!("kb       {}{missing}\n", kb.path)
+        let wiki = self.wiki.iter().map(|wiki| {
+            let missing = if wiki.exists { "" } else { "  (missing)" };
+            format!("wiki     {}{missing}\n", wiki.path)
         });
         items
-            .chain(kb)
+            .chain(wiki)
             .chain(["now      (generated block)\n".to_string()])
             .collect()
     }
@@ -74,7 +74,7 @@ pub fn build(id: &Identity, req: &Request, project: Option<&str>) -> Result<Cont
         items.push(item("look", "persona/LOOK.md", "visuals matter"));
     }
     let mut warnings = vec![];
-    let mut kb = None;
+    let mut wiki = None;
     if let Some(p) = project {
         let readme = format!("work/projects/{p}/README.md");
         items.push(item("work", "work/PROFILE.md", "work profile"));
@@ -82,8 +82,8 @@ pub fn build(id: &Identity, req: &Request, project: Option<&str>) -> Result<Cont
         for n in id.project_notes(p).into_iter().take(req.notes) {
             items.push(item("work", &n.rel, "recent project note"));
         }
-        let (pointer, warning) = crate::kb::pointer(id, p);
-        kb = pointer;
+        let (path, warning) = crate::wiki::path(id, p);
+        wiki = path;
         warnings.extend(warning);
     }
     for name in &req.with {
@@ -108,7 +108,7 @@ pub fn build(id: &Identity, req: &Request, project: Option<&str>) -> Result<Cont
         project: project.map(str::to_string),
         items,
         now: status::now_block(&state, project),
-        kb,
+        wiki,
         warnings,
     })
 }
@@ -124,14 +124,14 @@ pub fn render_text(id: &Identity, c: &Context) -> String {
             text.trim_end()
         ));
     }
-    if let Some(kb) = &c.kb {
-        let note = if kb.exists {
-            kb.entry.clone().unwrap_or_else(|| kb.path.clone())
+    if let Some(wiki) = &c.wiki {
+        let shown = if wiki.exists {
+            wiki.entry.clone().unwrap_or_else(|| wiki.path.clone())
         } else {
-            format!("{} (not found)", kb.path)
+            format!("{} (not found)", wiki.path)
         };
         out.push_str(&format!(
-            "<!-- owo: project kb -->\nProject knowledge base: {note}\n\n"
+            "<!-- owo: project wiki -->\nProject wiki: {shown}\n\n"
         ));
     }
     out.push_str(&format!("<!-- owo: now -->\n{}\n", c.now));

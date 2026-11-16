@@ -27,13 +27,13 @@ The ACP proxy takes `--dry-run` too: `owo acp --dry-run -- <agent command>` stor
 Each command with its flags and exit behavior.
 
 - `owo new <name> [--slug]` creates an identity from templates, writes indexes and state files. Exits 1 when anything, even a broken symlink, is at the identity path, and leaves it alone. When a later write fails, it removes the folder it created and nothing else.
-- `owo add <type> <title> [--date] [--parent] [--alias]... [--kb]` creates one entry at its deterministic path; `--date` and the `created` and `updated` fields default to the local day. Uses `--project` for project notes; `--parent` is only for location-detail and `--kb` only for project-readme. A second `add daily-log` for the same day succeeds and prints `exists <path>`; for other types an existing path exits 1 with an `exists` error.
+- `owo add <type> <title> [--date] [--parent] [--alias]... [--wiki]` creates one entry at its deterministic path; `--date` and the `created` and `updated` fields default to the local day. Uses `--project` for project notes; `--parent` is only for location-detail and `--wiki` only for project-readme. A second `add daily-log` for the same day succeeds and prints `exists <path>`; for other types an existing path exits 1 with an `exists` error.
 - `owo write <path> [--content <text>]` replaces the full text of one authored file under persona/, life/ or work/, from `--content` or stdin; it refuses empty text, generated files (after it drops `.` parts of the path) and paths outside the identity.
 - `owo lint [--rule <code>]...` runs [[lint]] rules. Exits 1 when any error is found.
 - `owo index [--check]` writes generated files, or reports stale ones and exits 1.
 - `owo stamp [--check]` refreshes state files from hashes; see [[decisions#Stamp touches frontmatter]].
 - `owo resolve <name> [--type]` prints the path a name resolves to (a file path works too, absolute or relative to the working folder); on a miss it exits 1 with up to five candidates. The name is required: with no name it is a usage error (exit 2), before the root and identity resolve, so it is the same error in a root with one identity or more. An empty or blank name has no candidates. The error is `"<name>" does not resolve to one entry` with the candidates on the lines below; `show`, `links` and the other commands that take a name use the same sentence with `; candidates: <paths>` appended. The `--type` value is a kind name such as `character`, `persona` or `work-profile` (the kind of `work/PROFILE.md`); an unknown one is a usage error (exit 2), here and in `search`.
-- `owo show <name> [--section]` prints an entry or one section at any heading level; a `kb:<p>:<path>` name prints a file from the project KB.
+- `owo show <name> [--section]` prints an entry or one section at any heading level; a `wiki:<p>:<path>` name prints a file from the project wiki.
 - `owo links <name> [--in] [--out]` lists backlinks and outlinks; `owo links --orphans` lists unlinked entries.
 - `owo context [--voice] [--look] [--with <name>]... [--notes N] [--format paths]` prints the load set as text, or the file list with `--format paths`; see [[cli#Context]].
 - `owo state [--days N]` prints the derived Now block, plus the last update and recent project notes with `--project`.
@@ -55,13 +55,13 @@ Each command with its flags and exit behavior.
 
 - core, always: `persona/IDENTITY.md`, `persona/SOUL.md`, `persona/MEMORY.md`.
 - voice and look: `persona/VOICE.md` and `persona/LOOK.md` with `--voice` and `--look`.
-- work, with `--project <p>`: `work/PROFILE.md`, the project readme `work/projects/<p>/README.md`, the newest N project notes, and the KB pointer.
+- work, with `--project <p>`: `work/PROFILE.md`, the project readme `work/projects/<p>/README.md`, the newest N project notes, and the project wiki path.
 - with, for each `--with <name>`: the entry it resolves to, unless the load set already holds that file.
 - now, always: the Now block (last activity per scope, last project, recent days, recent events (counted back from the newest non-blank daily log or event date), open threads and conflicts, reflection status, where to look next).
 
-Both formats put the Now block last, after the KB pointer.
+Both formats put the Now block last, after the project wiki path.
 
-The KB path comes from `kb` in the project readme, relative to the identity folder, with `~/` as the home folder. See [[decisions#KB pointer is always emitted]]. `owo context` writes nothing; the last project is the one with the newest file stamp under `work/projects/`.
+The project wiki path comes from `wiki` in the project readme, relative to the identity folder, with `~/` as the home folder. See [[decisions#Project wiki path is always emitted]]. `owo context` writes nothing; the last project is the one with the newest file stamp under `work/projects/`.
 
 
 ## Reflect

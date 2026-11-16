@@ -6,7 +6,7 @@ summary: "Payments ledger service; I review every schema change."
 status: canon
 created: 2026-11-04
 updated: 2026-11-04
-kb: "../kb/ledger-api/lat.md"
+wiki: "../wiki/ledger-api/lat.md"
 repo: "example/ledger-api"
 started: 2026-11-04
 sources: []

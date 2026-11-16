@@ -12,7 +12,6 @@ mod find;
 mod git;
 mod identity;
 mod index;
-mod kb;
 mod lint;
 mod markdown;
 pub mod mcp;
@@ -27,6 +26,7 @@ mod state;
 mod status;
 mod sync;
 mod templates;
+mod wiki;
 mod write;
 
 pub use changes::{Change, Changes};
@@ -37,7 +37,6 @@ pub use error::{Error, ErrorKind, Fault, Result};
 pub use export::{CardSpec, SoulspecReport};
 pub use find::{Hit, LinkRef};
 pub use identity::{entry_types, Identity, Kind};
-pub use kb::Kb;
 pub use lint::Rule;
 pub use migrate::Report as MigrateReport;
 pub use operation::{operations, Envelope, Operation, Outcome, Ran};
@@ -62,6 +61,7 @@ pub use status::{
 pub use sync::{
     parse_turns, Bookmark, Format as SyncFormat, PendingRun, PendingSession, Role, SyncReport, Turn,
 };
+pub use wiki::WikiPath;
 
 use config::{need_identity, need_project};
 use serde_json::Value;

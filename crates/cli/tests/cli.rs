@@ -549,15 +549,15 @@ fn owo_toml_in_a_parent_sets_identity_and_project() {
     copy_tree(&examples().join("nicole"), &tmp.path().join("nicole"));
     owo(tmp.path())
         .args(["-i", "reviewer", "add", "project-readme", "Mural"])
-        .args(["--kb", "../repo/kb/mural"])
+        .args(["--wiki", "../repo/wiki/mural"])
         .assert()
         .success();
     let repo = tmp.path().join("repo");
     let home = tmp.path().join("home");
     fs::create_dir_all(repo.join("sub")).unwrap();
-    fs::create_dir_all(repo.join("kb/mural")).unwrap();
+    fs::create_dir_all(repo.join("wiki/mural")).unwrap();
     fs::create_dir_all(&home).unwrap();
-    fs::write(repo.join("kb/mural/lat.md"), "# Mural\n").unwrap();
+    fs::write(repo.join("wiki/mural/lat.md"), "# Mural\n").unwrap();
     fs::write(
         repo.join(".owo.toml"),
         "identity = \"reviewer\"\nproject = \"mural\"\n",
@@ -575,11 +575,11 @@ fn owo_toml_in_a_parent_sets_identity_and_project() {
     let v: Value = serde_json::from_slice(&out.stdout).unwrap();
     assert_eq!(v["data"]["identity"], "reviewer");
     assert_eq!(v["data"]["project"], "mural");
-    assert_eq!(v["data"]["kb"]["exists"], true, "{v}");
-    assert!(v["data"]["kb"]["path"]
+    assert_eq!(v["data"]["wiki"]["exists"], true, "{v}");
+    assert!(v["data"]["wiki"]["path"]
         .as_str()
         .unwrap()
-        .ends_with("repo/kb/mural"));
+        .ends_with("repo/wiki/mural"));
     let v = json(
         owo_in(&repo.join("sub"), &home)
             .arg("--root")

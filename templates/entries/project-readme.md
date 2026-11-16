@@ -6,7 +6,7 @@ summary: ""
 status: canon
 created: {{today}}
 updated: {{today}}
-kb: ""
+wiki: ""
 repo: ""
 started: {{date}}
 sources: []

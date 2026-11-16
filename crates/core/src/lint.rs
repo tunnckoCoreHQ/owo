@@ -38,7 +38,7 @@ const CHECKS: &[(&str, Check)] = &[
     ("orphans", orphans),
     ("persona-evidence", persona_evidence),
     ("reflection-due", reflection_due),
-    ("kb", kb_links),
+    ("wiki", wiki_links),
 ];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -671,14 +671,14 @@ fn reflection_due(id: &Identity, out: &mut Vec<Diagnostic>) {
     }
 }
 
-fn kb_links(id: &Identity, out: &mut Vec<Diagnostic>) {
+fn wiki_links(id: &Identity, out: &mut Vec<Diagnostic>) {
     for e in id.entries.iter().filter(|e| !e.is_generated()) {
         for (line, link) in crate::find::raw_links(e) {
             let full = link
                 .section
                 .as_ref()
                 .map_or(link.target.clone(), |s| format!("{}#{s}", link.target));
-            let d = match crate::kb::link(id, &full) {
+            let d = match crate::wiki::link(id, &full) {
                 Some(Err(msg)) => err(&e.rel, msg),
                 Some(Ok(k)) if k.root_exists && !k.file_exists => warn(
                     &e.rel,

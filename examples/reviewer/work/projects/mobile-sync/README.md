@@ -6,7 +6,7 @@ summary: "Offline sync for the mobile app; I review merge logic."
 status: canon
 created: 2026-11-04
 updated: 2026-11-04
-kb: "../kb/mobile-sync/lat.md"
+wiki: "../wiki/mobile-sync/lat.md"
 repo: "example/mobile-sync"
 started: 2026-11-04
 sources: []

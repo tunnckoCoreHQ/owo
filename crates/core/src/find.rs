@@ -120,7 +120,7 @@ pub fn section_text(body: &str, name: &str, path: &str) -> anyhow::Result<String
 
 pub fn show(id: &Identity, name: &str, section: Option<&str>) -> anyhow::Result<(String, String)> {
     let target = name.trim_start_matches("[[").trim_end_matches("]]");
-    if let Some(shown) = crate::kb::show(id, target, section) {
+    if let Some(shown) = crate::wiki::show(id, target, section) {
         return shown;
     }
     let e = &id.entries[one(id, name)?];
@@ -181,7 +181,7 @@ pub fn outlinks(id: &Identity, idx: usize) -> Vec<LinkRef> {
 
 pub fn file_links(e: &Entry) -> Vec<(usize, markdown::Link)> {
     let mut out = raw_links(e);
-    out.retain(|(_, l)| !l.target.is_empty() && !l.target.starts_with("kb:"));
+    out.retain(|(_, l)| !l.target.is_empty() && !l.target.starts_with("wiki:"));
     out
 }
 

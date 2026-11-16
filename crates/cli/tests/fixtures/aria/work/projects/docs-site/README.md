@@ -6,7 +6,7 @@ summary: I write and review the product docs.
 status: canon
 created: 2026-10-03
 updated: 2026-10-03
-kb: ""
+wiki: ""
 repo: ""
 started: 2026-10-03
 sources: []

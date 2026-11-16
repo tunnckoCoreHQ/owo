@@ -45,7 +45,7 @@ Links are Obsidian-style wiki-links: `[[Title]]`, `[[Title|shown text]]`, `[[Tit
 
 Links inside inline code or fenced code do not count. A fence opens with three or more backticks or tildes and closes on a run of the same character at least as long. A backtick with no closing backtick on its line is plain text.
 
-Persona files link by name: `[[IDENTITY]]`, `[[SOUL]]`, `[[VOICE]]`, `[[LOOK]]`, `[[MEMORY]]`. Links into a project KB are `[[kb:<project>:<path>#<Section>]]`, resolved against the KB path in [[cli#Context]].
+Persona files link by name: `[[IDENTITY]]`, `[[SOUL]]`, `[[VOICE]]`, `[[LOOK]]`, `[[MEMORY]]`. Links into a project wiki are `[[wiki:<project>:<path>#<Section>]]`, resolved against the project wiki path in [[cli#Context]].
 
 ## Entry frontmatter
 
@@ -68,7 +68,7 @@ Extra fields per type:
 | `conflict` | `state`, `affects` |
 | `insight` | `evidence` |
 | `writing`, `daily-log`, `journal` | `date` |
-| `project-readme` | `kb`, `repo`, `started` |
+| `project-readme` | `wiki`, `repo`, `started` |
 | `project-note` | `date`, `project` |
 
 ## Entry bodies
