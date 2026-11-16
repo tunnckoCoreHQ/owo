@@ -206,7 +206,10 @@ fn auto_ingest_runs_the_prompt_in_the_background() {
     let mut c = start(tmp.path());
     c.prompt(2);
     let warnings = c.end();
-    assert_eq!(warnings, "", "no warnings");
+    assert!(
+        warnings.lines().all(|l| l.contains("is still pending")),
+        "{warnings}"
+    );
     let got = wait_lines(&tmp.path().join("got.txt"), 2);
     let prompt =
         std::fs::read_to_string(tmp.path().join(".owo/sessions/s1.nicole.prompt.md")).unwrap();
@@ -248,7 +251,10 @@ fn one_ingest_runs_at_a_time_and_a_skipped_run_starts_later() {
     std::thread::sleep(Duration::from_millis(300));
     c.prompt(4);
     let warnings = c.end();
-    assert_eq!(warnings, "", "no warnings");
+    assert!(
+        warnings.lines().all(|l| l.contains("is still pending")),
+        "{warnings}"
+    );
     let text = wait_lines(&runs, 3);
     assert_eq!(text.matches("start").count(), 2, "{text}");
 }
@@ -305,6 +311,21 @@ fn a_failed_ingest_is_one_warning_line() {
     let warnings = c.end();
     assert_eq!(warnings.lines().count(), 1, "{warnings}");
     assert!(warnings.starts_with("owo: warning: "), "{warnings}");
+}
+
+#[test]
+fn an_ingest_that_leaves_its_run_pending_is_a_warning() {
+    let tmp = root(
+        "sync_every = 1\nauto_ingest = true\ningest_command = [\"sh\", \"-c\", \"echo x > got.txt\"]\n",
+    );
+    let mut c = start(tmp.path());
+    c.prompt(2);
+    wait_lines(&tmp.path().join("got.txt"), 1);
+    std::thread::sleep(Duration::from_millis(300));
+    assert_eq!(
+        c.end(),
+        "owo: warning: the ingest of session s1.nicole exited and its run is still pending: .owo/sessions/s1.nicole.prompt.md\n"
+    );
 }
 
 #[test]

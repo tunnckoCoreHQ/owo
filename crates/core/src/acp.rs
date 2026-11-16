@@ -220,7 +220,8 @@ impl Ingest {
     }
 
     /// Starts the agent for the run whose prompt file is `prompt`, unless an agent runs. Its
-    /// output goes nowhere, so the client never sees it. A failure is one warning line.
+    /// output goes nowhere, so the client never sees it. A failure, or a run still pending when
+    /// the agent exits, is one warning line.
     fn start(&self, prompt: &str, owo: &Arc<Owo>) {
         if self.busy.swap(true, Ordering::SeqCst) {
             return;
@@ -244,11 +245,24 @@ impl Ingest {
             }
         };
         let (busy, owo, prompt) = (self.busy.clone(), owo.clone(), prompt.to_string());
+        let root = self.root.clone();
         std::thread::spawn(move || {
-            match child.wait() {
-                Ok(status) if status.success() => {}
-                Ok(status) => owo.warn(&format!("the ingest of {prompt} failed: {status}")),
-                Err(e) => owo.warn(&format!("the ingest of {prompt} failed: {e}")),
+            let failed = match child.wait() {
+                Ok(status) if status.success() => None,
+                Ok(status) => Some(status.to_string()),
+                Err(e) => Some(e.to_string()),
+            };
+            let pending = crate::sync::due(&root, None)
+                .ok()
+                .and_then(|runs| runs.into_iter().find(|r| r.prompt == prompt));
+            match (pending, failed) {
+                (Some(run), failed) => owo.warn(&format!(
+                    "the ingest of session {} {} and its run is still pending: {prompt}",
+                    run.session,
+                    failed.map_or("exited".into(), |f| format!("failed ({f})")),
+                )),
+                (None, Some(f)) => owo.warn(&format!("the ingest of {prompt} failed: {f}")),
+                (None, None) => {}
             }
             busy.store(false, Ordering::SeqCst);
         });
