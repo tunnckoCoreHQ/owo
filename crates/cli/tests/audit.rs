@@ -107,7 +107,7 @@ fn card_greetings_skip_headings_in_code_fences() {
     )
     .unwrap();
     let out = owo(tmp.path())
-        .args(["-i", "thea", "export", "card"])
+        .args(["-i", "thea", "export", "persona-card"])
         .output()
         .unwrap();
     let card: Value = serde_json::from_slice(&out.stdout).unwrap();
@@ -168,7 +168,7 @@ fn add(root: &Path, args: &[&str]) {
 
 fn card(root: &Path) -> Value {
     let out = owo(root)
-        .args(["-i", "thea", "export", "card"])
+        .args(["-i", "thea", "export", "persona-card"])
         .output()
         .unwrap();
     serde_json::from_slice(&out.stdout).unwrap()
@@ -501,7 +501,7 @@ fn mcp_tool_output_stays_out_of_the_reply_stream() {
         &[
             call(
                 1,
-                "export_card",
+                "export_persona_card",
                 json!({ "png": avatar, "out": "/dev/stdout" }),
             ),
             call(2, "slug", json!({ "text": "Next One" })),

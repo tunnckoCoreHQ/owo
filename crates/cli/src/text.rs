@@ -303,7 +303,7 @@ impl Text {
                     self.line("no changes");
                 }
             }
-            Outcome::Card { card, out } => match out {
+            Outcome::PersonaCard { card, out } => match out {
                 Some(f) => self.say(format!("wrote {}", f.display())),
                 None => {
                     self.line(serde_json::to_string_pretty(&card.card).expect("a card serializes"))

@@ -185,15 +185,17 @@ fn read_side_calls_return_typed_results() {
         matches!(id.changes(&both), Err(e) if e.fault == Some(Fault::Conflict("since", "days")))
     );
     assert!(id
-        .export_card(&owo_core::CardRequest::default())
+        .export_persona_card(&owo_core::PersonaCardRequest::default())
         .unwrap()
         .card["data"]["name"]
         .is_string());
-    let png = owo_core::CardRequest {
+    let png = owo_core::PersonaCardRequest {
         png: Some("avatar.png".into()),
         ..Default::default()
     };
-    assert!(matches!(id.export_card(&png), Err(e) if e.fault == Some(Fault::Needs("png", "out"))));
+    assert!(
+        matches!(id.export_persona_card(&png), Err(e) if e.fault == Some(Fault::Needs("png", "out")))
+    );
 }
 
 #[test]

@@ -85,7 +85,7 @@ fn mcp_lists_and_calls_tools() {
         "reflect_done",
         "persona_change",
         "persona_changelog",
-        "export_card",
+        "export_persona_card",
         "export_soulspec",
         "export_skill",
         "sync_start",

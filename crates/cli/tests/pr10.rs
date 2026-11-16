@@ -117,8 +117,11 @@ fn pr10_relative_paths_join_env_cwd() {
     for (name, args) in [
         ("export_skill", json!({ "out": "sk" })),
         ("export_soulspec", json!({ "out": "pkg" })),
-        ("export_card", json!({ "out": "card.json" })),
-        ("export_card", json!({ "out": "card.png", "png": "a.png" })),
+        ("export_persona_card", json!({ "out": "card.json" })),
+        (
+            "export_persona_card",
+            json!({ "out": "card.png", "png": "a.png" }),
+        ),
         (
             "sync_start",
             json!({ "session": "s1", "transcript": "t.jsonl" }),
@@ -305,7 +308,14 @@ fn pr10_export_write_error_names_the_path_as_given() {
     read_only(tmp.path());
     let err = cli_error(
         tmp.path(),
-        &["-i", "nicole", "export", "card", "--out", "ro/x.json"],
+        &[
+            "-i",
+            "nicole",
+            "export",
+            "persona-card",
+            "--out",
+            "ro/x.json",
+        ],
     );
     assert!(err.starts_with("owo: writing ro/x.json: "), "{err}");
 }
@@ -316,7 +326,14 @@ fn pr10_export_folder_error_names_the_path_as_given() {
     fs::write(tmp.path().join("work/afile"), "").unwrap();
     let err = cli_error(
         tmp.path(),
-        &["-i", "nicole", "export", "card", "--out", "afile/x.json"],
+        &[
+            "-i",
+            "nicole",
+            "export",
+            "persona-card",
+            "--out",
+            "afile/x.json",
+        ],
     );
     assert!(err.starts_with("owo: creating afile: "), "{err}");
 }

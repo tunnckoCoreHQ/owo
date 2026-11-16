@@ -43,7 +43,7 @@ pub struct Ran {
 
 impl Operation {
     pub fn name(&self) -> String {
-        self.path.join("_")
+        self.path.join("_").replace('-', "_")
     }
 
     pub fn run(
@@ -293,13 +293,13 @@ pub fn operations() -> Vec<Operation> {
             "What changed, grouped by day (Git history, else state stamps)",
             |r, s| Ok(Outcome::Changes(s.identity()?.changes(&r)?)),
         ),
-        write_op::<CardRequest>(
-            &["export", "card"],
-            "Character Card JSON (V3 with V2-compatible fields, or V2)",
+        write_op::<PersonaCardRequest>(
+            &["export", "persona-card"],
+            "Persona Card JSON in the Character Card V3 format, with V2-compatible fields, or V2",
             |mut r, s| {
                 r.project = s.select.project.clone();
-                let card = s.identity()?.export_card(&r)?;
-                Ok(Outcome::Card { card, out: r.out })
+                let card = s.identity()?.export_persona_card(&r)?;
+                Ok(Outcome::PersonaCard { card, out: r.out })
             },
         ),
         write_op::<SkillRequest>(
@@ -420,8 +420,8 @@ pub enum Outcome {
     PersonaChange(PersonaChangeReport),
     PersonaChangelog(Vec<PersonaChange>),
     Changes(Changes),
-    Card {
-        card: Card,
+    PersonaCard {
+        card: PersonaCard,
         out: Option<PathBuf>,
     },
     Skill(String),
@@ -571,7 +571,7 @@ impl Outcome {
             }
             Outcome::PersonaChangelog(list) => Envelope::ok(json!({ "changelog": list })),
             Outcome::Changes(c) => Envelope::ok(value(c)),
-            Outcome::Card { card, out } => {
+            Outcome::PersonaCard { card, out } => {
                 let data = match out {
                     Some(f) => json!({ "path": f }),
                     None => card.card.clone(),

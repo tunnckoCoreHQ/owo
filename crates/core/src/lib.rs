@@ -45,8 +45,8 @@ pub use reflect::{
     Changed, DailyLog, PersonaChange, PersonaChangeReport, ReflectionDigest, ReflectionRecord,
 };
 pub use request::{
-    AddRequest, Args, CardRequest, ChangesRequest, ContextRequest, Field, IndexRequest,
-    LinksRequest, LintRequest, MigrateRequest, Named, NewRequest, PersonaChangeRequest,
+    AddRequest, Args, ChangesRequest, ContextRequest, Field, IndexRequest, LinksRequest,
+    LintRequest, MigrateRequest, Named, NewRequest, PersonaCardRequest, PersonaChangeRequest,
     PersonaChangelogRequest, PersonaRequest, Reader, ReflectDoneRequest, Request, ResolveRequest,
     SearchRequest, ShowRequest, SkillRequest, SlugRequest, SoulspecRequest, StampRequest,
     StateRequest, SyncDoneRequest, SyncOptions, SyncPushRequest, SyncStartRequest, TemplateRequest,
@@ -120,7 +120,7 @@ pub struct Links {
 }
 
 #[derive(Debug)]
-pub struct Card {
+pub struct PersonaCard {
     pub card: Value,
     pub warnings: Vec<String>,
 }
@@ -453,15 +453,15 @@ impl Identity {
         Ok(changes::changes(self, since.as_deref())?)
     }
 
-    pub fn export_card(&self, req: &CardRequest) -> Result<Card> {
+    pub fn export_persona_card(&self, req: &PersonaCardRequest) -> Result<PersonaCard> {
         req.check()?;
         let project = need_project(&self.dir, req.project.as_deref())?;
         let scenario = req.scenario.as_deref();
-        let card = export::card(self, req.spec, project, scenario)?;
+        let card = export::persona_card(self, req.spec, project, scenario)?;
         let warnings = export::warnings(&card);
         if let Some(out) = req.out.as_deref().map(utf8) {
             let png = req.png.as_deref().map(|p| self.cwd.join(utf8(p)));
-            export::write_card(
+            export::write_persona_card(
                 self,
                 &card,
                 project,
@@ -471,7 +471,7 @@ impl Identity {
                 png.as_deref(),
             )?;
         }
-        Ok(Card { card, warnings })
+        Ok(PersonaCard { card, warnings })
     }
 
     pub fn export_skill(&self, req: &SkillRequest) -> Result<String> {

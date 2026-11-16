@@ -82,15 +82,15 @@ Migrate never overwrites: a file whose target already exists is reported as skip
 
 A v1 location folder becomes `life/locations/<slug>/`: its `overview.md`, `index.md`, `README.md` or same-named file is the overview, and every other file is a location detail whose `parent` links the overview. A loose `<x>.md` becomes an overview. World folders `cultures`, `factions`, `eras`, `history/eras` and `threads` map to their life folders.
 
-## PNG cards without image crates
+## PNG persona cards without image crates
 
-Embedding a card only appends `tEXt` chunks before `IEND`, so `export.rs` walks PNG chunks with a small CRC32 and base64 instead of an image dependency. See [ADR-0002](../docs/adr/0002-small-dependency-set.md).
+Embedding a persona card only appends `tEXt` chunks before `IEND`, so `export.rs` walks PNG chunks with a small CRC32 and base64 instead of an image dependency. See [ADR-0002](../docs/adr/0002-small-dependency-set.md).
 
 ## Working project versus project filter
 
-The working project resolves from `--project`, `OWO_PROJECT`, then `.owo.toml`; `context`, `add project-note`, `state` and `sync` use it. `search` and `export card` narrow to a project only with an explicit `--project` flag.
+The working project resolves from `--project`, `OWO_PROJECT`, then `.owo.toml`; `context`, `add project-note`, `state` and `sync` use it. `search` and `export persona-card` narrow to a project only with an explicit `--project` flag.
 
-A filter hides results, so it comes from the command line and never from the environment. Inside a project checkout, `owo search` still finds life and persona entries, and `owo export card` still exports the whole identity.
+A filter hides results, so it comes from the command line and never from the environment. Inside a project checkout, `owo search` still finds life and persona entries, and `owo export persona-card` still exports the whole identity.
 
 `sync due` follows the same rule for the identity: it lists the runs of one identity only with `-i` (or the MCP `identity`), and every run in the root otherwise. The filter reads the slice path of each pending run, `sources/<identity>/...`, so the bookmark needs no identity field.
 

@@ -215,9 +215,9 @@ fn check_card(card: &Value, name: &str) {
 }
 
 #[test]
-fn export_card_v3_shape() {
+fn export_persona_card_v3_shape() {
     let out = owo_as(&examples(), "nicole")
-        .args(["export", "card"])
+        .args(["export", "persona-card"])
         .output()
         .unwrap();
     let card: Value = serde_json::from_slice(&out.stdout).unwrap();
@@ -247,7 +247,7 @@ fn export_card_v3_shape() {
     );
 
     let out = owo_as(&examples(), "reviewer")
-        .args(["--project", "ledger-api", "export", "card"])
+        .args(["--project", "ledger-api", "export", "persona-card"])
         .output()
         .unwrap();
     let card: Value = serde_json::from_slice(&out.stdout).unwrap();
@@ -268,7 +268,7 @@ fn export_card_v3_shape() {
     );
 
     let out = owo_as(&examples(), "nicole")
-        .args(["export", "card", "--spec", "v2"])
+        .args(["export", "persona-card", "--spec", "v2"])
         .output()
         .unwrap();
     let card: Value = serde_json::from_slice(&out.stdout).unwrap();
@@ -509,7 +509,7 @@ fn card_greetings_and_lore_content() {
         format!("{text}\n## Key facts\n\n- Fires on Fridays.\n"),
     )
     .unwrap();
-    let card = json(owo_as(tmp.path(), "nicole").args(["export", "card"]));
+    let card = json(owo_as(tmp.path(), "nicole").args(["export", "persona-card"]));
     let d = &card["data"]["data"];
     assert_eq!(d["first_mes"], "Hello there.");
     assert_eq!(d["alternate_greetings"], serde_json::json!([]));
@@ -684,7 +684,7 @@ fn card_png_and_scenario() {
     fs::write(&avatar, common::PNG_1X1).unwrap();
     let out = tmp.path().join("card.png");
     owo(&root)
-        .args(["-i", "nicole", "export", "card", "--png"])
+        .args(["-i", "nicole", "export", "persona-card", "--png"])
         .arg(&avatar)
         .arg("--out")
         .arg(&out)
@@ -706,7 +706,15 @@ fn card_png_and_scenario() {
         .collect();
     assert_eq!(names, ["IHDR", "IDAT", "tEXt:chara", "tEXt:ccv3", "IEND"]);
     owo(&root)
-        .args(["-i", "nicole", "export", "card", "--spec", "v2", "--png"])
+        .args([
+            "-i",
+            "nicole",
+            "export",
+            "persona-card",
+            "--spec",
+            "v2",
+            "--png",
+        ])
         .arg(&out)
         .arg("--out")
         .arg(&out)
@@ -726,7 +734,7 @@ fn card_png_and_scenario() {
                 "-i",
                 "nicole",
                 "export",
-                "card",
+                "persona-card",
                 "--scenario",
                 "First Firing",
             ])
@@ -739,7 +747,7 @@ fn card_png_and_scenario() {
         v["data"]["scenario"],
         "The first kiln load that came out whole."
     );
-    let env = json(owo(&root).args(["-i", "nicole", "export", "card"]));
+    let env = json(owo(&root).args(["-i", "nicole", "export", "persona-card"]));
     assert_eq!(env["ok"], true);
     assert_eq!(env["data"]["spec"], "chara_card_v3");
 }

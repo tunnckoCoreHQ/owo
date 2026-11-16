@@ -72,7 +72,7 @@ fn atomic_card_failed_rename_leaves_no_tmp() {
     block(&tmp.path().join("work/x.json"));
     assert!(!run(
         tmp.path(),
-        &["-i", "nicole", "export", "card", "--out", "x.json"]
+        &["-i", "nicole", "export", "persona-card", "--out", "x.json"]
     ));
     no_tmp(tmp.path());
 }
@@ -159,7 +159,14 @@ fn atomic_png_card_replaces_the_file() {
     let tmp = setup();
     fs::write(tmp.path().join("work/a.png"), PNG_1X1).unwrap();
     let args = [
-        "-i", "nicole", "export", "card", "--png", "a.png", "--out", "c.png",
+        "-i",
+        "nicole",
+        "export",
+        "persona-card",
+        "--png",
+        "a.png",
+        "--out",
+        "c.png",
     ];
     assert!(run(tmp.path(), &args));
     let file = tmp.path().join("work/c.png");

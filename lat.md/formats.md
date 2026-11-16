@@ -51,7 +51,7 @@ Persona files link by name: `[[IDENTITY]]`, `[[SOUL]]`, `[[VOICE]]`, `[[LOOK]]`,
 
 Every life and work entry has YAML frontmatter with `type`, `title`, `aliases`, `summary`, `status`, `created`, `updated`, `sources`. Lists are block lists (`  - item`); an empty list is `[]`. A title or alias holds no `#`, `|`, `[` or `]`, because those break a `[[link]]` to it; `owo add` refuses them and the `schema` rule reports them.
 
-`summary` is one line; indexes, search, the Now block and card lorebooks use it. Citations live only in frontmatter: `sources` (paths relative to `sources/`, optional `#L<a>-L<b>`, or plain text), insight `evidence` and thread `from` are links. Bodies have no Sources, Evidence or From section.
+`summary` is one line; indexes, search, the Now block and persona card lorebooks use it. Citations live only in frontmatter: `sources` (paths relative to `sources/`, optional `#L<a>-L<b>`, or plain text), insight `evidence` and thread `from` are links. Bodies have no Sources, Evidence or From section.
 
 `type` must match the folder. `status` is `canon`, `disputed` (an open conflict links the entry) or `superseded` (with `superseded_by`). Dates are `YYYY-MM-DD` and are story time: the dates inside the identity's life, not chat timestamps. Dated types (daily-log, journal, writing, project-note) carry `date`, and the file name must start with it. Events need `date`; threads need `state: open|closed`; conflicts need `state: open|resolved`; location details need `parent`; project notes need `project` equal to their project folder.
 
@@ -83,7 +83,7 @@ A character's exact personal identifiers (birth date, handles, emails, phone num
 
 The tool manifest, read by the CLI.
 
-- `schema` (`owo/1`), `slug`, `name`, and optional `nickname` (card export).
+- `schema` (`owo/1`), `slug`, `name`, and optional `nickname` (persona card export).
 - `accounts`: the identity's own accounts as `{kind, handle}`. Handles appear only here.
 - `budgets`: persona file word budgets that override the defaults in [[lint]].
 - `reflect_every_days` (default 7).

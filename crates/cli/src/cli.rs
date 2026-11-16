@@ -83,7 +83,7 @@ fn globals() -> [Arg; 5] {
             .long("project")
             .value_name("PROJECT")
             .global(true)
-            .help("Project slug (else OWO_PROJECT, .owo.toml); search and export card filter only on this flag"),
+            .help("Project slug (else OWO_PROJECT, .owo.toml); search and export persona-card filter only on this flag"),
         Arg::new("json")
             .long("json")
             .global(true)
@@ -153,7 +153,7 @@ fn help(op: &Operation, f: &Field) -> &'static str {
         (["write"], "content") => "The file text; read from stdin when left out",
         (["templates", "show"], "name") => "Template name from `owo templates list`",
         (["links"], "name") => "Entry name, alias, path or [[link]] (not needed with --orphans)",
-        (["export", "card"], "png") => "Embed the card in this PNG avatar (needs --out)",
+        (["export", "persona-card"], "png") => "Embed the card in this PNG avatar (needs --out)",
         (["sync", "push"], "turns") => "JSON array of {\"id\", \"role\", \"text\"}; id is the turn id, the host's id for that message, and a stored turn id is skipped (default: stdin)",
         _ => f.help,
     }

@@ -989,7 +989,7 @@ impl Request for ChangesRequest {
 }
 
 #[derive(Debug, Clone)]
-pub struct CardRequest {
+pub struct PersonaCardRequest {
     pub spec: CardSpec,
     pub project: Option<String>,
     pub scenario: Option<String>,
@@ -997,7 +997,7 @@ pub struct CardRequest {
     pub png: Option<PathBuf>,
 }
 
-impl Default for CardRequest {
+impl Default for PersonaCardRequest {
     fn default() -> Self {
         Self {
             spec: CardSpec::V3,
@@ -1009,7 +1009,7 @@ impl Default for CardRequest {
     }
 }
 
-impl Request for CardRequest {
+impl Request for PersonaCardRequest {
     fn read(r: &mut Reader, b: Self) -> Self {
         let d = Self::default();
         let png = r.path(
@@ -1024,7 +1024,7 @@ impl Request for CardRequest {
             b.scenario,
         );
         let spec = r.choice(
-            Field::new("spec", "Card spec version").default(d.spec.name()),
+            Field::new("spec", "Character Card spec version").default(d.spec.name()),
             b.spec,
         );
         let out = r.path(

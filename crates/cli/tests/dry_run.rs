@@ -104,7 +104,7 @@ fn dry_run_names_what_each_writing_command_writes() {
             "--evidence",
             "first-firing",
         ],
-        &["export", "card", "--out", "card.json"],
+        &["export", "persona-card", "--out", "card.json"],
         &["export", "skill", "--out", "skill"],
         &["export", "soulspec", "--out", "spec"],
         &[

@@ -12,7 +12,7 @@ Exit codes: 0 success, 1 problems found (lint errors, exists, unknown template, 
 
 ## Dry run
 
-Each command that writes files takes `--dry-run`, and its MCP tool takes `dryRun`: `new`, `write`, `add`, `stamp`, `index`, `reflect done`, `persona change`, `export card`, `export skill`, `export soulspec`, `sync start`, `sync push`, `sync done` and `migrate v1`. The command runs as usual, writes nothing, and reports what it would write. See [[decisions#Dry run keeps writes in memory]].
+Each command that writes files takes `--dry-run`, and its MCP tool takes `dryRun`: `new`, `write`, `add`, `stamp`, `index`, `reflect done`, `persona change`, `export persona-card`, `export skill`, `export soulspec`, `sync start`, `sync push`, `sync done` and `migrate v1`. The command runs as usual, writes nothing, and reports what it would write. See [[decisions#Dry run keeps writes in memory]].
 
 - The list names each file the command would write, and before it each folder the command would make for it, once each, in write order. A folder ends in `/`. A path is the one the command would write: the request path joined onto the root or the working folder.
 - With `--json` the envelope is the one of the real run, with `would_write` after `errors`: `{ "ok", "data", "warnings", "errors", "would_write" }`.
@@ -42,10 +42,10 @@ Each command with its flags and exit behavior.
 - `owo persona [--id] [--soul] [--voice] [--look] [--memory]` prints `persona/IDENTITY.md` and `persona/SOUL.md`, or only the persona files the flags name, in that order, each after an `<!-- owo: <path> -->` line. A missing one exits 1. See [[decisions#Persona prints persona files without the load set]].
 - `owo persona change <file> --change <text> --evidence <name>...` appends to `persona/state.json` `changelog`. Evidence must resolve; a `#Section` or `|label` part is kept in the record and ignored for resolution; fewer than two links and no defining event gives a warning. `owo persona changelog [file]` prints the persona changelog; its text shows the string evidence of an array that also holds other values. A persona change written by hand comes back as written, also one with a field of the wrong type, so the last persona change is always the newest one.
 - `owo changes [--since | --days N]` lists changes by day; `--days N` starts N days before the local day; see [[decisions#Changes read Git, else stamps]]. `owo lint --changed` keeps diagnostics for changed files only.
-- `owo export card [--spec v3|v2] [--scenario <name>] [--png <avatar> --out <file>]`, `owo export soulspec --out <dir>`, `owo export skill --out <dir>`; see [[cli#Export]].
+- `owo export persona-card [--spec v3|v2] [--scenario <name>] [--png <avatar> --out <file>]`, `owo export soulspec --out <dir>`, `owo export skill --out <dir>`; see [[cli#Export]].
 - `owo sync start`, `owo sync push`, `owo sync done` and `owo sync due`; see [[cli#Sync]].
 - `owo migrate v1 <path> --out <root>/<slug>`; see [[decisions#Migrate is mechanical]].
-- `owo mcp [--remote [ADDR]] [--port N]` serves every command as an MCP tool (subcommands as `reflect_done`, `export_card` and so on). Without `--remote` it speaks over stdio. With `--remote` it listens on ADDR (default `127.0.0.1`), port N or 4224 (else the next free port), prints `http://<addr>:<port>/mcp`, and answers each POST with JSON. `--root`, `-i` and `--project` given to `owo mcp` are the defaults; each tool also takes `identity` and `project`. Paths in tool arguments are paths on the server.
+- `owo mcp [--remote [ADDR]] [--port N]` serves every command as an MCP tool (subcommands as `reflect_done`, `export_persona_card` and so on; a `-` in a command name is `_` in its tool name). Without `--remote` it speaks over stdio. With `--remote` it listens on ADDR (default `127.0.0.1`), port N or 4224 (else the next free port), prints `http://<addr>:<port>/mcp`, and answers each POST with JSON. `--root`, `-i` and `--project` given to `owo mcp` are the defaults; each tool also takes `identity` and `project`. Paths in tool arguments are paths on the server.
 - `owo acp [--inject] [--dry-run] -- <agent command>` runs an ACP agent behind a pass-through proxy that stores the turns and gives the agent the identity; see [[decisions#ACP proxy passes lines through]]. Each session starts with the selected identity, or none, and the client switches it with the `identity` session config option or the `/owo <identity>` command. By default the proxy adds the owo MCP server to each session and tells the agent to load the identity with the `context` tool. With `--inject` it puts the output of `owo context` in the first prompt of a session and in the next prompt after a switch instead, and adds no MCP server; with no identity in the root that is a usage error (exit 2). With `auto_ingest` in the config, and not with `--dry-run`, it starts an ingest agent in the background for each due or pending run, one at a time; see [[decisions#ACP proxy runs the ingest in the background]]. It exits with the agent's exit code, or 1 when a signal killed the agent. It is not an MCP tool.
 - `owo list` prints slug, name, last activity and projects per identity. Also `owo slug <text>` (exits 1 with a reason when the text has no letters or digits), `owo templates [list | show <name>]` (list marks overrides), `owo config` (the root and where it comes from: flag, environment, local config `<file>` or default, then the identity and the project).
 
@@ -76,9 +76,9 @@ The project wiki path comes from `wiki` in the project readme, relative to the i
 
 ## Export
 
-`owo export card` writes Character Card V3 JSON (V2 with `--spec v2`); `--project <p>` narrows the work scope to one project.
+`owo export persona-card` writes the persona card as Character Card V3 JSON (V2 with `--spec v2`); `--project <p>` narrows the work scope to one project.
 
-| Card field | Source |
+| Persona card field | Source |
 | :- | :- |
 | `description` | IDENTITY.md body, LOOK.md under `## Look` with its headings one level down |
 | `system_prompt` | IDENTITY "Who she/he/they is/are" section, then VOICE.md |

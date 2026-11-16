@@ -111,7 +111,7 @@ fn lore(e: &Entry, n: usize) -> Value {
     })
 }
 
-pub fn card(
+pub fn persona_card(
     id: &Identity,
     spec: CardSpec,
     project: Option<&str>,
@@ -238,7 +238,7 @@ pub fn warnings(card: &Value) -> Vec<String> {
         .collect()
 }
 
-pub fn write_card(
+pub fn write_persona_card(
     id: &Identity,
     main: &Value,
     project: Option<&str>,
@@ -252,7 +252,7 @@ pub fn write_card(
     };
     let avatar = fs::read(png)?;
     let image = if main["spec"] == "chara_card_v3" {
-        let v2 = card(id, CardSpec::V2, project, scenario)?;
+        let v2 = persona_card(id, CardSpec::V2, project, scenario)?;
         embed_png(&avatar, &[("chara", &v2), ("ccv3", main)])?
     } else {
         embed_png(&avatar, &[("chara", main)])?
