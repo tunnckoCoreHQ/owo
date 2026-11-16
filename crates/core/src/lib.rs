@@ -56,10 +56,12 @@ pub use search::{Hit as SearchHit, Scope};
 pub use stamp::Report as StampReport;
 pub use state::{day, parse_day};
 pub use status::{
-    join_links, now_block, CurrentState, Link, ListedIdentity, ProjectState, ReflectionStatus,
+    current_state_text, join_links, CurrentState, Link, ListedIdentity, ProjectState,
+    ReflectionStatus,
 };
 pub use sync::{
-    parse_turns, Bookmark, Format as SyncFormat, PendingRun, PendingSession, Role, SyncReport, Turn,
+    parse_turns, Format as SyncFormat, PendingRun, PendingSession, Role, SyncCursor, SyncReport,
+    Turn,
 };
 pub use wiki::WikiPath;
 
@@ -223,7 +225,7 @@ impl Root {
         })
     }
 
-    pub fn sync_done(&self, req: &SyncDoneRequest) -> Result<Bookmark> {
+    pub fn sync_done(&self, req: &SyncDoneRequest) -> Result<SyncCursor> {
         req.check()?;
         Ok(sync::done(&self.config.root, &req.session, req.until)?)
     }

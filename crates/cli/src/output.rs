@@ -103,7 +103,7 @@ fn says(fault: &Fault) -> String {
         | Fault::Empty(_)
         | Fault::Field { .. }
         | Fault::OutNoSlug
-        | Fault::BehindBookmark { .. }
+        | Fault::BehindSyncCursor { .. }
         | Fault::InjectNeedsIdentity => format!("--{fault}"),
         Fault::UnknownTemplate(_) => format!("{fault}; run `owo templates` for the list"),
         Fault::NoIdentityFolder(_) => {
@@ -119,7 +119,7 @@ fn says(fault: &Fault) -> String {
         Fault::PushedSession(_) => format!("{fault}; use `owo sync push`"),
         Fault::TranscriptSession { .. } => format!("{fault}; use `owo sync start`"),
         Fault::NoMessages { .. } => format!("{fault}; check --format"),
-        Fault::NoBookmark(_) => format!("{fault}; run `owo sync start` first"),
+        Fault::NoSyncCursor(_) => format!("{fault}; run `owo sync start` first"),
         Fault::PastMessages { until, seen } => {
             format!("--until {until} is past the {seen} messages the last `sync start` read")
         }

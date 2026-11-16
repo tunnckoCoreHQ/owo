@@ -141,7 +141,7 @@ fn read_side_calls_return_typed_results() {
         ]
     );
     let text = id.context_text(&ctx);
-    assert!(text.contains("<!-- owo: now -->\n## Now"));
+    assert!(text.contains("<!-- owo: current state -->\n## Current state"));
     assert!(text.contains("<!-- owo: persona/VOICE.md (voice) -->"));
 
     let state = id.state(&owo_core::StateRequest::default()).unwrap();
@@ -262,13 +262,13 @@ fn write_side_calls_change_the_identity() {
         r.sync_done(&req::SyncDoneRequest { session: "s1".into(), until: 9 }),
         Err(e) if e.fault == Some(Fault::PastMessages { until: 9, seen: 1 })
     ));
-    let bookmark = r
+    let cursor = r
         .sync_done(&req::SyncDoneRequest {
             session: "s1".into(),
             until: 1,
         })
         .unwrap();
-    assert_eq!((bookmark.until, bookmark.messages), (1, Some(1)));
+    assert_eq!((cursor.until, cursor.messages), (1, Some(1)));
 }
 
 #[test]

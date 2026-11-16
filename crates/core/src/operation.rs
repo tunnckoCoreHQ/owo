@@ -230,7 +230,7 @@ pub fn operations() -> Vec<Operation> {
         ),
         op::<ContextRequest>(
             &["context"],
-            "The tiered load set: core files, requested tiers, and the generated Now block last",
+            "The tiered load set: core files, requested tiers, and the generated current state last",
             |r, s| {
                 let id = s.identity()?;
                 let context = id.context(&r)?;
@@ -330,13 +330,13 @@ pub fn operations() -> Vec<Operation> {
         ),
         write_op::<SyncDoneRequest>(
             &["sync", "done"],
-            "Move the bookmark after a successful ingest run",
+            "Move the sync cursor after a successful ingest run",
             |r, s| {
-                let bookmark = s.root()?.sync_done(&r)?;
+                let cursor = s.root()?.sync_done(&r)?;
                 Ok(Outcome::SyncDone {
                     session: r.session,
                     until: r.until,
-                    bookmark,
+                    cursor,
                 })
             },
         ),
@@ -407,7 +407,7 @@ pub enum Outcome {
     SyncDone {
         session: String,
         until: usize,
-        bookmark: Bookmark,
+        cursor: SyncCursor,
     },
     SyncDue(Vec<PendingSession>),
     Migrate(MigrateReport),
@@ -554,7 +554,7 @@ impl Outcome {
                 Envelope::new(ok, json!({ "hits": hits })).with_errors((!ok).then_some("no hits"))
             }
             Outcome::Synced(s) => Envelope::ok(value(s)),
-            Outcome::SyncDone { bookmark, .. } => Envelope::ok(value(bookmark)),
+            Outcome::SyncDone { cursor, .. } => Envelope::ok(value(cursor)),
             Outcome::SyncDue(list) => Envelope::ok(json!({ "due": list })),
             Outcome::Migrate(r) => Envelope::ok(value(r)),
             Outcome::Reflect(p) => Envelope::ok(value(p)),

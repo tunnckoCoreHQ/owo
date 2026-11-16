@@ -8,7 +8,7 @@ The root holds identity folders and shared working data. It works well as a Git 
 
 - `<slug>/`: one identity per folder.
 - `sources/<slug>/`: raw source material (transcripts, notes, slices), outside every identity. Entries cite files here.
-- `.owo/sessions/`: bookmarks, ingest prompts, locks and turns files (`<session>.turns.jsonl`).
+- `.owo/sessions/`: sync cursors (`<session>.json`), ingest prompts, locks and turns files (`<session>.turns.jsonl`).
 - `.templates/`: optional template overrides; see [[formats#Templates]].
 - `owo.toml`: the optional global config; see [[formats#Config resolution]].
 
@@ -51,7 +51,7 @@ Persona files link by name: `[[IDENTITY]]`, `[[SOUL]]`, `[[VOICE]]`, `[[LOOK]]`,
 
 Every life and work entry has YAML frontmatter with `type`, `title`, `aliases`, `summary`, `status`, `created`, `updated`, `sources`. Lists are block lists (`  - item`); an empty list is `[]`. A title or alias holds no `#`, `|`, `[` or `]`, because those break a `[[link]]` to it; `owo add` refuses them and the `schema` rule reports them.
 
-`summary` is one line; indexes, search, the Now block and persona card lorebooks use it. Citations live only in frontmatter: `sources` (paths relative to `sources/`, optional `#L<a>-L<b>`, or plain text), insight `evidence` and thread `from` are links. Bodies have no Sources, Evidence or From section.
+`summary` is one line; indexes, search, the current state and persona card lorebooks use it. Citations live only in frontmatter: `sources` (paths relative to `sources/`, optional `#L<a>-L<b>`, or plain text), insight `evidence` and thread `from` are links. Bodies have no Sources, Evidence or From section.
 
 `type` must match the folder. `status` is `canon`, `disputed` (an open conflict links the entry) or `superseded` (with `superseded_by`). Dates are `YYYY-MM-DD` and are story time: the dates inside the identity's life, not chat timestamps. Dated types (daily-log, journal, writing, project-note) carry `date`, and the file name must start with it. Events need `date`; threads need `state: open|closed`; conflicts need `state: open|resolved`; location details need `parent`; project notes need `project` equal to their project folder.
 
@@ -96,7 +96,7 @@ Each `state.json` has `files`: a map from scope-relative path to `{updated, hash
 
 `persona/state.json` adds `changelog` and `reflection`. Each persona change in `changelog` is `{at, file, change, evidence}`, appended by `owo persona change`. The `reflection` object holds `last_reflected`, `reflected_through` and `memory_hash`; when MEMORY.md's hash differs from `memory_hash`, lint warns that MEMORY changed outside a reflection.
 
-Every file write is all or nothing: owo writes `<name>.tmp` next to the file and renames it over the file, and a failed write removes the temporary file. A command that writes several files (`stamp`, `index`, `sync start`, `sync push`, `export soulspec`, `new`) writes them as one set: when one fails, it puts back the files it replaced and removes the files and folders it made. A write follows a symlink to its file, and a device or pipe such as `/dev/stdout` is written in place. A symlink whose file is missing is an error and stays. A replaced file keeps its mode. A file in a read-only folder, or a file the caller cannot write, is not replaced, and a file the caller cannot read fails as a read. When `<name>.tmp` already exists, as a file or a symlink, the write fails and leaves it. Error text names the file, not its temporary file. See [[decisions#Writes are all or nothing]]. A command that rewrites a state file, `persona/soul.json` or a sync bookmark exits 1 when the file exists but does not parse or is not an object, so a broken file is never replaced with an empty one. When a persona file changed, `owo stamp` reads `persona/soul.json` before it writes any file, so a broken one fails the stamp with nothing recorded or touched.
+Every file write is all or nothing: owo writes `<name>.tmp` next to the file and renames it over the file, and a failed write removes the temporary file. A command that writes several files (`stamp`, `index`, `sync start`, `sync push`, `export soulspec`, `new`) writes them as one set: when one fails, it puts back the files it replaced and removes the files and folders it made. A write follows a symlink to its file, and a device or pipe such as `/dev/stdout` is written in place. A symlink whose file is missing is an error and stays. A replaced file keeps its mode. A file in a read-only folder, or a file the caller cannot write, is not replaced, and a file the caller cannot read fails as a read. When `<name>.tmp` already exists, as a file or a symlink, the write fails and leaves it. Error text names the file, not its temporary file. See [[decisions#Writes are all or nothing]]. A command that rewrites a state file, `persona/soul.json` or a sync cursor exits 1 when the file exists but does not parse or is not an object, so a broken file is never replaced with an empty one. When a persona file changed, `owo stamp` reads `persona/soul.json` before it writes any file, so a broken one fails the stamp with nothing recorded or touched.
 
 ## Generated files
 

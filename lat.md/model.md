@@ -17,7 +17,7 @@ One identity works across many projects. The layout is in [[formats#Identity lay
 The rules that shape every format and command.
 
 - Each fact has one home. Other files link to it. The table of homes is in `skills/owo/references/rules.md`.
-- People and agents write authored files. Only owo writes the rest: the generated files, the state files, the Now block and the exports.
+- People and agents write authored files. Only owo writes the rest: the generated files, the state files, the current state and the exports.
 - The CLI does the mechanics: create, validate, index, search, resolve, stamp, slice transcripts, export. Agents decide what is durable, write prose and compile MEMORY.
 - Maintenance runs when a person, a host hook or an agent asks for it. Every maintenance command is safe to run at any time.
 - Every command has text output for people and `--json` output for agents.

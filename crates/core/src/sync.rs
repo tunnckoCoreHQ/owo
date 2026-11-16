@@ -20,7 +20,7 @@ named! {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct Bookmark {
+pub struct SyncCursor {
     pub session: String,
     pub transcript: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -228,12 +228,12 @@ impl Drop for Lock {
     }
 }
 
-fn bookmark_path(root: &Path, session: &str) -> std::path::PathBuf {
+fn cursor_path(root: &Path, session: &str) -> std::path::PathBuf {
     root.join(".owo/sessions").join(format!("{session}.json"))
 }
 
-fn read_bookmark(root: &Path, session: &str) -> Result<Value> {
-    Ok(read_object(&bookmark_path(root, session))?.unwrap_or_else(|| json!({})))
+fn read_cursor(root: &Path, session: &str) -> Result<Value> {
+    Ok(read_object(&cursor_path(root, session))?.unwrap_or_else(|| json!({})))
 }
 
 fn turns_file(session: &str) -> String {
@@ -243,7 +243,7 @@ fn turns_file(session: &str) -> String {
 pub fn start(req: &StartRequest, transcript: &Path, format: Format) -> Result<SyncReport> {
     check_session(req.session)?;
     let _lock = Lock::take(req.root, req.session)?;
-    if let Some(t) = read_bookmark(req.root, req.session)?["transcript"].as_str() {
+    if let Some(t) = read_cursor(req.root, req.session)?["transcript"].as_str() {
         if t.ends_with(&turns_file(req.session)) {
             return Err(Fault::PushedSession(req.session.into()).into());
         }
@@ -308,7 +308,7 @@ pub fn push(req: &StartRequest, turns: &[Turn]) -> Result<SyncReport> {
     check_session(req.session)?;
     let _lock = Lock::take(req.root, req.session)?;
     let file = req.root.join(turns_file(req.session));
-    if let Some(t) = read_bookmark(req.root, req.session)?["transcript"].as_str() {
+    if let Some(t) = read_cursor(req.root, req.session)?["transcript"].as_str() {
         if !t.ends_with(&turns_file(req.session)) {
             return Err(Fault::TranscriptSession {
                 session: req.session.into(),
@@ -375,7 +375,7 @@ fn run(
         }
         .into());
     }
-    let mut doc = read_bookmark(req.root, req.session)?;
+    let mut doc = read_cursor(req.root, req.session)?;
     let done = doc["until"].as_u64().unwrap_or(0) as usize;
     let done = done.min(messages.len());
     let until = messages.len();
@@ -447,7 +447,7 @@ fn run(
         out.source = Some(source);
         out.prompt = Some(prompt);
     }
-    let path = bookmark_path(req.root, req.session);
+    let path = cursor_path(req.root, req.session);
     Ok((out, writes.and(Writes::default().json(&path, &path, &doc)?)))
 }
 
@@ -476,13 +476,13 @@ pub fn due(root: &Path, slug: Option<&str>) -> Result<Vec<PendingSession>> {
         let Some(doc) = read_object(&path)? else {
             continue;
         };
-        let bookmark = Bookmark::deserialize(&doc)
+        let cursor = SyncCursor::deserialize(&doc)
             .with_context(|| format!("{} does not parse; fix it by hand", path.display()))?;
         let of_identity =
             |p: &PendingRun| prefix.as_ref().is_none_or(|pre| p.source.starts_with(pre));
-        if let Some(p) = bookmark.pending.filter(of_identity) {
+        if let Some(p) = cursor.pending.filter(of_identity) {
             out.push(PendingSession {
-                session: bookmark.session,
+                session: cursor.session,
                 prompt: p.prompt,
                 from: p.from,
                 until: p.until,
@@ -493,18 +493,18 @@ pub fn due(root: &Path, slug: Option<&str>) -> Result<Vec<PendingSession>> {
     Ok(out)
 }
 
-pub fn done(root: &Path, session: &str, until: usize) -> Result<Bookmark> {
+pub fn done(root: &Path, session: &str, until: usize) -> Result<SyncCursor> {
     check_session(session)?;
     let _lock = Lock::take(root, session)?;
-    let mut doc = read_bookmark(root, session)?;
+    let mut doc = read_cursor(root, session)?;
     if doc.get("session").is_none() {
-        return Err(Fault::NoBookmark(session.into()).into());
+        return Err(Fault::NoSyncCursor(session.into()).into());
     }
     let prev = doc["until"].as_u64().unwrap_or(0) as usize;
     if until < prev {
-        return Err(Fault::BehindBookmark {
+        return Err(Fault::BehindSyncCursor {
             until,
-            bookmark: prev,
+            cursor: prev,
         }
         .into());
     }
@@ -518,9 +518,9 @@ pub fn done(root: &Path, session: &str, until: usize) -> Result<Bookmark> {
     {
         doc.as_object_mut().expect("object").remove("pending");
     }
-    let bookmark = Bookmark::deserialize(&doc)
-        .with_context(|| format!("the bookmark of session {session:?} does not parse"))?;
-    let path = bookmark_path(root, session);
+    let cursor = SyncCursor::deserialize(&doc)
+        .with_context(|| format!("the sync cursor of session {session:?} does not parse"))?;
+    let path = cursor_path(root, session);
     Writes::default().json(&path, &path, &doc)?.commit()?;
-    Ok(bookmark)
+    Ok(cursor)
 }

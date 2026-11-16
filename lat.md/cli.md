@@ -36,7 +36,7 @@ Each command with its flags and exit behavior.
 - `owo show <name> [--section]` prints an entry or one section at any heading level; a `wiki:<p>:<path>` name prints a file from the project wiki.
 - `owo links <name> [--in] [--out]` lists backlinks and outlinks; `owo links --orphans` lists unlinked entries.
 - `owo context [--voice] [--look] [--with <name>]... [--notes N] [--format paths]` prints the load set as text, or the file list with `--format paths`; see [[cli#Context]].
-- `owo state [--days N]` prints the derived Now block, plus the last update and recent project notes with `--project`.
+- `owo state [--days N]` prints the derived current state, plus the last update and recent project notes with `--project`.
 - `owo search <query> [--scope persona|life|work] [--type <t>]... [--since <date>] [--limit N]` ranks entries with BM25; no hits gives `ok: false` and exit 1. See [[decisions#Search is in-crate BM25]].
 - `owo reflect` prints the reflection digest; see [[cli#Reflect]]. `owo reflect done [--through <date>]` records a finished reflection: `last_reflected`, `reflected_through` (default: newest date of a non-blank daily log, an event or a journal entry) and the MEMORY.md hash.
 - `owo persona [--id] [--soul] [--voice] [--look] [--memory]` prints `persona/IDENTITY.md` and `persona/SOUL.md`, or only the persona files the flags name, in that order, each after an `<!-- owo: <path> -->` line. A missing one exits 1. See [[decisions#Persona prints persona files without the load set]].
@@ -51,15 +51,15 @@ Each command with its flags and exit behavior.
 
 ## Context
 
-`owo context` lists files by tier and adds a generated Now block derived from state files and frontmatter dates.
+`owo context` lists files by tier and adds the generated current state derived from state files and frontmatter dates.
 
 - core, always: `persona/IDENTITY.md`, `persona/SOUL.md`, `persona/MEMORY.md`.
 - voice and look: `persona/VOICE.md` and `persona/LOOK.md` with `--voice` and `--look`.
 - work, with `--project <p>`: `work/PROFILE.md`, the project readme `work/projects/<p>/README.md`, the newest N project notes, and the project wiki path.
 - with, for each `--with <name>`: the entry it resolves to, unless the load set already holds that file.
-- now, always: the Now block (last activity per scope, last project, recent days, recent events (counted back from the newest non-blank daily log or event date), open threads and conflicts, reflection status, where to look next).
+- state, always: the current state, under `## Current state` (last activity per scope, last project, recent days, recent events (counted back from the newest non-blank daily log or event date), open threads and conflicts, reflection status, where to look next).
 
-Both formats put the Now block last, after the project wiki path.
+Both formats put the current state last, after the project wiki path.
 
 The project wiki path comes from `wiki` in the project readme, relative to the identity folder, with `~/` as the home folder. See [[decisions#Project wiki path is always emitted]]. `owo context` writes nothing; the last project is the one with the newest file stamp under `work/projects/`.
 
@@ -103,14 +103,14 @@ The command builds the card once, warns when `first_mes` or `mes_example` is emp
 
 Host-agnostic session sync: the host calls `sync start` after each turn, and the ingest agent calls `sync done` at the end of a successful run.
 
-`owo sync start --session <session_id> --transcript <path> [--format jsonl|claude-jsonl|opencode-json] [--every N] [--now]` parses user and assistant text, reads the bookmark in `<root>/.owo/sessions/<session_id>.json`, and counts new user turns. A run is due at `--every` turns, or at any new turn with `--now`. Without `--every` the run size is `sync_every` from the config (see [[formats#Config resolution]]), else 6; the MCP `every` argument works the same way.
+`owo sync start --session <session_id> --transcript <path> [--format jsonl|claude-jsonl|opencode-json] [--every N] [--now]` parses user and assistant text, reads the sync cursor in `<root>/.owo/sessions/<session_id>.json`, and counts new user turns. A run is due at `--every` turns, or at any new turn with `--now`. Without `--every` the run size is `sync_every` from the config (see [[formats#Config resolution]]), else 6; the MCP `every` argument works the same way.
 
-When due it writes the slice, with two earlier user turns as overlap, to `<root>/sources/<slug>/<date>_<session_id>_<from>-<until>.md`, and the ingest prompt to `.owo/sessions/<session_id>.prompt.md`. `owo sync done --session <session_id> --until <n>` moves the bookmark forward; `--until` may not pass the turn count the last `sync start` read. The prompt names the absolute root. It starts with "Use owo ingest", which points the agent at the ingest path of the `owo` skill, and its last step is the `owo sync done` command of the run, so the prompt is the whole task of an ingest agent. `--project` must name an existing project. A file with no user or assistant turns for the chosen format fails. While a run is pending, a not-due `sync start` names its prompt.
+When due it writes the slice, with two earlier user turns as overlap, to `<root>/sources/<slug>/<date>_<session_id>_<from>-<until>.md`, and the ingest prompt to `.owo/sessions/<session_id>.prompt.md`. `owo sync done --session <session_id> --until <n>` moves the sync cursor forward; `--until` may not pass the turn count the last `sync start` read. The prompt names the absolute root. It starts with "Use owo ingest", which points the agent at the ingest path of the `owo` skill, and its last step is the `owo sync done` command of the run, so the prompt is the whole task of an ingest agent. `--project` must name an existing project. A file with no user or assistant turns for the chosen format fails. While a run is pending, a not-due `sync start` names its prompt.
 
 `owo sync push --session <session_id> [--turns <json>] [--every N] [--now]` is for hosts with no transcript on this machine, such as a hosted chat over MCP. It takes a JSON array of `{id, role, text}` turns (stdin when `--turns` is left out), adds those whose turn id is not stored yet to `.owo/sessions/<session_id>.turns.jsonl`, then runs the `sync start` logic on that file. A turn id is the host's own message id: a number, or a string with no control characters. One bad turn fails the push and stores nothing. The turns file is rewritten through a temporary file, and a cut-off last line from an older write is dropped. A session that syncs a local file refuses pushes, and `sync start` refuses a session that stores pushed turns. The reply adds `added` and, when due, `source_text` and `prompt_text`. The MCP `sync_push` tool takes `turns` as a JSON array.
 
-Pushed turns are stored in push order, not conversation order, and the bookmark counts by position. A turn the host sends after later turns lands at the end; a turn the host never sends between two pushes is lost with no signal.
+Pushed turns are stored in push order, not conversation order, and the sync cursor counts by position. A turn the host sends after later turns lands at the end; a turn the host never sends between two pushes is lost with no signal.
 
-`owo sync due` lists the sessions in the root that have a pending run: the session id, the prompt path, and the turns `from` to `until` the run covers; the text prints one line per session, `<session_id> <from>-<until> <prompt>`. It reads every bookmark in `.owo/sessions/`. With `-i` (or the MCP `identity` argument) it lists only the runs whose slice is in `sources/<identity>/`; without it, every run in the root. An identity from the environment or the config does not narrow it; the `-i` of `owo mcp`, such as the one the ACP proxy passes, does, since it is the default `identity` of every tool. See [[decisions#Working project versus project filter]]. The MCP tool is `sync_due`.
+`owo sync due` lists the sessions in the root that have a pending run: the session id, the prompt path, and the turns `from` to `until` the run covers; the text prints one line per session, `<session_id> <from>-<until> <prompt>`. It reads every sync cursor in `.owo/sessions/`. With `-i` (or the MCP `identity` argument) it lists only the runs whose slice is in `sources/<identity>/`; without it, every run in the root. An identity from the environment or the config does not narrow it; the `-i` of `owo mcp`, such as the one the ACP proxy passes, does, since it is the default `identity` of every tool. See [[decisions#Working project versus project filter]]. The MCP tool is `sync_due`.
 
 The readers keep each turn's id (`id` in jsonl, `uuid` in claude-jsonl, `id` in opencode-json), and slice headings show it after the turn number, for example `## 380 user (3533)`.

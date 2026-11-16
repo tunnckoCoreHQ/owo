@@ -27,7 +27,7 @@ pub struct Context {
     pub identity: String,
     pub project: Option<String>,
     pub items: Vec<Item>,
-    pub now: String,
+    pub current_state: String,
     pub wiki: Option<crate::wiki::WikiPath>,
     pub warnings: Vec<String>,
 }
@@ -44,7 +44,7 @@ impl Context {
         });
         items
             .chain(wiki)
-            .chain(["now      (generated block)\n".to_string()])
+            .chain(["state    (generated current state)\n".to_string()])
             .collect()
     }
 }
@@ -107,7 +107,7 @@ pub fn build(id: &Identity, req: &Request, project: Option<&str>) -> Result<Cont
         identity: id.slug.clone(),
         project: project.map(str::to_string),
         items,
-        now: status::now_block(&state, project),
+        current_state: status::current_state_text(&state, project),
         wiki,
         warnings,
     })
@@ -134,6 +134,9 @@ pub fn render_text(id: &Identity, c: &Context) -> String {
             "<!-- owo: project wiki -->\nProject wiki: {shown}\n\n"
         ));
     }
-    out.push_str(&format!("<!-- owo: now -->\n{}\n", c.now));
+    out.push_str(&format!(
+        "<!-- owo: current state -->\n{}\n",
+        c.current_state
+    ));
     out
 }

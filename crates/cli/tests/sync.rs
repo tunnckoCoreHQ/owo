@@ -257,7 +257,7 @@ fn sync_push_stores_turns_once() {
     assert_eq!(v["data"]["added"], 1);
     assert_eq!(
         v["data"]["from"], 2,
-        "two overlap user turns before the bookmark"
+        "two overlap user turns before the sync cursor"
     );
 }
 

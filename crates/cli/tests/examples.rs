@@ -118,7 +118,7 @@ fn context_with_project_points_at_missing_wiki() {
         .ends_with("examples/wiki/ledger-api/lat.md"));
     assert_eq!(v["data"]["wiki"]["exists"], false);
     assert!(v["warnings"].to_string().contains("project wiki not found"));
-    let now = v["data"]["now"].as_str().unwrap();
+    let now = v["data"]["current_state"].as_str().unwrap();
     assert!(now.contains("[[Weekly hour]] (2026-11-03)"), "{now}");
     assert!(now.contains("Open threads: [[Flaky Cache Test]]"), "{now}");
 }

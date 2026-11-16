@@ -207,7 +207,7 @@ pub fn join_links(links: &[Link]) -> String {
     }
 }
 
-pub fn now_block(s: &CurrentState, project: Option<&str>) -> String {
+pub fn current_state_text(s: &CurrentState, project: Option<&str>) -> String {
     let scopes: Vec<String> = s
         .last_activity_by_scope
         .iter()
@@ -255,5 +255,5 @@ pub fn now_block(s: &CurrentState, project: Option<&str>) -> String {
     lines.push(format!(
         "- More: life/_index.md, life/timeline.md, work/_index.md{notes} (or `owo search`, `owo resolve`)"
     ));
-    format!("## Now\n\n{}\n", lines.join("\n"))
+    format!("## Current state\n\n{}\n", lines.join("\n"))
 }

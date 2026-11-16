@@ -55,10 +55,10 @@ pub enum Fault {
         transcript: PathBuf,
         format: &'static str,
     },
-    NoBookmark(String),
-    BehindBookmark {
+    NoSyncCursor(String),
+    BehindSyncCursor {
         until: usize,
-        bookmark: usize,
+        cursor: usize,
     },
     PastMessages {
         until: usize,
@@ -158,9 +158,9 @@ impl std::fmt::Display for Fault {
                 "no user or assistant messages in {} as {format}",
                 transcript.display()
             ),
-            Fault::NoBookmark(s) => write!(f, "no sync bookmark for session {s:?}"),
-            Fault::BehindBookmark { until, bookmark } => {
-                write!(f, "until {until} is behind the bookmark ({bookmark})")
+            Fault::NoSyncCursor(s) => write!(f, "no sync cursor for session {s:?}"),
+            Fault::BehindSyncCursor { until, cursor } => {
+                write!(f, "until {until} is behind the sync cursor ({cursor})")
             }
             Fault::PastMessages { until, seen } => write!(
                 f,

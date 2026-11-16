@@ -259,14 +259,17 @@ fn lorebook_lists_locations_before_events() {
 }
 
 #[test]
-fn context_puts_the_now_block_last() {
+fn context_puts_the_current_state_last() {
     let tmp = thea();
     let args = ["context", "--voice", "--look"];
     let text = stdout(tmp.path(), &args);
     let last = text.lines().rfind(|l| l.starts_with("<!-- owo:")).unwrap();
-    assert_eq!(last, "<!-- owo: now -->", "{text}");
+    assert_eq!(last, "<!-- owo: current state -->", "{text}");
     let paths = stdout(tmp.path(), &[&args[..], &["--format", "paths"]].concat());
-    assert!(paths.ends_with("now      (generated block)\n"), "{paths}");
+    assert!(
+        paths.ends_with("state    (generated current state)\n"),
+        "{paths}"
+    );
 }
 
 fn git(dir: &Path, args: &[&str], date: Option<&str>) {

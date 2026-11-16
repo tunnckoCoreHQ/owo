@@ -68,9 +68,9 @@ Lint's link rules and orphan check call `find::raw_links` and `find::orphans`, s
 
 ## Sync counts user turns
 
-Turn indexes are positions in the parsed transcript (user and assistant text only; tool calls and tool results drop out). The bookmark stores the index the last successful ingest reached, so a failed run is retried by the next `sync start`.
+Turn indexes are positions in the parsed transcript (user and assistant text only; tool calls and tool results drop out). The sync cursor stores the index the last successful ingest reached, so a failed run is retried by the next `sync start`.
 
-While a run is pending, new user turns count from its end, so the turns that follow do not start it again; the next slice still starts at the bookmark. Each `sync start` and `sync done` holds `.owo/sessions/<session_id>.lock` while it touches the bookmark; a lock older than a minute is taken over.
+While a run is pending, new user turns count from its end, so the turns that follow do not start it again; the next slice still starts at the sync cursor. Each `sync start` and `sync done` holds `.owo/sessions/<session_id>.lock` while it touches the sync cursor; a lock older than a minute is taken over.
 
 ## Migrate is mechanical
 
@@ -92,7 +92,7 @@ The working project resolves from `--project`, `OWO_PROJECT`, then `.owo.toml`; 
 
 A filter hides results, so it comes from the command line and never from the environment. Inside a project checkout, `owo search` still finds life and persona entries, and `owo export persona-card` still exports the whole identity.
 
-`sync due` follows the same rule for the identity: it lists the runs of one identity only with `-i` (or the MCP `identity`), and every run in the root otherwise. The filter reads the slice path of each pending run, `sources/<identity>/...`, so the bookmark needs no identity field.
+`sync due` follows the same rule for the identity: it lists the runs of one identity only with `-i` (or the MCP `identity`), and every run in the root otherwise. The filter reads the slice path of each pending run, `sources/<identity>/...`, so the sync cursor needs no identity field.
 
 ## Options are declared once in the core
 
@@ -160,7 +160,7 @@ The flags give the agent only what an ingest needs without a person to answer pr
 
 ## Writes are all or nothing
 
-Every file write goes through `write::Writes`: a temporary file `<name>.tmp` next to the file, synced, then a rename. The temporary file is made new, so an existing `<name>.tmp` or a symlink of that name fails the write and stays; it takes the mode of the file it replaces. A file the caller cannot write is refused before any write, and a symlink whose file is missing is an error, so no rename replaces the link. A command that writes several files builds one `Writes` and commits it once; the commit writes every temporary file before the first rename, and on an error it removes the temporary files, puts back the files it replaced, and removes the files and folders it made. `index` writes its stale files as one set; `stamp` its touched entries, the three `state.json` files and `persona/soul.json`; `sync start` the slice, the prompt and the bookmark; `sync push` the stored turns with those; `export soulspec` the whole package; `new` its template files and folders, then its indexes, then its state files, and it removes the identity folder when a later step fails. `owo add project-readme` makes the project readme and its `notes/` folder together. The sync lock removes the `.owo/sessions` folders it made when they are empty again, so a failed sync step leaves none. Migrate writes each file this way and keeps its own cleanup. See [ADR-0006](../docs/adr/0006-every-write-is-all-or-nothing.md).
+Every file write goes through `write::Writes`: a temporary file `<name>.tmp` next to the file, synced, then a rename. The temporary file is made new, so an existing `<name>.tmp` or a symlink of that name fails the write and stays; it takes the mode of the file it replaces. A file the caller cannot write is refused before any write, and a symlink whose file is missing is an error, so no rename replaces the link. A command that writes several files builds one `Writes` and commits it once; the commit writes every temporary file before the first rename, and on an error it removes the temporary files, puts back the files it replaced, and removes the files and folders it made. `index` writes its stale files as one set; `stamp` its touched entries, the three `state.json` files and `persona/soul.json`; `sync start` the slice, the prompt and the sync cursor; `sync push` the stored turns with those; `export soulspec` the whole package; `new` its template files and folders, then its indexes, then its state files, and it removes the identity folder when a later step fails. `owo add project-readme` makes the project readme and its `notes/` folder together. The sync lock removes the `.owo/sessions` folders it made when they are empty again, so a failed sync step leaves none. Migrate writes each file this way and keeps its own cleanup. See [ADR-0006](../docs/adr/0006-every-write-is-all-or-nothing.md).
 
 ## Dry run keeps writes in memory
 
@@ -168,4 +168,4 @@ A dry run ([[cli#Dry run]]) is a switch in the write layer, not a parameter of e
 
 Three steps write outside `Writes`, and each checks `write::dry` instead. In a dry run, `new` makes no identity folder and only checks that nothing is at its path, the sync lock is not taken, and the cleanup of `new` and `migrate` after an error does not run. The list goes away when the call returns or panics, so a panic in an MCP tool call leaves no dry run on the thread.
 
-At the end, `write::dry_run` turns the kept targets into the list of paths. For each target in commit order, it adds the folders that are not on disk, top first, then the file. It uses `Target::path`, the path the write would use, not the shown path of the error text. With `acp::Options::dry_run`, the ACP proxy runs the whole loop of its push thread inside one `write::dry_run`. Each push then reads the turns file and the bookmark that the earlier pushes kept, and `sync push` reads its turns file with `write::read`. When the loop ends, the proxy writes the paths as lines to its warnings writer.
+At the end, `write::dry_run` turns the kept targets into the list of paths. For each target in commit order, it adds the folders that are not on disk, top first, then the file. It uses `Target::path`, the path the write would use, not the shown path of the error text. With `acp::Options::dry_run`, the ACP proxy runs the whole loop of its push thread inside one `write::dry_run`. Each push then reads the turns file and the sync cursor that the earlier pushes kept, and `sync push` reads its turns file with `write::read`. When the loop ends, the proxy writes the paths as lines to its warnings writer.

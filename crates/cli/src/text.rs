@@ -1,6 +1,6 @@
 use owo_core::{
-    day, join_links, now_block, Diagnostic, Hit, Kind, Level, Origin, Outcome, ReflectionDigest,
-    SyncReport,
+    current_state_text, day, join_links, Diagnostic, Hit, Kind, Level, Origin, Outcome,
+    ReflectionDigest, SyncReport,
 };
 
 struct Text {
@@ -199,7 +199,7 @@ impl Text {
             }
             Outcome::State(s) => {
                 self.line(format!("# {}\n", s.identity));
-                self.push(now_block(s, None));
+                self.push(current_state_text(s, None));
                 if let Some(change) = &s.last_persona_change {
                     self.line(format!(
                         "- Last persona change: {} {}",
