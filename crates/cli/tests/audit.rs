@@ -102,7 +102,7 @@ fn card_greetings_skip_headings_in_code_fences() {
     let tmp = thea();
     let dir = tmp.path().join("thea");
     fs::write(
-        dir.join("soul/examples/greetings.md"),
+        dir.join("persona/examples/greetings.md"),
         "# Greetings\n\n## Hello\n\nHi there.\n\n```md\n## Not a greeting\n```\n",
     )
     .unwrap();
@@ -230,7 +230,7 @@ fn context_with_loads_each_file_once() {
         .output()
         .unwrap();
     let paths = String::from_utf8(out.stdout).unwrap();
-    assert_eq!(paths.matches("soul/IDENTITY.md").count(), 1, "{paths}");
+    assert_eq!(paths.matches("persona/IDENTITY.md").count(), 1, "{paths}");
     assert_eq!(
         paths.matches("life/characters/jay-doe.md").count(),
         1,
@@ -330,13 +330,13 @@ fn stamp_with_a_broken_soul_json_touches_no_entry() {
         .to_string();
     let text = text.replace(&updated, "updated: 2000-01-01");
     fs::write(&bob, format!("{text}\nx\n")).unwrap();
-    let soul = dir.join("soul/SOUL.md");
+    let soul = dir.join("persona/SOUL.md");
     fs::write(
         &soul,
         format!("{}\nx\n", fs::read_to_string(&soul).unwrap()),
     )
     .unwrap();
-    fs::write(dir.join("soul/soul.json"), "{bad").unwrap();
+    fs::write(dir.join("persona/soul.json"), "{bad").unwrap();
     owo(tmp.path())
         .args(["-i", "thea", "stamp"])
         .assert()
@@ -396,8 +396,8 @@ fn an_ambiguous_link_is_not_two_pieces_of_evidence() {
         .args([
             "-i",
             "thea",
-            "soul",
-            "note",
+            "persona",
+            "change",
             "SOUL.md",
             "--change",
             "x",
@@ -414,9 +414,9 @@ fn an_ambiguous_link_is_not_two_pieces_of_evidence() {
         text.replace("aliases: []", "aliases:\n  - \"Mara\""),
     )
     .unwrap();
-    let v = json(owo(tmp.path()).args(["-i", "thea", "lint", "--rule", "soul-evidence"]));
+    let v = json(owo(tmp.path()).args(["-i", "thea", "lint", "--rule", "persona-evidence"]));
     let warnings = messages(&v, "warnings");
-    assert!(warnings.contains("history[0]"), "{warnings}");
+    assert!(warnings.contains("changelog[0]"), "{warnings}");
 }
 
 #[test]
@@ -442,20 +442,20 @@ fn lint_changed_keeps_a_path_with_a_quote() {
     git(tmp.path(), &["init", "-q"], None);
     git(tmp.path(), &["add", "-A"], None);
     git(tmp.path(), &["commit", "-q", "-m", "init"], None);
-    let file = tmp.path().join("thea/soul/examples/a\"b.md");
+    let file = tmp.path().join("thea/persona/examples/a\"b.md");
     fs::write(&file, "See [[Nobody]].\n").unwrap();
     // Stamped and its state committed, so only Git can name the file as changed.
     owo(tmp.path())
         .args(["-i", "thea", "stamp"])
         .assert()
         .success();
-    git(tmp.path(), &["add", "thea/soul/state.json"], None);
+    git(tmp.path(), &["add", "thea/persona/state.json"], None);
     git(tmp.path(), &["commit", "-q", "-m", "stamp"], None);
     let v = json(owo(tmp.path()).args(["-i", "thea", "lint", "--rule", "links", "--changed"]));
     let errors = messages(&v, "errors");
     assert!(errors.contains("Nobody"), "{errors}");
     let out = stdout(tmp.path(), &["changes"]);
-    assert!(out.contains("soul/examples/a\"b.md"), "{out}");
+    assert!(out.contains("persona/examples/a\"b.md"), "{out}");
 }
 
 fn call(id: u64, tool: &str, arguments: Value) -> Value {

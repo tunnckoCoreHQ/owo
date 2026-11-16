@@ -2,7 +2,7 @@ use crate::identity::{Identity, Kind};
 use chrono::{DateTime, NaiveDate, SecondsFormat, Utc};
 use serde_json::{json, Map, Value};
 
-pub const SCOPES: [&str; 3] = ["soul", "life", "work"];
+pub const SCOPES: [&str; 3] = ["persona", "life", "work"];
 
 pub fn hash(text: &str) -> String {
     format!("b3:{}", blake3::hash(text.as_bytes()).to_hex())
@@ -59,7 +59,7 @@ pub fn tracked(identity: &Identity) -> impl Iterator<Item = &crate::identity::En
 }
 
 pub fn initial(identity: &Identity, at: &str) -> Vec<(String, Value)> {
-    let memory_hash = identity.entry("soul/MEMORY.md").map(|e| hash(&e.text));
+    let memory_hash = identity.entry("persona/MEMORY.md").map(|e| hash(&e.text));
     SCOPES
         .iter()
         .map(|scope| {
@@ -72,9 +72,9 @@ pub fn initial(identity: &Identity, at: &str) -> Vec<(String, Value)> {
                 })
                 .collect();
             let doc = match *scope {
-                "soul" => json!({
+                "persona" => json!({
                     "files": files,
-                    "history": [],
+                    "changelog": [],
                     "review": { "last_reviewed": null, "reviewed_through": null, "memory_hash": memory_hash }
                 }),
                 _ => json!({ "files": files }),
@@ -106,8 +106,8 @@ pub fn stamps(id: &Identity) -> impl Iterator<Item = (&'static str, &str, &str)>
     })
 }
 
-pub fn history(id: &Identity) -> &[Value] {
-    doc(id, "soul")["history"]
+pub fn changelog(id: &Identity) -> &[Value] {
+    doc(id, "persona")["changelog"]
         .as_array()
         .map_or(&[], Vec::as_slice)
 }
@@ -136,14 +136,14 @@ impl Review {
 }
 
 pub fn review(id: &Identity) -> Review {
-    let field = |key: &str| doc(id, "soul")["review"][key].as_str();
+    let field = |key: &str| doc(id, "persona")["review"][key].as_str();
     let last_reviewed = field("last_reviewed").map(str::to_string);
     let every_days = id.manifest["review_every_days"].as_i64().unwrap_or(7);
     let days_since = last_reviewed
         .as_deref()
         .and_then(|t| DateTime::parse_from_rfc3339(t).ok())
         .map(|t| (Utc::now() - t.with_timezone(&Utc)).num_days());
-    let memory_hash = id.entry("soul/MEMORY.md").map(|e| hash(&e.text));
+    let memory_hash = id.entry("persona/MEMORY.md").map(|e| hash(&e.text));
     Review {
         reviewed_through: field("reviewed_through").and_then(date_of),
         days_since,

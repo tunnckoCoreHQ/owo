@@ -39,7 +39,7 @@ pub struct Hit {
 
 named! {
     pub enum Scope {
-        Soul = "soul",
+        Persona = "persona",
         Life = "life",
         Work = "work",
     }

@@ -514,7 +514,7 @@ impl Request for WriteRequest {
             path: r.string(
                 Field::positional(
                     "path",
-                    "Identity-relative path under soul/, life/ or work/, ending in .md",
+                    "Identity-relative path under persona/, life/ or work/, ending in .md",
                 )
                 .required(),
                 b.path,
@@ -779,8 +779,8 @@ impl Request for ContextRequest {
     fn read(r: &mut Reader, b: Self) -> Self {
         let d = Self::default();
         Self {
-            voice: r.flag(Field::new("voice", "Add soul/VOICE.md"), b.voice),
-            look: r.flag(Field::new("look", "Add soul/LOOK.md"), b.look),
+            voice: r.flag(Field::new("voice", "Add persona/VOICE.md"), b.voice),
+            look: r.flag(Field::new("look", "Add persona/LOOK.md"), b.look),
             with: r.list(
                 Field::new("with", "Add a resolvable entry (repeatable)"),
                 b.with,
@@ -854,7 +854,10 @@ impl Request for SearchRequest {
         let d = Self::default();
         Self {
             query: r.words(Field::new("query", "Search words"), b.query),
-            scope: r.named(Field::new("scope", "Limit to soul, life or work"), b.scope),
+            scope: r.named(
+                Field::new("scope", "Limit to persona, life or work"),
+                b.scope,
+            ),
             types: r.all_named(
                 Field::new("type", "Limit to entry types (repeatable)").value_name("TYPES"),
                 b.types,
@@ -895,13 +898,13 @@ impl Request for ReviewDoneRequest {
 }
 
 #[derive(Debug, Clone, Default)]
-pub struct SoulNoteRequest {
+pub struct PersonaChangeRequest {
     pub file: String,
     pub change: String,
     pub evidence: Vec<String>,
 }
 
-impl Request for SoulNoteRequest {
+impl Request for PersonaChangeRequest {
     fn read(r: &mut Reader, b: Self) -> Self {
         Self {
             file: r.string(
@@ -921,7 +924,7 @@ impl Request for SoulNoteRequest {
 }
 
 #[derive(Debug, Clone, Copy, Default)]
-pub struct SoulRequest {
+pub struct PersonaRequest {
     pub identity: bool,
     pub soul: bool,
     pub voice: bool,
@@ -929,24 +932,24 @@ pub struct SoulRequest {
     pub memory: bool,
 }
 
-impl Request for SoulRequest {
+impl Request for PersonaRequest {
     fn read(r: &mut Reader, b: Self) -> Self {
         Self {
-            identity: r.flag(Field::new("id", "Print soul/IDENTITY.md"), b.identity),
-            soul: r.flag(Field::new("soul", "Print soul/SOUL.md"), b.soul),
-            voice: r.flag(Field::new("voice", "Print soul/VOICE.md"), b.voice),
-            look: r.flag(Field::new("look", "Print soul/LOOK.md"), b.look),
-            memory: r.flag(Field::new("memory", "Print soul/MEMORY.md"), b.memory),
+            identity: r.flag(Field::new("id", "Print persona/IDENTITY.md"), b.identity),
+            soul: r.flag(Field::new("soul", "Print persona/SOUL.md"), b.soul),
+            voice: r.flag(Field::new("voice", "Print persona/VOICE.md"), b.voice),
+            look: r.flag(Field::new("look", "Print persona/LOOK.md"), b.look),
+            memory: r.flag(Field::new("memory", "Print persona/MEMORY.md"), b.memory),
         }
     }
 }
 
 #[derive(Debug, Clone, Default)]
-pub struct SoulHistoryRequest {
+pub struct PersonaChangelogRequest {
     pub file: Option<String>,
 }
 
-impl Request for SoulHistoryRequest {
+impl Request for PersonaChangelogRequest {
     fn read(r: &mut Reader, b: Self) -> Self {
         Self {
             file: r.text(

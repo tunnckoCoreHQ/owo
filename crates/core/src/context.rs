@@ -59,19 +59,19 @@ fn item(tier: &'static str, path: &str, reason: &str) -> Item {
 
 pub fn build(id: &Identity, req: &Request, project: Option<&str>) -> Result<Context> {
     let mut items = vec![
-        item("core", "soul/IDENTITY.md", "who the identity is"),
-        item("core", "soul/SOUL.md", "first-person core"),
-        item("core", "soul/MEMORY.md", "compiled long-term memory"),
+        item("core", "persona/IDENTITY.md", "who the identity is"),
+        item("core", "persona/SOUL.md", "first-person core"),
+        item("core", "persona/MEMORY.md", "compiled long-term memory"),
     ];
     if req.voice {
         items.push(item(
             "voice",
-            "soul/VOICE.md",
+            "persona/VOICE.md",
             "talking or writing as itself",
         ));
     }
     if req.look {
-        items.push(item("look", "soul/LOOK.md", "visuals matter"));
+        items.push(item("look", "persona/LOOK.md", "visuals matter"));
     }
     let mut warnings = vec![];
     let mut kb = None;

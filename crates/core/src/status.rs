@@ -42,7 +42,7 @@ pub struct CurrentState {
     pub open_threads: Vec<Link>,
     pub open_conflicts: Vec<Link>,
     pub review: ReviewStatus,
-    pub last_soul_change: Option<crate::review::SoulChange>,
+    pub last_persona_change: Option<crate::review::PersonaChange>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub project: Option<ProjectState>,
 }
@@ -174,7 +174,7 @@ pub fn compute(id: &Identity, days: i64, logs: usize) -> CurrentState {
             .collect(),
         open_threads: open_links(id, Kind::Thread),
         open_conflicts: open_links(id, Kind::Conflict),
-        last_soul_change: crate::review::soul_history(id, None).pop(),
+        last_persona_change: crate::review::persona_changelog(id, None).pop(),
         review: ReviewStatus {
             last_reviewed: review.last_reviewed,
             days_since: review.days_since,

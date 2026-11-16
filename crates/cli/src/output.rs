@@ -111,7 +111,7 @@ fn says(fault: &Fault) -> String {
         }
         Fault::NoProject(_) => format!("{fault} (run `owo add project`)"),
         Fault::Generated(_) => format!("{fault}; run `owo index` instead"),
-        Fault::NoSoulState => format!("{fault}; run `owo stamp`"),
+        Fault::NoPersonaState => format!("{fault}; run `owo stamp`"),
         Fault::SessionBusy { session, lock } => format!(
             "session {session:?} is busy: another `owo sync` holds {}",
             lock.display()

@@ -265,28 +265,28 @@ pub fn operations() -> Vec<Operation> {
             "Record a finished review (dates and the MEMORY.md hash)",
             |r, s| Ok(Outcome::ReviewDone(s.identity()?.review_done(&r)?)),
         ),
-        op::<SoulRequest>(
-            &["soul"],
-            "Print soul/IDENTITY.md and soul/SOUL.md, or only the soul files asked for; `note` and `history` keep the soul history",
+        op::<PersonaRequest>(
+            &["persona"],
+            "Print persona/IDENTITY.md and persona/SOUL.md, or only the persona files asked for; `change` and `changelog` keep the persona changelog",
             |r, s| {
-                let files = s.identity()?.soul(&r)?;
+                let files = s.identity()?.persona(&r)?;
                 let text = files
                     .iter()
                     .map(|(path, text)| format!("<!-- owo: {path} -->\n{}\n", text.trim_end()))
                     .collect::<Vec<_>>()
                     .join("\n");
-                Ok(Outcome::Soul { files, text })
+                Ok(Outcome::Persona { files, text })
             },
         ),
-        write_op::<SoulNoteRequest>(
-            &["soul", "note"],
-            "Append a soul change with its evidence",
-            |r, s| Ok(Outcome::SoulNote(s.identity()?.soul_note(&r)?)),
+        write_op::<PersonaChangeRequest>(
+            &["persona", "change"],
+            "Record a persona change with its evidence",
+            |r, s| Ok(Outcome::PersonaChange(s.identity()?.persona_change(&r)?)),
         ),
-        op::<SoulHistoryRequest>(
-            &["soul", "history"],
-            "Print the soul history, optionally for one file",
-            |r, s| Ok(Outcome::SoulHistory(s.identity()?.soul_history(&r)?)),
+        op::<PersonaChangelogRequest>(
+            &["persona", "changelog"],
+            "Print the persona changelog, optionally for one file",
+            |r, s| Ok(Outcome::PersonaChangelog(s.identity()?.persona_changelog(&r)?)),
         ),
         op::<ChangesRequest>(
             &["changes"],
@@ -413,12 +413,12 @@ pub enum Outcome {
     Migrate(MigrateReport),
     Review(ReviewPacket),
     ReviewDone(ReviewRecord),
-    Soul {
+    Persona {
         files: Vec<(String, String)>,
         text: String,
     },
-    SoulNote(SoulChangeReport),
-    SoulHistory(Vec<SoulChange>),
+    PersonaChange(PersonaChangeReport),
+    PersonaChangelog(Vec<PersonaChange>),
     Changes(Changes),
     Card {
         card: Card,
@@ -559,17 +559,17 @@ impl Outcome {
             Outcome::Migrate(r) => Envelope::ok(value(r)),
             Outcome::Review(p) => Envelope::ok(value(p)),
             Outcome::ReviewDone(r) => Envelope::ok(value(r)),
-            Outcome::Soul { files, .. } => {
+            Outcome::Persona { files, .. } => {
                 let files: Vec<Value> = files
                     .iter()
                     .map(|(path, text)| json!({ "path": path, "text": text }))
                     .collect();
                 Envelope::ok(json!({ "files": files }))
             }
-            Outcome::SoulNote(note) => {
+            Outcome::PersonaChange(note) => {
                 Envelope::ok(value(&note.record)).with_warnings(note.warning.clone())
             }
-            Outcome::SoulHistory(list) => Envelope::ok(json!({ "history": list })),
+            Outcome::PersonaChangelog(list) => Envelope::ok(json!({ "changelog": list })),
             Outcome::Changes(c) => Envelope::ok(value(c)),
             Outcome::Card { card, out } => {
                 let data = match out {

@@ -44,7 +44,7 @@ pub struct ReviewPacket {
     pub open_threads: Vec<Link>,
     pub open_conflicts: Vec<Link>,
     pub recurring: Vec<(String, usize)>,
-    pub last_soul_change: Option<SoulChange>,
+    pub last_persona_change: Option<PersonaChange>,
 }
 
 const STOP_WORDS: &[&str] = &[
@@ -87,7 +87,7 @@ pub fn packet(id: &Identity) -> ReviewPacket {
             .to_string();
         let reviewed =
             !updated.is_empty() && last.as_deref().is_some_and(|l| updated.as_str() <= l);
-        if reviewed || e.rel == "soul/MEMORY.md" {
+        if reviewed || e.rel == "persona/MEMORY.md" {
             continue;
         }
         changed.push(Changed {
@@ -124,7 +124,7 @@ pub fn packet(id: &Identity) -> ReviewPacket {
     days.sort_by(|a, b| a.date.cmp(&b.date));
     let of_kind = |k: Kind| id.entries.iter().filter(move |e| e.kind == k);
     let changed_paths: BTreeSet<&str> = changed.iter().map(|c| c.path.as_str()).collect();
-    let memory = id.entry("soul/MEMORY.md");
+    let memory = id.entry("persona/MEMORY.md");
     ReviewPacket {
         identity: id.slug.clone(),
         memory: memory.map(|e| e.text.clone()).unwrap_or_default(),
@@ -147,7 +147,7 @@ pub fn packet(id: &Identity) -> ReviewPacket {
         open_threads: open_links(id, Kind::Thread),
         open_conflicts: open_links(id, Kind::Conflict),
         recurring: recurring(&days),
-        last_soul_change: soul_history(id, None).pop(),
+        last_persona_change: persona_changelog(id, None).pop(),
         unreviewed_days: days,
         changed,
         last_reviewed: last,
@@ -164,8 +164,8 @@ pub struct ReviewRecord {
 
 pub fn done(id: &Identity, through: Option<NaiveDate>) -> Result<ReviewRecord> {
     let mut doc = id
-        .read_object("soul/state.json")?
-        .ok_or(crate::Fault::NoSoulState)?;
+        .read_object("persona/state.json")?
+        .ok_or(crate::Fault::NoPersonaState)?;
     let through = match through {
         Some(t) => Some(t.to_string()),
         None => id
@@ -178,7 +178,7 @@ pub fn done(id: &Identity, through: Option<NaiveDate>) -> Result<ReviewRecord> {
             .max(),
     };
     let memory = id
-        .entry("soul/MEMORY.md")
+        .entry("persona/MEMORY.md")
         .map(|e| crate::state::hash(&e.text));
     let review = ReviewRecord {
         last_reviewed: crate::state::now(),
@@ -186,12 +186,12 @@ pub fn done(id: &Identity, through: Option<NaiveDate>) -> Result<ReviewRecord> {
         memory_hash: memory,
     };
     doc["review"] = serde_json::to_value(&review)?;
-    crate::write::json(&id.dir.join("soul/state.json"), &doc)?;
+    crate::write::json(&id.dir.join("persona/state.json"), &doc)?;
     Ok(review)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SoulChange {
+pub struct PersonaChange {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub at: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -204,7 +204,7 @@ pub struct SoulChange {
     pub other: Map<String, Value>,
 }
 
-impl SoulChange {
+impl PersonaChange {
     fn of(record: &Value) -> Self {
         let mut other = record.as_object().cloned().unwrap_or_default();
         let mut take = |key: &str, is: fn(&Value) -> bool| match other.get(key) {
@@ -225,22 +225,22 @@ impl SoulChange {
     }
 }
 
-pub struct SoulChangeReport {
-    pub record: SoulChange,
+pub struct PersonaChangeReport {
+    pub record: PersonaChange,
     pub warning: Option<String>,
 }
 
-pub fn soul_note(
+pub fn persona_change(
     id: &Identity,
     file: &str,
     change: &str,
     evidence: &[String],
-) -> Result<SoulChangeReport> {
-    let file = file.trim_start_matches("soul/");
-    if !crate::identity::SOUL_FILES.contains(&file) {
+) -> Result<PersonaChangeReport> {
+    let file = file.trim_start_matches("persona/");
+    if !crate::identity::PERSONA_FILES.contains(&file) {
         bail!(
-            "{file:?} is not a soul file ({})",
-            crate::identity::SOUL_FILES.join(", ")
+            "{file:?} is not a persona file ({})",
+            crate::identity::PERSONA_FILES.join(", ")
         );
     }
     if change.trim().is_empty() {
@@ -260,18 +260,18 @@ pub fn soul_note(
         }
     }
     let warning = (links.len() < 2 && !defining)
-        .then(|| "soul changes need two evidence links or one defining event".to_string());
+        .then(|| "persona changes need two evidence links or one defining event".to_string());
     let mut doc = id
-        .read_object("soul/state.json")?
-        .ok_or(crate::Fault::NoSoulState)?;
-    let recorded = doc["history"].as_array().is_some_and(|h| {
+        .read_object("persona/state.json")?
+        .ok_or(crate::Fault::NoPersonaState)?;
+    let recorded = doc["changelog"].as_array().is_some_and(|h| {
         h.iter()
             .any(|r| r["file"] == file && r["change"] == change.trim())
     });
     if recorded {
         bail!("{file} already records {:?}", change.trim());
     }
-    let record = SoulChange {
+    let record = PersonaChange {
         at: Some(crate::state::now()),
         file: Some(file.to_string()),
         change: Some(change.trim().to_string()),
@@ -279,19 +279,19 @@ pub fn soul_note(
         other: Map::new(),
     };
     let value = serde_json::to_value(&record)?;
-    match doc.get_mut("history").and_then(Value::as_array_mut) {
+    match doc.get_mut("changelog").and_then(Value::as_array_mut) {
         Some(h) => h.push(value),
-        None => doc["history"] = json!([value]),
+        None => doc["changelog"] = json!([value]),
     }
-    crate::write::json(&id.dir.join("soul/state.json"), &doc)?;
-    Ok(SoulChangeReport { record, warning })
+    crate::write::json(&id.dir.join("persona/state.json"), &doc)?;
+    Ok(PersonaChangeReport { record, warning })
 }
 
-pub fn soul_history(id: &Identity, file: Option<&str>) -> Vec<SoulChange> {
-    let file = file.map(|f| f.trim_start_matches("soul/"));
-    crate::state::history(id)
+pub fn persona_changelog(id: &Identity, file: Option<&str>) -> Vec<PersonaChange> {
+    let file = file.map(|f| f.trim_start_matches("persona/"));
+    crate::state::changelog(id)
         .iter()
-        .map(SoulChange::of)
+        .map(PersonaChange::of)
         .filter(|r| file.is_none_or(|f| r.file.as_deref() == Some(f)))
         .collect()
 }

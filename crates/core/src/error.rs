@@ -41,7 +41,7 @@ pub enum Fault {
     NoIdentityFolder(PathBuf),
     NoProject(String),
     Generated(String),
-    NoSoulState,
+    NoPersonaState,
     SessionBusy {
         session: String,
         lock: PathBuf,
@@ -142,7 +142,7 @@ impl std::fmt::Display for Fault {
             }
             Fault::NoProject(p) => write!(f, "project not found: work/projects/{p}/project.md"),
             Fault::Generated(path) => write!(f, "{path} is generated"),
-            Fault::NoSoulState => f.write_str("soul/state.json missing"),
+            Fault::NoPersonaState => f.write_str("persona/state.json missing"),
             Fault::SessionBusy { session, lock } => write!(
                 f,
                 "session {session:?} is busy: another sync step holds {}",

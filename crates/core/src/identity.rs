@@ -8,7 +8,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
 
-pub const SOUL_FILES: &[&str] = &["IDENTITY.md", "SOUL.md", "VOICE.md", "LOOK.md", "MEMORY.md"];
+pub const PERSONA_FILES: &[&str] = &["IDENTITY.md", "SOUL.md", "VOICE.md", "LOOK.md", "MEMORY.md"];
 
 struct KindRow {
     kind: Kind,
@@ -40,7 +40,7 @@ const fn untyped(kind: Kind, name: &'static str) -> KindRow {
 }
 
 const KIND_ROWS: [KindRow; Kind::Unknown as usize + 1] = [
-    untyped(Kind::Soul, "soul"),
+    untyped(Kind::Persona, "persona"),
     untyped(Kind::Example, "example"),
     typed!(Character, "character", Some("characters")),
     typed!(Location, "location", Some("locations")),
@@ -86,7 +86,7 @@ pub fn entry_types() -> impl Iterator<Item = Kind> {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Kind {
-    Soul,
+    Persona,
     Example,
     Character,
     Location,
@@ -235,8 +235,8 @@ pub fn classify(rel: &str) -> Kind {
         ["life", category, "_index.md"] if life_categories().any(|(c, _)| c == *category) => {
             Kind::Generated
         }
-        ["soul", file] if SOUL_FILES.contains(file) => Kind::Soul,
-        ["soul", "examples", _] => Kind::Example,
+        ["persona", file] if PERSONA_FILES.contains(file) => Kind::Persona,
+        ["persona", "examples", _] => Kind::Example,
         ["work", "README.md"] => Kind::WorkProfile,
         ["work", "projects", _, "project.md"] => Kind::Project,
         ["work", "projects", _, "notes", _] => Kind::Note,
@@ -384,8 +384,8 @@ impl Identity {
                     list.push(idx);
                 }
             };
-            if e.kind == Kind::Soul {
-                add(e.rel.trim_start_matches("soul/").trim_end_matches(".md"));
+            if e.kind == Kind::Persona {
+                add(e.rel.trim_start_matches("persona/").trim_end_matches(".md"));
             }
             for name in e.title.iter().chain(&e.aliases) {
                 add(name);
@@ -453,8 +453,8 @@ mod tests {
 
     #[test]
     fn classifies_paths() {
-        assert_eq!(classify("soul/SOUL.md"), Kind::Soul);
-        assert_eq!(classify("soul/examples/good.md"), Kind::Example);
+        assert_eq!(classify("persona/SOUL.md"), Kind::Persona);
+        assert_eq!(classify("persona/examples/good.md"), Kind::Example);
         assert_eq!(classify("life/characters/joe.md"), Kind::Character);
         assert_eq!(classify("life/locations/flat/overview.md"), Kind::Location);
         assert_eq!(
@@ -473,18 +473,18 @@ mod tests {
         );
         assert_eq!(classify("life/stuff/x.md"), Kind::Unknown);
         assert_eq!(classify("life/stuff/_index.md"), Kind::Unknown);
-        assert_eq!(classify("soul/_index.md"), Kind::Unknown);
+        assert_eq!(classify("persona/_index.md"), Kind::Unknown);
         assert_eq!(classify("work/_index.md"), Kind::Generated);
     }
 
     #[test]
     fn a_dry_run_loads_the_files_it_kept() {
         let tmp = tempfile::TempDir::new().unwrap();
-        let soul = tmp.path().join("thea/soul/SOUL.md");
+        let soul = tmp.path().join("thea/persona/SOUL.md");
         let ((), paths) = crate::write::dry_run(|| {
             crate::write::file(&soul, "# Soul\n").unwrap();
             let id = Identity::load(tmp.path(), "thea").unwrap();
-            let text = id.entry("soul/SOUL.md").map(|e| e.text.as_str());
+            let text = id.entry("persona/SOUL.md").map(|e| e.text.as_str());
             assert_eq!(text, Some("# Soul\n"));
         });
         let thea = tmp.path().join("thea");
@@ -492,7 +492,7 @@ mod tests {
             paths,
             [
                 format!("{}/", thea.display()),
-                format!("{}/", thea.join("soul").display()),
+                format!("{}/", thea.join("persona").display()),
                 soul.display().to_string()
             ]
         );

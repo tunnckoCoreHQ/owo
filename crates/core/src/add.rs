@@ -152,11 +152,11 @@ pub fn write(id: &Identity, rel: &str, text: &str) -> Result<bool> {
         })
         .collect();
     let clean = parts.map(|p| p.join("/")).unwrap_or_default();
-    let scoped = ["soul/", "life/", "work/"]
+    let scoped = ["persona/", "life/", "work/"]
         .iter()
         .any(|s| clean.starts_with(s));
     if !scoped || !clean.ends_with(".md") {
-        bail!("{rel:?} must be an identity-relative .md path under soul/, life/ or work/");
+        bail!("{rel:?} must be an identity-relative .md path under persona/, life/ or work/");
     }
     if crate::identity::classify(&clean) == crate::identity::Kind::Generated {
         return Err(Fault::Generated(clean).into());

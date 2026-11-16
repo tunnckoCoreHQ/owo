@@ -66,7 +66,7 @@ fn plan(id: &Identity, check: bool) -> Result<(Report, Writes)> {
         .map(|s| Ok((*s, load(id, s)?)))
         .collect::<Result<Vec<(&str, Value)>>>()?;
     let mut report = Report::default();
-    let mut soul_changed = false;
+    let mut persona_changed = false;
     let mut seen: Vec<(String, String)> = vec![];
     let mut touched: Vec<(String, String)> = vec![];
 
@@ -90,7 +90,7 @@ fn plan(id: &Identity, check: bool) -> Result<(Report, Writes)> {
         } else {
             report.changed.push(e.rel.clone());
         }
-        soul_changed |= e.kind == Kind::Soul;
+        persona_changed |= e.kind == Kind::Persona;
         if check {
             continue;
         }
@@ -123,7 +123,11 @@ fn plan(id: &Identity, check: bool) -> Result<(Report, Writes)> {
     if check || report.is_clean() {
         return Ok((report, Writes::default()));
     }
-    let soul = if soul_changed { bumped_soul(id)? } else { None };
+    let manifest = if persona_changed {
+        bumped_manifest(id)?
+    } else {
+        None
+    };
     let writes = touched
         .into_iter()
         .fold(Writes::default(), |w, (rel, text)| {
@@ -133,27 +137,27 @@ fn plan(id: &Identity, check: bool) -> Result<(Report, Writes)> {
         let path = id.dir.join(format!("{scope}/state.json"));
         w.json(&path, &path, doc)
     })?;
-    let path = id.dir.join("soul/soul.json");
-    let writes = match soul {
-        Some(soul) => writes.json(&path, &path, &soul)?,
+    let path = id.dir.join("persona/soul.json");
+    let writes = match manifest {
+        Some(manifest) => writes.json(&path, &path, &manifest)?,
         None => writes,
     };
     Ok((report, writes))
 }
 
-fn bumped_soul(id: &Identity) -> Result<Option<Value>> {
-    let Some(mut soul) = id.read_object("soul/soul.json")? else {
+fn bumped_manifest(id: &Identity) -> Result<Option<Value>> {
+    let Some(mut manifest) = id.read_object("persona/soul.json")? else {
         return Ok(None);
     };
-    let mut parts = soul
+    let mut parts = manifest
         .get("version")
         .and_then(Value::as_str)
         .unwrap_or("0.0.0")
         .split('.')
         .map(|p| p.parse().unwrap_or(0));
     let (major, minor): (u64, u64) = (parts.next().unwrap_or(0), parts.next().unwrap_or(0));
-    soul["version"] = json!(format!("{major}.{}.0", minor + 1));
-    Ok(Some(soul))
+    manifest["version"] = json!(format!("{major}.{}.0", minor + 1));
+    Ok(Some(manifest))
 }
 
 #[cfg(test)]

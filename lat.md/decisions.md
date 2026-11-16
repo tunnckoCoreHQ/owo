@@ -14,7 +14,7 @@ Indexes and the timeline depend only on entry content, so `owo index --check` an
 
 `owo stamp` moves a file's stamp only when its hash changes, and then sets `updated:` in that entry's frontmatter to the local day (the day `owo add` uses) and re-hashes it.
 
-A changed soul file bumps the minor version in `soul/soul.json`. New identities get `review.memory_hash` set at creation, so a fresh identity lints without a memory warning.
+A changed persona file bumps the minor version in `persona/soul.json`. New identities get `review.memory_hash` set at creation, so a fresh identity lints without a memory warning.
 
 ## Identifier check is literal
 
@@ -34,9 +34,9 @@ Title and aliases count three times, summary twice, body once. A query equal to 
 
 The project KB is a pointer for the agent to follow. `owo context` prints it when the path is missing too, with a warning, so a misconfigured path shows up at load time.
 
-## Soul prints soul files without the load set
+## Persona prints persona files without the load set
 
-An agent loads the identity once, at the start of a thread, with `owo context`. When it needs one soul file later, such as LOOK for an image, `owo soul --look` prints that file alone, so the agent does not load the whole set again. With no flag, `owo soul` prints IDENTITY and SOUL, the two files that say who the identity is.
+An agent loads the identity once, at the start of a thread, with `owo context`. When it needs one persona file later, such as LOOK for an image, `owo persona --look` prints that file alone, so the agent does not load the whole set again. With no flag, `owo persona` prints IDENTITY and SOUL, the two files that say who the identity is.
 
 The flag for IDENTITY is `--id`, not `--identity`. The global `-i/--identity` flag and the MCP `identity` argument already name the selected identity, and clap cannot give one command two `--identity` flags.
 
@@ -76,7 +76,7 @@ While a run is pending, new user turns count from its end, so the turns that fol
 
 `owo migrate v1` does only file moves and frontmatter fills; judgment work goes to a printed checklist.
 
-It builds a fresh identity with `owo new`, copies soul files (STYLE becomes VOICE), adds missing frontmatter fields to world files (a body `## Sources` section joins `sources`, its links a lesson's `evidence`), splits `conflicts.md` by `##`, copies `sources/`, then indexes and stamps. It reports files with no home and prints the judgment work as a checklist.
+It builds a fresh identity with `owo new`, copies persona files (STYLE becomes VOICE), adds missing frontmatter fields to world files (a body `## Sources` section joins `sources`, its links a lesson's `evidence`), splits `conflicts.md` by `##`, copies `sources/`, then indexes and stamps. It reports files with no home and prints the judgment work as a checklist.
 
 Migrate never overwrites: a file whose target already exists is reported as skipped, including files under `sources/`, which is copied with its subfolders. v1 `index.md` files are dropped, since owo generates its own, and a status outside canon, disputed and superseded becomes canon. An event file named only by a date takes its slug from its title. A file whose frontmatter does not parse is reported as skipped and not written. When migrate fails partway, it removes the identity folder and the `sources/<slug>/` folder it created, so a rerun starts clean.
 
@@ -90,7 +90,7 @@ Embedding a card only appends `tEXt` chunks before `IEND`, so `export.rs` walks 
 
 The working project resolves from `--project`, `OWO_PROJECT`, then `.owo.toml`; `context`, `add note`, `state` and `sync` use it. `search` and `export card` narrow to a project only with an explicit `--project` flag.
 
-A filter hides results, so it comes from the command line and never from the environment. Inside a project checkout, `owo search` still finds life and soul entries, and `owo export card` still exports the whole identity.
+A filter hides results, so it comes from the command line and never from the environment. Inside a project checkout, `owo search` still finds life and persona entries, and `owo export card` still exports the whole identity.
 
 `sync due` follows the same rule for the identity: it lists the runs of one identity only with `-i` (or the MCP `identity`), and every run in the root otherwise. The filter reads the slice path of each pending run, `sources/<identity>/...`, so the bookmark needs no identity field.
 
@@ -110,9 +110,9 @@ The caller builds `Env` once and gives it to the server, with the server's own r
 
 The tool list and each input schema come from the request types: each field is a parameter with its help text, type and allowed values, so a new field needs no change in `mcp.rs`.
 
-The server refuses an unknown argument, a missing required one, a value outside a fixed list (`invalid value "x" for "type"; possible values: ...`), and a value that is not an integer or a `YYYY-MM-DD` day, with its own text and no envelope. An argument it leaves out takes the library's default, from the request type. The typed call checks the rules of the fields (an empty required path, days outside 0 to 36500, `since` with `days`, `png` without `out`) and gives its usage error, as the library text in a fail envelope, not in clap's usage format. Either error sets `isError`. A string argument takes a number or a boolean as its text, and an integer argument takes a string of digits. A single-value argument also takes an array of one value (`{"scope": ["soul"]}`, `{"limit": [5]}`); an array of more values is an error that names the type of the field, such as `argument "days" must be an integer`. A positional argument of several words is a string, or an array of words joined with spaces. A JSON field, such as `turns`, reaches the request as its JSON text, as the CLI gives it.
+The server refuses an unknown argument, a missing required one, a value outside a fixed list (`invalid value "x" for "type"; possible values: ...`), and a value that is not an integer or a `YYYY-MM-DD` day, with its own text and no envelope. An argument it leaves out takes the library's default, from the request type. The typed call checks the rules of the fields (an empty required path, days outside 0 to 36500, `since` with `days`, `png` without `out`) and gives its usage error, as the library text in a fail envelope, not in clap's usage format. Either error sets `isError`. A string argument takes a number or a boolean as its text, and an integer argument takes a string of digits. A single-value argument also takes an array of one value (`{"scope": ["persona"]}`, `{"limit": [5]}`); an array of more values is an error that names the type of the field, such as `argument "days" must be an integer`. A positional argument of several words is a string, or an array of words joined with spaces. A JSON field, such as `turns`, reaches the request as its JSON text, as the CLI gives it.
 
-Most tools return the envelope followed by the warning lines, such as the one for a root from a `.owo.toml` in a parent folder; `context`, `show` and `soul` return text, which is what an agent reads, followed by the warning lines, or the warning lines and the error line `owo: <error>` when the call fails. An error text is the core's plain text, with no `owo` command to run; the CLI adds those hints. A failed call or an envelope with `ok` false sets `isError`; an unknown tool name gets a -32602 error. `initialize` answers the client's protocol version when it is one the server speaks (2025-06-18, 2025-03-26, 2024-11-05), else 2025-06-18. A line that is not UTF-8 JSON gets a -32700 parse error and the server goes on.
+Most tools return the envelope followed by the warning lines, such as the one for a root from a `.owo.toml` in a parent folder; `context`, `show` and `persona` return text, which is what an agent reads, followed by the warning lines, or the warning lines and the error line `owo: <error>` when the call fails. An error text is the core's plain text, with no `owo` command to run; the CLI adds those hints. A failed call or an envelope with `ok` false sets `isError`; an unknown tool name gets a -32602 error. `initialize` answers the client's protocol version when it is one the server speaks (2025-06-18, 2025-03-26, 2024-11-05), else 2025-06-18. A line that is not UTF-8 JSON gets a -32700 parse error and the server goes on.
 
 Each tool call runs inside `std::panic::catch_unwind`. A panic gives an `isError` result with the text `owo panicked: <message>`, and the server answers the next request, on stdio and with `--remote`.
 
@@ -160,7 +160,7 @@ The flags give the agent only what an ingest needs without a person to answer pr
 
 ## Writes are all or nothing
 
-Every file write goes through `write::Writes`: a temporary file `<name>.tmp` next to the file, synced, then a rename. The temporary file is made new, so an existing `<name>.tmp` or a symlink of that name fails the write and stays; it takes the mode of the file it replaces. A file the caller cannot write is refused before any write, and a symlink whose file is missing is an error, so no rename replaces the link. A command that writes several files builds one `Writes` and commits it once; the commit writes every temporary file before the first rename, and on an error it removes the temporary files, puts back the files it replaced, and removes the files and folders it made. `index` writes its stale files as one set; `stamp` its touched entries, the three `state.json` files and `soul/soul.json`; `sync start` the slice, the prompt and the bookmark; `sync push` the stored turns with those; `export soulspec` the whole package; `new` its template files and folders, then its indexes, then its state files, and it removes the identity folder when a later step fails. `owo add project` makes the entry and its `notes/` folder together. The sync lock removes the `.owo/sessions` folders it made when they are empty again, so a failed sync step leaves none. Migrate writes each file this way and keeps its own cleanup. See [ADR-0006](../docs/adr/0006-every-write-is-all-or-nothing.md).
+Every file write goes through `write::Writes`: a temporary file `<name>.tmp` next to the file, synced, then a rename. The temporary file is made new, so an existing `<name>.tmp` or a symlink of that name fails the write and stays; it takes the mode of the file it replaces. A file the caller cannot write is refused before any write, and a symlink whose file is missing is an error, so no rename replaces the link. A command that writes several files builds one `Writes` and commits it once; the commit writes every temporary file before the first rename, and on an error it removes the temporary files, puts back the files it replaced, and removes the files and folders it made. `index` writes its stale files as one set; `stamp` its touched entries, the three `state.json` files and `persona/soul.json`; `sync start` the slice, the prompt and the bookmark; `sync push` the stored turns with those; `export soulspec` the whole package; `new` its template files and folders, then its indexes, then its state files, and it removes the identity folder when a later step fails. `owo add project` makes the entry and its `notes/` folder together. The sync lock removes the `.owo/sessions` folders it made when they are empty again, so a failed sync step leaves none. Migrate writes each file this way and keeps its own cleanup. See [ADR-0006](../docs/adr/0006-every-write-is-all-or-nothing.md).
 
 ## Dry run keeps writes in memory
 

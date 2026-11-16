@@ -44,12 +44,13 @@ pub use operation::{operations, Envelope, Operation, Outcome, Ran};
 pub use output::{warning_line, Diagnostic, Level};
 pub use request::{
     AddRequest, Args, CardRequest, ChangesRequest, ContextRequest, Field, IndexRequest,
-    LinksRequest, LintRequest, MigrateRequest, Named, NewRequest, Reader, Request, ResolveRequest,
-    ReviewDoneRequest, SearchRequest, ShowRequest, SkillRequest, SlugRequest, SoulHistoryRequest,
-    SoulNoteRequest, SoulRequest, SoulspecRequest, StampRequest, StateRequest, SyncDoneRequest,
-    SyncOptions, SyncPushRequest, SyncStartRequest, TemplateRequest, Type, WriteRequest, MAX_DAYS,
+    LinksRequest, LintRequest, MigrateRequest, Named, NewRequest, PersonaChangeRequest,
+    PersonaChangelogRequest, PersonaRequest, Reader, Request, ResolveRequest, ReviewDoneRequest,
+    SearchRequest, ShowRequest, SkillRequest, SlugRequest, SoulspecRequest, StampRequest,
+    StateRequest, SyncDoneRequest, SyncOptions, SyncPushRequest, SyncStartRequest, TemplateRequest,
+    Type, WriteRequest, MAX_DAYS,
 };
-pub use review::{Changed, LogDay, ReviewPacket, ReviewRecord, SoulChange, SoulChangeReport};
+pub use review::{Changed, LogDay, PersonaChange, PersonaChangeReport, ReviewPacket, ReviewRecord};
 pub use search::{Hit as SearchHit, Scope};
 pub use stamp::Report as StampReport;
 pub use state::{day, parse_day};
@@ -403,9 +404,9 @@ impl Identity {
         Ok(review::done(self, req.through)?)
     }
 
-    pub fn soul_note(&self, req: &SoulNoteRequest) -> Result<SoulChangeReport> {
+    pub fn persona_change(&self, req: &PersonaChangeRequest) -> Result<PersonaChangeReport> {
         req.check()?;
-        Ok(review::soul_note(
+        Ok(review::persona_change(
             self,
             &req.file,
             &req.change,
@@ -413,7 +414,7 @@ impl Identity {
         )?)
     }
 
-    pub fn soul(&self, req: &SoulRequest) -> Result<Vec<(String, String)>> {
+    pub fn persona(&self, req: &PersonaRequest) -> Result<Vec<(String, String)>> {
         req.check()?;
         let named = [req.identity, req.soul, req.voice, req.look, req.memory];
         let asked = if named.contains(&true) {
@@ -422,8 +423,12 @@ impl Identity {
             [true, true, false, false, false]
         };
         let mut files = vec![];
-        for (file, _) in identity::SOUL_FILES.iter().zip(asked).filter(|(_, on)| *on) {
-            let path = format!("soul/{file}");
+        for (file, _) in identity::PERSONA_FILES
+            .iter()
+            .zip(asked)
+            .filter(|(_, on)| *on)
+        {
+            let path = format!("persona/{file}");
             let Some(e) = self.entries.iter().find(|e| e.rel == path) else {
                 return Err(anyhow::anyhow!("missing {path}").into());
             };
@@ -432,9 +437,9 @@ impl Identity {
         Ok(files)
     }
 
-    pub fn soul_history(&self, req: &SoulHistoryRequest) -> Result<Vec<SoulChange>> {
+    pub fn persona_changelog(&self, req: &PersonaChangelogRequest) -> Result<Vec<PersonaChange>> {
         req.check()?;
-        Ok(review::soul_history(self, req.file.as_deref()))
+        Ok(review::persona_changelog(self, req.file.as_deref()))
     }
 
     pub fn changes(&self, req: &ChangesRequest) -> Result<Changes> {

@@ -251,7 +251,7 @@ fn atomic_stamp_is_all_or_nothing() {
     let text = fs::read_to_string(&file).unwrap();
     fs::write(&file, format!("{text}\nMore.\n")).unwrap();
     let before = snapshot(&dir);
-    read_only(&dir.join("soul"), || {
+    read_only(&dir.join("persona"), || {
         assert!(!run(tmp.path(), &["-i", "nicole", "stamp"]));
     });
     assert_eq!(snapshot(&dir), before);

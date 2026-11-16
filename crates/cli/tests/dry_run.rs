@@ -84,20 +84,20 @@ fn dry_run_names_what_each_writing_command_writes() {
 
     let list = check(&base, &["new", "Thea"]);
     assert_eq!(list[0], format!("{}/", base.join("ids/thea").display()));
-    assert!(list.iter().any(|p| p.ends_with("/thea/soul/SOUL.md")));
+    assert!(list.iter().any(|p| p.ends_with("/thea/persona/SOUL.md")));
     assert!(list.iter().any(|p| p.ends_with("/thea/life/_index.md")));
     assert!(list.iter().any(|p| p.ends_with("/thea/work/projects/")));
     for args in [
-        &["write", "soul/SOUL.md", "--content", "# Soul\n\nNew.\n"][..],
+        &["write", "persona/SOUL.md", "--content", "# Soul\n\nNew.\n"][..],
         &["add", "character", "Mara Voss"],
         &["add", "project", "Big Thing"],
         &["index"],
         &["stamp"],
         &["review", "done"],
-        &["soul", "note", "SOUL.md", "--change", "Calmer"],
+        &["persona", "change", "SOUL.md", "--change", "Calmer"],
         &[
-            "soul",
-            "note",
+            "persona",
+            "change",
             "SOUL.md",
             "--change",
             "Kinder",

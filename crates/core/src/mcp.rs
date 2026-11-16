@@ -10,7 +10,7 @@ const PROTOCOL: &str = "2025-06-18";
 const SUPPORTED: &[&str] = &[PROTOCOL, "2025-03-26", "2024-11-05"];
 
 fn returns_text(op: &Operation) -> bool {
-    matches!(op.path, ["context"] | ["show"] | ["soul"])
+    matches!(op.path, ["context"] | ["show"] | ["persona"])
 }
 
 fn schema_type(f: &Field) -> &'static str {
@@ -140,9 +140,9 @@ fn reply_of(op: &Operation, ran: Ran) -> Value {
 
 fn text(o: &Outcome) -> String {
     match o {
-        Outcome::Context { text, .. } | Outcome::Show { text, .. } | Outcome::Soul { text, .. } => {
-            text.clone()
-        }
+        Outcome::Context { text, .. }
+        | Outcome::Show { text, .. }
+        | Outcome::Persona { text, .. } => text.clone(),
         _ => String::new(),
     }
 }
@@ -157,7 +157,7 @@ fn respond(id: &Value, method: &str, params: &Value, select: &Select, env: &Env)
             "protocolVersion": params["protocolVersion"].as_str().filter(|v| SUPPORTED.contains(v)).unwrap_or(PROTOCOL),
             "capabilities": { "tools": {} },
             "serverInfo": { "name": "owo", "version": env!("CARGO_PKG_VERSION") },
-            "instructions": "owo manages one identity: soul/, life/ and work/. Start with `context`, read more with `resolve`, `search`, `show` and `links`, create entries with `add`, fill or edit their text with `write`, then run `stamp`, `index` and `lint`.",
+            "instructions": "owo manages one identity: persona/, life/ and work/. Start with `context`, read more with `resolve`, `search`, `show` and `links`, create entries with `add`, fill or edit their text with `write`, then run `stamp`, `index` and `lint`.",
         })),
         "ping" => ok(json!({})),
         "tools/list" => ok(json!({

@@ -104,10 +104,10 @@ fn context_with_project_points_at_missing_kb() {
     assert_eq!(
         &paths[..4],
         [
-            "soul/IDENTITY.md",
-            "soul/SOUL.md",
-            "soul/MEMORY.md",
-            "soul/VOICE.md"
+            "persona/IDENTITY.md",
+            "persona/SOUL.md",
+            "persona/MEMORY.md",
+            "persona/VOICE.md"
         ]
     );
     assert!(paths.contains(&"work/README.md"));
@@ -325,7 +325,7 @@ fn review_packet_then_done() {
     assert_eq!(days.len(), 1);
     assert_eq!(days[0]["date"], "2026-11-04");
     fs::write(
-        tmp.path().join("reviewer/soul/MEMORY.md"),
+        tmp.path().join("reviewer/persona/MEMORY.md"),
         "# Memory\n\n## Patterns\n\n- Pairing helps.\n",
     )
     .unwrap();
@@ -349,11 +349,11 @@ fn review_packet_then_done() {
 }
 
 #[test]
-fn soul_note_and_history() {
+fn persona_change_and_changelog() {
     let tmp = copy_example("nicole");
     let v = json(owo_as(tmp.path(), "nicole").args([
-        "soul",
-        "note",
+        "persona",
+        "change",
         "SOUL.md",
         "--change",
         "Waiting is part of the craft.",
@@ -367,8 +367,8 @@ fn soul_note_and_history() {
     );
     owo_as(tmp.path(), "nicole")
         .args([
-            "soul",
-            "note",
+            "persona",
+            "change",
             "SOUL.md",
             "--change",
             "x",
@@ -378,11 +378,11 @@ fn soul_note_and_history() {
         .assert()
         .code(1);
     owo_as(tmp.path(), "nicole")
-        .args(["soul", "note", "NOPE.md", "--change", "x"])
+        .args(["persona", "change", "NOPE.md", "--change", "x"])
         .assert()
         .code(1);
-    let h = json(owo_as(tmp.path(), "nicole").args(["soul", "history", "SOUL.md"]));
-    assert_eq!(h["data"]["history"].as_array().unwrap().len(), 2);
+    let h = json(owo_as(tmp.path(), "nicole").args(["persona", "changelog", "SOUL.md"]));
+    assert_eq!(h["data"]["changelog"].as_array().unwrap().len(), 2);
 }
 
 #[test]
@@ -413,11 +413,11 @@ fn changes_and_lint_changed() {
 }
 
 #[test]
-fn soul_note_counts_distinct_evidence() {
+fn persona_change_counts_distinct_evidence() {
     let tmp = copy_example("nicole");
     let v = json(owo_as(tmp.path(), "nicole").args([
-        "soul",
-        "note",
+        "persona",
+        "change",
         "SOUL.md",
         "--change",
         "Waiting is part of the craft.",
@@ -498,7 +498,7 @@ fn card_greetings_and_lore_content() {
     let tmp = copy_example("nicole");
     let dir = tmp.path().join("nicole");
     fs::write(
-        dir.join("soul/examples/greetings.md"),
+        dir.join("persona/examples/greetings.md"),
         "# Greetings\n\nOne greeting per section.\nKeep them short.\n\n## Morning\n\nHello there.\n",
     )
     .unwrap();
@@ -805,12 +805,12 @@ fn context_look_and_with() {
         .iter()
         .map(|i| (i["tier"].as_str().unwrap(), i["path"].as_str().unwrap()))
         .collect();
-    assert!(items.contains(&("look", "soul/LOOK.md")), "{v}");
+    assert!(items.contains(&("look", "persona/LOOK.md")), "{v}");
     assert!(
         items.contains(&("with", "life/events/first-firing.md")),
         "{v}"
     );
-    assert!(!items.iter().any(|(_, p)| *p == "soul/VOICE.md"));
+    assert!(!items.iter().any(|(_, p)| *p == "persona/VOICE.md"));
     assert!(v["warnings"]
         .to_string()
         .contains("--with \\\"Nope\\\" does not resolve"));

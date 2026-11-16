@@ -134,15 +134,15 @@ fn read_side_calls_return_typed_results() {
     assert_eq!(
         paths,
         [
-            "soul/IDENTITY.md",
-            "soul/SOUL.md",
-            "soul/MEMORY.md",
-            "soul/VOICE.md"
+            "persona/IDENTITY.md",
+            "persona/SOUL.md",
+            "persona/MEMORY.md",
+            "persona/VOICE.md"
         ]
     );
     let text = id.context_text(&ctx);
     assert!(text.contains("<!-- owo: now -->\n## Now"));
-    assert!(text.contains("<!-- owo: soul/VOICE.md (voice) -->"));
+    assert!(text.contains("<!-- owo: persona/VOICE.md (voice) -->"));
 
     let state = id.state(&owo_core::StateRequest::default()).unwrap();
     assert!(matches!(

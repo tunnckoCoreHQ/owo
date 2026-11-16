@@ -14,17 +14,17 @@ The root holds identity folders and shared working data. It works well as a Git 
 
 ## Identity layout
 
-An identity is `<root>/<slug>/` with `identity.json`, `soul/`, `life/` and `work/`; `owo new` creates every folder and file listed here.
+An identity is `<root>/<slug>/` with `identity.json`, `persona/`, `life/` and `work/`; `owo new` creates every folder and file listed here.
 
-- `soul/`: `soul.json` (SoulSpec v0.5), `state.json`, `IDENTITY.md`, `SOUL.md`, `VOICE.md`, `LOOK.md`, `MEMORY.md`, `examples/{good,bad,greetings}.md`.
+- `persona/`: `soul.json` (SoulSpec v0.5), `state.json`, `IDENTITY.md`, `SOUL.md`, `VOICE.md`, `LOOK.md`, `MEMORY.md`, `examples/{good,bad,greetings}.md`.
 - `life/`: `state.json`, `_index.md`, `timeline.md`, and one folder per category: characters, locations, cultures, factions, events, eras, threads, conflicts, lessons, writing, log, journal.
 - `work/`: `state.json`, `README.md`, `_index.md`, `projects/<p>/project.md`, `projects/<p>/notes/YYYY-MM-DD_<slug>.md`.
 
 Each top-level location is a folder with `overview.md`. Rooms and angles are sibling files beside it, and location folders sit one level deep.
 
-## Soul files
+## Persona files
 
-Soul Markdown files are plain Markdown with no frontmatter; their stamps live in `soul/state.json`. They are always loaded or loaded by tier, so they hold durable abstractions; scenes, quotes and dated happenings live in `life/`.
+Persona files are plain Markdown with no frontmatter; their stamps live in `persona/state.json`. They are always loaded or loaded by tier, so they hold durable abstractions; scenes, quotes and dated happenings live in `life/`.
 
 - `IDENTITY.md`: third person. Who the identity is, biography, roles, the frame of its world. It names the identity's accounts by kind only.
 - `SOUL.md`: first person. Beliefs, wants, emotional logic, boundaries.
@@ -45,7 +45,7 @@ Links are Obsidian-style wiki-links: `[[Title]]`, `[[Title|shown text]]`, `[[Tit
 
 Links inside inline code or fenced code do not count. A fence opens with three or more backticks or tildes and closes on a run of the same character at least as long. A backtick with no closing backtick on its line is plain text.
 
-Soul files link by name: `[[IDENTITY]]`, `[[SOUL]]`, `[[VOICE]]`, `[[LOOK]]`, `[[MEMORY]]`. Links into a project KB are `[[kb:<project>:<path>#<Section>]]`, resolved against the KB path in [[cli#Context]].
+Persona files link by name: `[[IDENTITY]]`, `[[SOUL]]`, `[[VOICE]]`, `[[LOOK]]`, `[[MEMORY]]`. Links into a project KB are `[[kb:<project>:<path>#<Section>]]`, resolved against the KB path in [[cli#Context]].
 
 ## Entry frontmatter
 
@@ -85,18 +85,18 @@ The tool manifest, read by the CLI.
 
 - `schema` (`owo/1`), `slug`, `name`, and optional `nickname` (card export).
 - `accounts`: the identity's own accounts as `{kind, handle}`. Handles appear only here.
-- `budgets`: soul file word budgets that override the defaults in [[lint]].
+- `budgets`: persona file word budgets that override the defaults in [[lint]].
 - `review_every_days` (default 7).
 
-`soul/soul.json` is the SoulSpec v0.5 manifest. `owo stamp` bumps its minor version when a soul file changes.
+`persona/soul.json` is the SoulSpec v0.5 manifest. `owo stamp` bumps its minor version when a persona file changes.
 
 ## State files
 
 Each `state.json` has `files`: a map from scope-relative path to `{updated, hash}`. Stamps are RFC 3339 UTC and move only when the hash changes. Hashes are `b3:<blake3 hex>` of the file text.
 
-`soul/state.json` adds `history` and `review`. Each soul change in `history` is `{at, file, change, evidence}`, appended by `owo soul note`. The `review` object holds `last_reviewed`, `reviewed_through` and `memory_hash`; when MEMORY.md's hash differs from `memory_hash`, lint warns that MEMORY changed outside a review.
+`persona/state.json` adds `changelog` and `review`. Each persona change in `changelog` is `{at, file, change, evidence}`, appended by `owo persona change`. The `review` object holds `last_reviewed`, `reviewed_through` and `memory_hash`; when MEMORY.md's hash differs from `memory_hash`, lint warns that MEMORY changed outside a review.
 
-Every file write is all or nothing: owo writes `<name>.tmp` next to the file and renames it over the file, and a failed write removes the temporary file. A command that writes several files (`stamp`, `index`, `sync start`, `sync push`, `export soulspec`, `new`) writes them as one set: when one fails, it puts back the files it replaced and removes the files and folders it made. A write follows a symlink to its file, and a device or pipe such as `/dev/stdout` is written in place. A symlink whose file is missing is an error and stays. A replaced file keeps its mode. A file in a read-only folder, or a file the caller cannot write, is not replaced, and a file the caller cannot read fails as a read. When `<name>.tmp` already exists, as a file or a symlink, the write fails and leaves it. Error text names the file, not its temporary file. See [[decisions#Writes are all or nothing]]. A command that rewrites a state file, `soul/soul.json` or a sync bookmark exits 1 when the file exists but does not parse or is not an object, so a broken file is never replaced with an empty one. When a soul file changed, `owo stamp` reads `soul/soul.json` before it writes any file, so a broken one fails the stamp with nothing recorded or touched.
+Every file write is all or nothing: owo writes `<name>.tmp` next to the file and renames it over the file, and a failed write removes the temporary file. A command that writes several files (`stamp`, `index`, `sync start`, `sync push`, `export soulspec`, `new`) writes them as one set: when one fails, it puts back the files it replaced and removes the files and folders it made. A write follows a symlink to its file, and a device or pipe such as `/dev/stdout` is written in place. A symlink whose file is missing is an error and stays. A replaced file keeps its mode. A file in a read-only folder, or a file the caller cannot write, is not replaced, and a file the caller cannot read fails as a read. When `<name>.tmp` already exists, as a file or a symlink, the write fails and leaves it. Error text names the file, not its temporary file. See [[decisions#Writes are all or nothing]]. A command that rewrites a state file, `persona/soul.json` or a sync bookmark exits 1 when the file exists but does not parse or is not an object, so a broken file is never replaced with an empty one. When a persona file changed, `owo stamp` reads `persona/soul.json` before it writes any file, so a broken one fails the stamp with nothing recorded or touched.
 
 ## Generated files
 
@@ -118,6 +118,6 @@ Two fields set the auto-ingest of `owo acp`, and each resolves from `.owo.toml`,
 
 ## Templates
 
-Templates are embedded in the binary. `<root>/.templates/<name>` overrides one, where `<name>` is the identity-relative path for identity files (`soul/IDENTITY.md`, `work/README.md`) and `<type>.md` for entries (`character.md`).
+Templates are embedded in the binary. `<root>/.templates/<name>` overrides one, where `<name>` is the identity-relative path for identity files (`persona/IDENTITY.md`, `work/README.md`) and `<type>.md` for entries (`character.md`).
 
 Placeholders are `{{name}}`, `{{slug}}`, `{{title}}`, `{{today}}`, `{{date}}`, `{{parent}}`, `{{project}}`. A `{{key_yaml}}` form escapes double quotes for YAML strings, and a `{{key_json}}` form escapes for JSON strings. Filling is one pass, so `{{key}}` text inside a value stays as written. An era's `start` and `end` are empty until the author sets them.

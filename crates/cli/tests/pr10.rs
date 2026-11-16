@@ -3,8 +3,8 @@ mod common;
 use chrono::NaiveDate;
 use common::{copy_tree, examples, owo, PNG_1X1};
 use owo_core::{
-    mcp, parse_turns, AddRequest, Env, ErrorKind, Identity, Kind, ReviewDoneRequest, Root, Select,
-    SkillRequest, SoulHistoryRequest, SoulspecRequest, StateRequest, SyncStartRequest,
+    mcp, parse_turns, AddRequest, Env, ErrorKind, Identity, Kind, PersonaChangelogRequest,
+    ReviewDoneRequest, Root, Select, SkillRequest, SoulspecRequest, StateRequest, SyncStartRequest,
 };
 use serde_json::{json, Value};
 use std::fs;
@@ -142,24 +142,26 @@ fn pr10_relative_paths_join_env_cwd() {
 }
 
 #[test]
-fn pr10_last_soul_change_is_never_an_older_record() {
+fn pr10_last_persona_change_is_never_an_older_record() {
     let tmp = setup();
-    let path = tmp.path().join("ids/nicole/soul/state.json");
+    let path = tmp.path().join("ids/nicole/persona/state.json");
     let mut doc: Value = serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
-    doc["history"] = json!([
+    doc["changelog"] = json!([
         { "at": "2026-01-01T00:00:00Z", "file": "SOUL.md", "change": "old", "evidence": [] },
         { "at": "2026-02-01T00:00:00Z", "file": "SOUL.md", "change": "new", "evidence": "[[x]]" },
     ]);
     fs::write(&path, doc.to_string()).unwrap();
     let id = identity(tmp.path());
-    let history = id.soul_history(&SoulHistoryRequest::default()).unwrap();
+    let history = id
+        .persona_changelog(&PersonaChangelogRequest::default())
+        .unwrap();
     let last = serde_json::to_value(history.last().unwrap()).unwrap();
     assert_eq!(last["change"], "new", "{last}");
     assert_eq!(last["evidence"], "[[x]]", "{last}");
     let state = id.state(&StateRequest::default()).unwrap();
-    let last = serde_json::to_value(&state.last_soul_change).unwrap();
+    let last = serde_json::to_value(&state.last_persona_change).unwrap();
     assert_eq!(last["change"], "new", "{last}");
-    let last = serde_json::to_value(&id.review().last_soul_change).unwrap();
+    let last = serde_json::to_value(&id.review().last_persona_change).unwrap();
     assert_eq!(last["change"], "new", "{last}");
 }
 
@@ -168,7 +170,7 @@ fn pr10_date_outside_four_digit_years_is_a_usage_error() {
     let tmp = setup();
     let id = identity(tmp.path());
     let far = NaiveDate::from_ymd_opt(12345, 1, 1).unwrap();
-    let state = tmp.path().join("ids/nicole/soul/state.json");
+    let state = tmp.path().join("ids/nicole/persona/state.json");
     let before = fs::read_to_string(&state).unwrap();
     usage(id.add(&AddRequest {
         kind: Kind::Log,
@@ -376,16 +378,16 @@ fn pr10_soulspec_write_error_names_the_path_as_given() {
 }
 
 #[test]
-fn pr10_soul_history_text_keeps_string_evidence_of_a_mixed_array() {
+fn pr10_persona_changelog_text_keeps_string_evidence_of_a_mixed_array() {
     let tmp = setup();
-    let path = tmp.path().join("ids/nicole/soul/state.json");
+    let path = tmp.path().join("ids/nicole/persona/state.json");
     let mut doc: Value = serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
-    doc["history"] = json!([
+    doc["changelog"] = json!([
         { "at": "2026-01-01T00:00:00Z", "file": "SOUL.md", "change": "c", "evidence": ["[[a]]", 3, "[[b]]"] },
     ]);
     fs::write(&path, doc.to_string()).unwrap();
     let out = owo(&tmp.path().join("ids"))
-        .args(["-i", "nicole", "soul", "history"])
+        .args(["-i", "nicole", "persona", "changelog"])
         .output()
         .unwrap();
     let text = String::from_utf8_lossy(&out.stdout);

@@ -22,7 +22,7 @@ fn migrate_v1_fixture() {
     );
     assert_eq!(v["ok"], true, "{v}");
     for f in [
-        "soul/VOICE.md",
+        "persona/VOICE.md",
         "life/characters/ada.md",
         "life/characters/gull.md",
         "life/events/the-storm.md",

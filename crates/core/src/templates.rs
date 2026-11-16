@@ -14,17 +14,23 @@ pub(crate) use template;
 
 pub const IDENTITY_FILES: &[(&str, &str)] = &[
     ("identity.json", template!("identity.json")),
-    ("soul/soul.json", template!("soul/soul.json")),
-    ("soul/IDENTITY.md", template!("soul/IDENTITY.md")),
-    ("soul/SOUL.md", template!("soul/SOUL.md")),
-    ("soul/VOICE.md", template!("soul/VOICE.md")),
-    ("soul/LOOK.md", template!("soul/LOOK.md")),
-    ("soul/MEMORY.md", template!("soul/MEMORY.md")),
-    ("soul/examples/good.md", template!("soul/examples-good.md")),
-    ("soul/examples/bad.md", template!("soul/examples-bad.md")),
+    ("persona/soul.json", template!("persona/soul.json")),
+    ("persona/IDENTITY.md", template!("persona/IDENTITY.md")),
+    ("persona/SOUL.md", template!("persona/SOUL.md")),
+    ("persona/VOICE.md", template!("persona/VOICE.md")),
+    ("persona/LOOK.md", template!("persona/LOOK.md")),
+    ("persona/MEMORY.md", template!("persona/MEMORY.md")),
     (
-        "soul/examples/greetings.md",
-        template!("soul/examples-greetings.md"),
+        "persona/examples/good.md",
+        template!("persona/examples-good.md"),
+    ),
+    (
+        "persona/examples/bad.md",
+        template!("persona/examples-bad.md"),
+    ),
+    (
+        "persona/examples/greetings.md",
+        template!("persona/examples-greetings.md"),
     ),
     ("work/README.md", template!("work-README.md")),
 ];

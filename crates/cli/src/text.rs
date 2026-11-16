@@ -177,7 +177,7 @@ impl Text {
             }
             Outcome::Show { text, .. }
             | Outcome::Context { text, .. }
-            | Outcome::Soul { text, .. }
+            | Outcome::Persona { text, .. }
             | Outcome::Template { text, .. } => self.push(text),
             Outcome::Orphans(hits) => {
                 for h in hits {
@@ -200,9 +200,9 @@ impl Text {
             Outcome::State(s) => {
                 self.line(format!("# {}\n", s.identity));
                 self.push(now_block(s, None));
-                if let Some(change) = &s.last_soul_change {
+                if let Some(change) = &s.last_persona_change {
                     self.line(format!(
-                        "- Last soul change: {} {}",
+                        "- Last persona change: {} {}",
                         change.file.as_deref().unwrap_or("?"),
                         change.change.as_deref().unwrap_or("")
                     ));
@@ -258,12 +258,12 @@ impl Text {
                 let through = review.reviewed_through.as_deref().unwrap_or("-");
                 self.say(format!("review recorded through {through}"))
             }
-            Outcome::SoulNote(note) => self.say(format!(
+            Outcome::PersonaChange(note) => self.say(format!(
                 "noted {}: {}",
                 note.record.file.as_deref().unwrap_or(""),
                 note.record.change.as_deref().unwrap_or("")
             )),
-            Outcome::SoulHistory(list) => {
+            Outcome::PersonaChangelog(list) => {
                 for r in list {
                     let loose = r.other.get("evidence").and_then(|v| v.as_array());
                     let evidence: Vec<&str> = (r.evidence.iter().flatten().map(String::as_str))
@@ -278,7 +278,7 @@ impl Text {
                     ));
                 }
                 if list.is_empty() {
-                    self.say("no soul changes recorded");
+                    self.say("no persona changes recorded");
                 }
             }
             Outcome::Changes(c) => {
@@ -408,9 +408,9 @@ impl Text {
                 self.line(format!("- \"{phrase}\" on {n} days"));
             }
         }
-        if let Some(c) = &p.last_soul_change {
+        if let Some(c) = &p.last_persona_change {
             self.line(format!(
-                "\n## Last soul change\n\n{} {}: {}",
+                "\n## Last persona change\n\n{} {}: {}",
                 c.at.as_deref().unwrap_or("?"),
                 c.file.as_deref().unwrap_or("?"),
                 c.change.as_deref().unwrap_or("")

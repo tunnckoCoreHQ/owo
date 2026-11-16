@@ -1,4 +1,4 @@
-use crate::identity::{life_categories, Entry, Identity, Kind, SOUL_FILES};
+use crate::identity::{life_categories, Entry, Identity, Kind, PERSONA_FILES};
 use crate::markdown;
 use crate::output::{Diagnostic, Level};
 use crate::slug::is_slug;
@@ -24,7 +24,7 @@ type Check = fn(&Identity, &mut Vec<Diagnostic>);
 const CHECKS: &[(&str, Check)] = &[
     ("tree", tree),
     ("schema", schema),
-    ("soul-plain", soul_plain),
+    ("persona-plain", persona_plain),
     ("links", links),
     ("unique", unique),
     ("identifiers", identifiers),
@@ -36,7 +36,7 @@ const CHECKS: &[(&str, Check)] = &[
     ("budget", budget),
     ("dupes", dupes),
     ("orphans", orphans),
-    ("soul-evidence", soul_evidence),
+    ("persona-evidence", persona_evidence),
     ("review-due", review_due),
     ("kb", kb_links),
 ];
@@ -89,13 +89,13 @@ fn tree(id: &Identity, out: &mut Vec<Diagnostic>) {
     let dir = id.dir.clone();
     let mut required: Vec<String> = vec![
         "identity.json".into(),
-        "soul/soul.json".into(),
-        "soul/state.json".into(),
+        "persona/soul.json".into(),
+        "persona/state.json".into(),
         "life/state.json".into(),
         "work/state.json".into(),
         "work/README.md".into(),
     ];
-    required.extend(SOUL_FILES.iter().map(|f| format!("soul/{f}")));
+    required.extend(PERSONA_FILES.iter().map(|f| format!("persona/{f}")));
     for rel in &required {
         if !dir.join(rel).is_file() {
             out.push(err(rel, "required file is missing"));
@@ -126,14 +126,14 @@ fn tree(id: &Identity, out: &mut Vec<Diagnostic>) {
         }
         _ => {}
     }
-    if dir.join("soul/soul.json").is_file() {
-        match id.read_json("soul/soul.json") {
-            None => out.push(err("soul/soul.json", "invalid JSON")),
+    if dir.join("persona/soul.json").is_file() {
+        match id.read_json("persona/soul.json") {
+            None => out.push(err("persona/soul.json", "invalid JSON")),
             Some(s) => {
                 for key in ["specVersion", "name", "displayName", "version"] {
                     if s.get(key).and_then(Json::as_str).is_none_or(str::is_empty) {
                         out.push(err(
-                            "soul/soul.json",
+                            "persona/soul.json",
                             format!("SoulSpec field {key:?} is missing"),
                         ));
                     }
@@ -319,15 +319,15 @@ fn check_entry_schema(e: &Entry, out: &mut Vec<Diagnostic>) {
     }
 }
 
-fn soul_plain(id: &Identity, out: &mut Vec<Diagnostic>) {
+fn persona_plain(id: &Identity, out: &mut Vec<Diagnostic>) {
     out.extend(
         id.entries
             .iter()
-            .filter(|e| e.kind == Kind::Soul && e.text.starts_with("---"))
+            .filter(|e| e.kind == Kind::Persona && e.text.starts_with("---"))
             .map(|e| {
                 err(
                     &e.rel,
-                    "soul files are plain Markdown; stamps live in soul/state.json",
+                    "persona files are plain Markdown; stamps live in persona/state.json",
                 )
             }),
     );
@@ -519,11 +519,11 @@ fn generated(id: &Identity, out: &mut Vec<Diagnostic>) {
 }
 
 fn memory_review(id: &Identity, out: &mut Vec<Diagnostic>) {
-    if state::doc(id, "soul").is_null() || !state::review(id).memory_changed {
+    if state::doc(id, "persona").is_null() || !state::review(id).memory_changed {
         return;
     }
     out.push(warn(
-        "soul/MEMORY.md",
+        "persona/MEMORY.md",
         "MEMORY.md changed outside a review; review compiles MEMORY (`owo review`)",
     ));
 }
@@ -558,7 +558,7 @@ fn state_rule(id: &Identity, out: &mut Vec<Diagnostic>) {
 
 fn budget(id: &Identity, out: &mut Vec<Diagnostic>) {
     for (file, default) in BUDGETS {
-        let Some(e) = id.entry(&format!("soul/{file}")) else {
+        let Some(e) = id.entry(&format!("persona/{file}")) else {
             continue;
         };
         let limit = id.budget_override(file).unwrap_or(*default);
@@ -624,8 +624,8 @@ fn orphans(id: &Identity, out: &mut Vec<Diagnostic>) {
     );
 }
 
-fn soul_evidence(id: &Identity, out: &mut Vec<Diagnostic>) {
-    for (n, record) in state::history(id).iter().enumerate() {
+fn persona_evidence(id: &Identity, out: &mut Vec<Diagnostic>) {
+    for (n, record) in state::changelog(id).iter().enumerate() {
         let evidence: std::collections::BTreeSet<usize> = record
             .get("evidence")
             .and_then(Json::as_array)
@@ -643,8 +643,8 @@ fn soul_evidence(id: &Identity, out: &mut Vec<Diagnostic>) {
         });
         if evidence.len() < 2 && !defining {
             out.push(warn(
-                "soul/state.json",
-                format!("history[{n}] needs two evidence links or one defining event"),
+                "persona/state.json",
+                format!("changelog[{n}] needs two evidence links or one defining event"),
             ));
         }
     }
@@ -665,7 +665,7 @@ fn review_due(id: &Identity, out: &mut Vec<Diagnostic>) {
         }),
     };
     if let Some(m) = msg {
-        out.push(Diagnostic::new(Level::Info, "soul/state.json", m));
+        out.push(Diagnostic::new(Level::Info, "persona/state.json", m));
     }
 }
 

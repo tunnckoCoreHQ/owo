@@ -38,7 +38,7 @@ impl Report {
     }
 }
 
-const SOUL: &[(&str, &str)] = &[
+const PERSONA: &[(&str, &str)] = &[
     ("IDENTITY.md", "IDENTITY.md"),
     ("SOUL.md", "SOUL.md"),
     ("LOOK.md", "LOOK.md"),
@@ -367,25 +367,25 @@ fn fill(src: &Path, refs: &Path, root: &Path, slug: &str, manifest: &Value) -> R
     };
     let rel = |p: &Path| p.strip_prefix(src).unwrap_or(p).display().to_string();
 
-    for (from, to) in SOUL {
+    for (from, to) in PERSONA {
         let p = refs.join("soul").join(from);
         if p.is_file() {
-            crate::write::file(&dir.join("soul").join(to), fs::read(&p)?)?;
-            r.moved.push((rel(&p), format!("soul/{to}")));
+            crate::write::file(&dir.join("persona").join(to), fs::read(&p)?)?;
+            r.moved.push((rel(&p), format!("persona/{to}")));
         }
     }
     if let Some(old) = fs::read_to_string(refs.join("soul/state.json"))
         .ok()
         .and_then(|t| serde_json::from_str::<Value>(&t).ok())
     {
-        patch_json(&dir.join("soul/state.json"), |doc| {
+        patch_json(&dir.join("persona/state.json"), |doc| {
             if let Some(h) = old.get("history").filter(|h| h.is_array()) {
-                doc["history"] = h.clone();
+                doc["changelog"] = h.clone();
             }
         })?;
         r.moved.push((
             "references/soul/state.json".into(),
-            "soul/state.json (history)".into(),
+            "persona/state.json (changelog)".into(),
         ));
     }
     patch_json(&dir.join("identity.json"), |doc| {

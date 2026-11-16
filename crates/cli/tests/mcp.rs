@@ -83,8 +83,8 @@ fn mcp_lists_and_calls_tools() {
         "changes",
         "review",
         "review_done",
-        "soul_note",
-        "soul_history",
+        "persona_change",
+        "persona_changelog",
         "export_card",
         "export_soulspec",
         "export_skill",
@@ -106,7 +106,7 @@ fn mcp_lists_and_calls_tools() {
         "values never parse as flags"
     );
     assert!(text(&replies[5]).contains("unknown argument"));
-    assert!(text(&replies[6]).contains("soul/VOICE.md"));
+    assert!(text(&replies[6]).contains("persona/VOICE.md"));
     assert_eq!(replies[7]["error"]["code"], -32601);
 }
 
@@ -125,7 +125,7 @@ fn mcp_sends_turns_on_stdin_and_joins_flag_values() {
         ),
         call(
             2,
-            "soul_note",
+            "persona_change",
             json!({ "file": "SOUL.md", "change": "-ly adverbs removed" }),
         ),
     ]);

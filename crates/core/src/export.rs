@@ -118,36 +118,36 @@ pub fn card(
     scenario_from: Option<&str>,
 ) -> Result<Value> {
     let name = id.name().to_string();
-    let soul_json = id.read_json("soul/soul.json").unwrap_or(Value::Null);
-    let mut description = text(id, "soul/IDENTITY.md");
-    let look = text(id, "soul/LOOK.md");
+    let soul_json = id.read_json("persona/soul.json").unwrap_or(Value::Null);
+    let mut description = text(id, "persona/IDENTITY.md");
+    let look = text(id, "persona/LOOK.md");
     if !look.is_empty() {
         description.push_str(&format!("\n\n## Look\n\n{}", markdown::demote(&look)));
     }
-    let who = section(id, "soul/IDENTITY.md", "Who she is")
-        + &section(id, "soul/IDENTITY.md", "Who he is")
-        + &section(id, "soul/IDENTITY.md", "Who they are");
+    let who = section(id, "persona/IDENTITY.md", "Who she is")
+        + &section(id, "persona/IDENTITY.md", "Who he is")
+        + &section(id, "persona/IDENTITY.md", "Who they are");
     let mut system_prompt = if who.is_empty() {
-        text(id, "soul/IDENTITY.md")
+        text(id, "persona/IDENTITY.md")
     } else {
         who
     };
-    let voice = text(id, "soul/VOICE.md");
+    let voice = text(id, "persona/VOICE.md");
     if !voice.is_empty() {
         system_prompt.push_str(&format!("\n\nVoice: {voice}"));
     }
-    let good = text(id, "soul/examples/good.md");
+    let good = text(id, "persona/examples/good.md");
     let mes_example = if good.is_empty() || good.starts_with("<START>") {
         good
     } else {
         format!("<START>\n{good}")
     };
-    let mut greetings = sections(id, "soul/examples/greetings.md").into_iter();
+    let mut greetings = sections(id, "persona/examples/greetings.md").into_iter();
     let first_mes = greetings.next().unwrap_or_default();
     let mut scenario = String::new();
     let mut entries = vec![json!({
-        "id": 0, "keys": ["memory"], "content": text(id, "soul/MEMORY.md"), "extensions": {}, "enabled": true,
-        "insertion_order": 10, "case_sensitive": false, "use_regex": false, "constant": true, "name": "Memory", "priority": 0, "comment": "soul/MEMORY.md"
+        "id": 0, "keys": ["memory"], "content": text(id, "persona/MEMORY.md"), "extensions": {}, "enabled": true,
+        "insertion_order": 10, "case_sensitive": false, "use_regex": false, "constant": true, "name": "Memory", "priority": 0, "comment": "persona/MEMORY.md"
     })];
     let project_md = project.and_then(|p| id.project(p));
     if let Some(e) = project_md {
@@ -189,7 +189,7 @@ pub fn card(
     let mut data = json!({
         "name": name,
         "description": description,
-        "personality": text(id, "soul/SOUL.md"),
+        "personality": text(id, "persona/SOUL.md"),
         "scenario": scenario,
         "first_mes": first_mes,
         "mes_example": mes_example,
@@ -234,7 +234,7 @@ pub fn warnings(card: &Value) -> Vec<String> {
                 .as_str()
                 .is_none_or(|s| s.trim().is_empty())
         })
-        .map(|k| format!("{k} is empty; fill soul/examples/"))
+        .map(|k| format!("{k} is empty; fill persona/examples/"))
         .collect()
 }
 
@@ -266,12 +266,12 @@ pub struct SoulspecReport {
 }
 
 pub fn soulspec(id: &Identity, dir: &Path, shown: &Path) -> Result<SoulspecReport> {
-    let soul = id.dir.join("soul");
+    let persona = id.dir.join("persona");
     let mut manifest = id
-        .read_object("soul/soul.json")?
+        .read_object("persona/soul.json")?
         .unwrap_or_else(|| json!({}));
     if !(manifest["files"].is_object() || manifest["files"].is_null()) {
-        bail!("soul/soul.json `files` is not an object");
+        bail!("persona/soul.json `files` is not an object");
     }
     let mut warnings = vec![];
     let license = manifest["license"].as_str().unwrap_or("").to_string();
@@ -283,8 +283,8 @@ pub fn soulspec(id: &Identity, dir: &Path, shown: &Path) -> Result<SoulspecRepor
     }
     manifest["files"]["style"] = json!("STYLE.md");
     manifest["files"]["memory"] = json!("MEMORY.md");
-    let read = |rel: &str| fs::read_to_string(soul.join(rel)).unwrap_or_default();
-    let look = text(id, "soul/LOOK.md");
+    let read = |rel: &str| fs::read_to_string(persona.join(rel)).unwrap_or_default();
+    let look = text(id, "persona/LOOK.md");
     let mut identity = read("IDENTITY.md").trim_end().to_string();
     if !look.is_empty() {
         identity.push_str(&format!("\n\n## Look\n\n{}", markdown::demote(&look)));
@@ -300,7 +300,7 @@ pub fn soulspec(id: &Identity, dir: &Path, shown: &Path) -> Result<SoulspecRepor
     ];
     for name in ["good.md", "bad.md", "greetings.md"] {
         let rel = format!("examples/{name}");
-        if soul.join(&rel).is_file() {
+        if persona.join(&rel).is_file() {
             parts.push((rel.clone(), read(&rel)));
         }
     }
@@ -321,8 +321,8 @@ pub fn soulspec(id: &Identity, dir: &Path, shown: &Path) -> Result<SoulspecRepor
 
 pub fn skill(id: &Identity, dir: &Path) -> Result<()> {
     let name = id.name().to_string();
-    let soul = id.read_json("soul/soul.json").unwrap_or(Value::Null);
-    let about = soul["description"]
+    let manifest = id.read_json("persona/soul.json").unwrap_or(Value::Null);
+    let about = manifest["description"]
         .as_str()
         .filter(|s| !s.is_empty())
         .map_or_else(|| format!("The {name} identity."), str::to_string);
@@ -368,7 +368,7 @@ Add `--look` when visuals matter.
 
 - New entries: `owo -i {slug} add <type> <title>`; small things: `owo -i {slug} add log`.
 - Edit existing entries in place (with file tools, or `owo -i {slug} write <path>` with the full text); each fact has one home.
-- MEMORY.md and soul changes happen in review.
+- MEMORY.md and persona changes happen in review.
 - Session end: `owo -i {slug} stamp && owo -i {slug} index && owo -i {slug} lint --changed`.
 "#,
         description = crate::templates::yaml_escape(&format!(
