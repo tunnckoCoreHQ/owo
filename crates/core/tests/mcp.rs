@@ -69,7 +69,7 @@ fn mcp_reply_answers_one_message() {
         .iter()
         .map(|t| t["name"].as_str().unwrap())
         .collect();
-    assert!(names.contains(&"slug") && names.contains(&"review_done"));
+    assert!(names.contains(&"slug") && names.contains(&"reflect_done"));
     assert!(!names.contains(&"mcp") && !names.contains(&"acp"));
 
     let r = reply(call("slug", json!({ "text": "Hello World" })), &sel, &env);

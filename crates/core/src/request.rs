@@ -879,11 +879,11 @@ impl Request for SearchRequest {
 }
 
 #[derive(Debug, Clone, Copy, Default)]
-pub struct ReviewDoneRequest {
+pub struct ReflectDoneRequest {
     pub through: Option<NaiveDate>,
 }
 
-impl Request for ReviewDoneRequest {
+impl Request for ReflectDoneRequest {
     fn read(r: &mut Reader, b: Self) -> Self {
         Self {
             through: r.day(

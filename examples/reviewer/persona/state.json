@@ -44,9 +44,9 @@
       ]
     }
   ],
-  "review": {
-    "last_reviewed": "2026-11-04T03:34:02Z",
-    "reviewed_through": "2026-11-03",
+  "reflection": {
+    "last_reflected": "2026-11-04T03:34:02Z",
+    "reflected_through": "2026-11-03",
     "memory_hash": "b3:cc84dab1555831e32673614dd6dd827661c9020e65cc06b5cc375ffb1aa2548c"
   }
 }

@@ -22,13 +22,13 @@ impl Link {
 }
 
 #[derive(Debug, Serialize)]
-pub struct ReviewStatus {
-    pub last_reviewed: Option<String>,
+pub struct ReflectionStatus {
+    pub last_reflected: Option<String>,
     pub days_since: Option<i64>,
     pub every_days: i64,
     pub due: bool,
-    pub unreviewed_log_days: usize,
-    pub memory_changed_outside_review: bool,
+    pub unreflected_log_days: usize,
+    pub memory_changed_outside_reflection: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -41,8 +41,8 @@ pub struct CurrentState {
     pub recent_events: Vec<Link>,
     pub open_threads: Vec<Link>,
     pub open_conflicts: Vec<Link>,
-    pub review: ReviewStatus,
-    pub last_persona_change: Option<crate::review::PersonaChange>,
+    pub reflection: ReflectionStatus,
+    pub last_persona_change: Option<crate::reflect::PersonaChange>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub project: Option<ProjectState>,
 }
@@ -146,14 +146,14 @@ pub fn compute(id: &Identity, days: i64, logs: usize) -> CurrentState {
         .max()
         .unwrap_or(today);
     let since = story_today - Duration::days(days);
-    let review = crate::state::review(id);
+    let reflection = crate::state::reflection(id);
     let log_entries: Vec<&Entry> = by_date_desc(id, Kind::Log)
         .into_iter()
         .filter(|e| !e.is_blank())
         .collect();
-    let unreviewed = log_entries
+    let unreflected = log_entries
         .iter()
-        .filter(|e| review.unreviewed(e.field_str("date").as_deref()))
+        .filter(|e| reflection.unreflected(e.field_str("date").as_deref()))
         .count();
     let by_scope = scope_activity(id);
     CurrentState {
@@ -174,14 +174,14 @@ pub fn compute(id: &Identity, days: i64, logs: usize) -> CurrentState {
             .collect(),
         open_threads: open_links(id, Kind::Thread),
         open_conflicts: open_links(id, Kind::Conflict),
-        last_persona_change: crate::review::persona_changelog(id, None).pop(),
-        review: ReviewStatus {
-            last_reviewed: review.last_reviewed,
-            days_since: review.days_since,
-            every_days: review.every_days,
-            due: review.due,
-            unreviewed_log_days: unreviewed,
-            memory_changed_outside_review: review.memory_changed,
+        last_persona_change: crate::reflect::persona_changelog(id, None).pop(),
+        reflection: ReflectionStatus {
+            last_reflected: reflection.last_reflected,
+            days_since: reflection.days_since,
+            every_days: reflection.every_days,
+            due: reflection.due,
+            unreflected_log_days: unreflected,
+            memory_changed_outside_reflection: reflection.memory_changed,
         },
         project: None,
     }
@@ -224,9 +224,9 @@ pub fn now_block(s: &CurrentState, project: Option<&str>) -> String {
             join_links(&s.open_conflicts)
         ));
     }
-    let r = &s.review;
-    let review = match r.days_since {
-        None => "never reviewed".to_string(),
+    let r = &s.reflection;
+    let reflection = match r.days_since {
+        None => "never reflected".to_string(),
         Some(d) => format!(
             "{} ({d} days since, every {})",
             if r.due { "due" } else { "not due" },
@@ -234,8 +234,8 @@ pub fn now_block(s: &CurrentState, project: Option<&str>) -> String {
         ),
     };
     lines.push(format!(
-        "- Review: {review}, {} unreviewed log days",
-        r.unreviewed_log_days
+        "- Reflection: {reflection}, {} log days since the last reflection",
+        r.unreflected_log_days
     ));
     let notes = project
         .map(|p| format!(", work/projects/{p}/notes/"))

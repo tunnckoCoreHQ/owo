@@ -93,7 +93,7 @@ fn dry_run_names_what_each_writing_command_writes() {
         &["add", "project", "Big Thing"],
         &["index"],
         &["stamp"],
-        &["review", "done"],
+        &["reflect", "done"],
         &["persona", "change", "SOUL.md", "--change", "Calmer"],
         &[
             "persona",

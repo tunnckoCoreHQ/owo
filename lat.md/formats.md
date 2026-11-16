@@ -30,7 +30,7 @@ Persona files are plain Markdown with no frontmatter; their stamps live in `pers
 - `SOUL.md`: first person. Beliefs, wants, emotional logic, boundaries.
 - `VOICE.md`: how the identity talks and writes, per medium.
 - `LOOK.md`: durable appearance, style, signature moves.
-- `MEMORY.md`: compiled long-term memory with sections Patterns, Defining moments, Lessons and Hints. Defining moments and lessons are links; hints point into `life/` and `work/`. Only review writes it.
+- `MEMORY.md`: compiled long-term memory with sections Patterns, Defining moments, Lessons and Hints. Defining moments and lessons are links; hints point into `life/` and `work/`. Only a reflection writes it.
 - `examples/`: `good.md`, `bad.md`, and `greetings.md` with one `##` per greeting. Exports read them.
 
 ## Slugs and paths
@@ -86,7 +86,7 @@ The tool manifest, read by the CLI.
 - `schema` (`owo/1`), `slug`, `name`, and optional `nickname` (card export).
 - `accounts`: the identity's own accounts as `{kind, handle}`. Handles appear only here.
 - `budgets`: persona file word budgets that override the defaults in [[lint]].
-- `review_every_days` (default 7).
+- `reflect_every_days` (default 7).
 
 `persona/soul.json` is the SoulSpec v0.5 manifest. `owo stamp` bumps its minor version when a persona file changes.
 
@@ -94,7 +94,7 @@ The tool manifest, read by the CLI.
 
 Each `state.json` has `files`: a map from scope-relative path to `{updated, hash}`. Stamps are RFC 3339 UTC and move only when the hash changes. Hashes are `b3:<blake3 hex>` of the file text.
 
-`persona/state.json` adds `changelog` and `review`. Each persona change in `changelog` is `{at, file, change, evidence}`, appended by `owo persona change`. The `review` object holds `last_reviewed`, `reviewed_through` and `memory_hash`; when MEMORY.md's hash differs from `memory_hash`, lint warns that MEMORY changed outside a review.
+`persona/state.json` adds `changelog` and `reflection`. Each persona change in `changelog` is `{at, file, change, evidence}`, appended by `owo persona change`. The `reflection` object holds `last_reflected`, `reflected_through` and `memory_hash`; when MEMORY.md's hash differs from `memory_hash`, lint warns that MEMORY changed outside a reflection.
 
 Every file write is all or nothing: owo writes `<name>.tmp` next to the file and renames it over the file, and a failed write removes the temporary file. A command that writes several files (`stamp`, `index`, `sync start`, `sync push`, `export soulspec`, `new`) writes them as one set: when one fails, it puts back the files it replaced and removes the files and folders it made. A write follows a symlink to its file, and a device or pipe such as `/dev/stdout` is written in place. A symlink whose file is missing is an error and stays. A replaced file keeps its mode. A file in a read-only folder, or a file the caller cannot write, is not replaced, and a file the caller cannot read fails as a read. When `<name>.tmp` already exists, as a file or a symlink, the write fails and leaves it. Error text names the file, not its temporary file. See [[decisions#Writes are all or nothing]]. A command that rewrites a state file, `persona/soul.json` or a sync bookmark exits 1 when the file exists but does not parse or is not an object, so a broken file is never replaced with an empty one. When a persona file changed, `owo stamp` reads `persona/soul.json` before it writes any file, so a broken one fails the stamp with nothing recorded or touched.
 

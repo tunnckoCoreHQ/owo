@@ -354,7 +354,7 @@ fn recurring_phrases_stay_inside_one_line() {
         let text = fs::read_to_string(&log).unwrap();
         fs::write(&log, format!("{text}\n- Fed cat\n- Walked home\n")).unwrap();
     }
-    let packet = stdout(tmp.path(), &["review"]);
+    let packet = stdout(tmp.path(), &["reflect"]);
     assert!(!packet.contains("cat walked"), "{packet}");
 }
 

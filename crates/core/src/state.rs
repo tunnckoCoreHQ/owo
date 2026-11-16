@@ -75,7 +75,7 @@ pub fn initial(identity: &Identity, at: &str) -> Vec<(String, Value)> {
                 "persona" => json!({
                     "files": files,
                     "changelog": [],
-                    "review": { "last_reviewed": null, "reviewed_through": null, "memory_hash": memory_hash }
+                    "reflection": { "last_reflected": null, "reflected_through": null, "memory_hash": memory_hash }
                 }),
                 _ => json!({ "files": files }),
             };
@@ -116,18 +116,18 @@ pub fn date_of(text: &str) -> Option<NaiveDate> {
     parse_day(text.get(..10)?).ok()
 }
 
-pub struct Review {
-    pub last_reviewed: Option<String>,
-    pub reviewed_through: Option<NaiveDate>,
+pub struct Reflection {
+    pub last_reflected: Option<String>,
+    pub reflected_through: Option<NaiveDate>,
     pub days_since: Option<i64>,
     pub every_days: i64,
     pub due: bool,
     pub memory_changed: bool,
 }
 
-impl Review {
-    pub fn unreviewed(&self, date: Option<&str>) -> bool {
-        match (date.and_then(date_of), self.reviewed_through) {
+impl Reflection {
+    pub fn unreflected(&self, date: Option<&str>) -> bool {
+        match (date.and_then(date_of), self.reflected_through) {
             (Some(d), Some(r)) => d > r,
             (Some(_), None) => true,
             _ => false,
@@ -135,21 +135,21 @@ impl Review {
     }
 }
 
-pub fn review(id: &Identity) -> Review {
-    let field = |key: &str| doc(id, "persona")["review"][key].as_str();
-    let last_reviewed = field("last_reviewed").map(str::to_string);
-    let every_days = id.manifest["review_every_days"].as_i64().unwrap_or(7);
-    let days_since = last_reviewed
+pub fn reflection(id: &Identity) -> Reflection {
+    let field = |key: &str| doc(id, "persona")["reflection"][key].as_str();
+    let last_reflected = field("last_reflected").map(str::to_string);
+    let every_days = id.manifest["reflect_every_days"].as_i64().unwrap_or(7);
+    let days_since = last_reflected
         .as_deref()
         .and_then(|t| DateTime::parse_from_rfc3339(t).ok())
         .map(|t| (Utc::now() - t.with_timezone(&Utc)).num_days());
     let memory_hash = id.entry("persona/MEMORY.md").map(|e| hash(&e.text));
-    Review {
-        reviewed_through: field("reviewed_through").and_then(date_of),
+    Reflection {
+        reflected_through: field("reflected_through").and_then(date_of),
         days_since,
         every_days,
         due: days_since.is_none_or(|d| d >= every_days),
         memory_changed: memory_hash.is_some() && memory_hash.as_deref() != field("memory_hash"),
-        last_reviewed,
+        last_reflected,
     }
 }

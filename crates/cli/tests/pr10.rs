@@ -4,7 +4,8 @@ use chrono::NaiveDate;
 use common::{copy_tree, examples, owo, PNG_1X1};
 use owo_core::{
     mcp, parse_turns, AddRequest, Env, ErrorKind, Identity, Kind, PersonaChangelogRequest,
-    ReviewDoneRequest, Root, Select, SkillRequest, SoulspecRequest, StateRequest, SyncStartRequest,
+    ReflectDoneRequest, Root, Select, SkillRequest, SoulspecRequest, StateRequest,
+    SyncStartRequest,
 };
 use serde_json::{json, Value};
 use std::fs;
@@ -161,7 +162,7 @@ fn pr10_last_persona_change_is_never_an_older_record() {
     let state = id.state(&StateRequest::default()).unwrap();
     let last = serde_json::to_value(&state.last_persona_change).unwrap();
     assert_eq!(last["change"], "new", "{last}");
-    let last = serde_json::to_value(&id.review().last_persona_change).unwrap();
+    let last = serde_json::to_value(&id.reflect().last_persona_change).unwrap();
     assert_eq!(last["change"], "new", "{last}");
 }
 
@@ -181,7 +182,7 @@ fn pr10_date_outside_four_digit_years_is_a_usage_error() {
         .path()
         .join("ids/nicole/life/log/+12345-01-01.md")
         .exists());
-    usage(id.review_done(&ReviewDoneRequest { through: Some(far) }));
+    usage(id.reflect_done(&ReflectDoneRequest { through: Some(far) }));
     assert_eq!(fs::read_to_string(&state).unwrap(), before);
 }
 

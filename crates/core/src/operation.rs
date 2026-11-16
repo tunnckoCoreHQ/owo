@@ -244,7 +244,7 @@ pub fn operations() -> Vec<Operation> {
         ),
         op::<StateRequest>(
             &["state"],
-            "Derived current state: activity, recent days and events, open threads, review",
+            "Derived current state: activity, recent days and events, open threads, reflection",
             |r, s| Ok(Outcome::State(s.identity()?.state(&r)?)),
         ),
         op::<SearchRequest>(
@@ -256,14 +256,14 @@ pub fn operations() -> Vec<Operation> {
             },
         ),
         op::<()>(
-            &["review"],
-            "Print the review packet, or record a finished review with `done`",
-            |_, s| Ok(Outcome::Review(s.identity()?.review())),
+            &["reflect"],
+            "Print the reflection digest, or record a finished reflection with `done`",
+            |_, s| Ok(Outcome::Reflect(s.identity()?.reflect())),
         ),
-        write_op::<ReviewDoneRequest>(
-            &["review", "done"],
-            "Record a finished review (dates and the MEMORY.md hash)",
-            |r, s| Ok(Outcome::ReviewDone(s.identity()?.review_done(&r)?)),
+        write_op::<ReflectDoneRequest>(
+            &["reflect", "done"],
+            "Record a finished reflection (dates and the MEMORY.md hash)",
+            |r, s| Ok(Outcome::ReflectDone(s.identity()?.reflect_done(&r)?)),
         ),
         op::<PersonaRequest>(
             &["persona"],
@@ -411,8 +411,8 @@ pub enum Outcome {
     },
     SyncDue(Vec<PendingSession>),
     Migrate(MigrateReport),
-    Review(ReviewPacket),
-    ReviewDone(ReviewRecord),
+    Reflect(ReflectionDigest),
+    ReflectDone(ReflectionRecord),
     Persona {
         files: Vec<(String, String)>,
         text: String,
@@ -557,8 +557,8 @@ impl Outcome {
             Outcome::SyncDone { bookmark, .. } => Envelope::ok(value(bookmark)),
             Outcome::SyncDue(list) => Envelope::ok(json!({ "due": list })),
             Outcome::Migrate(r) => Envelope::ok(value(r)),
-            Outcome::Review(p) => Envelope::ok(value(p)),
-            Outcome::ReviewDone(r) => Envelope::ok(value(r)),
+            Outcome::Reflect(p) => Envelope::ok(value(p)),
+            Outcome::ReflectDone(r) => Envelope::ok(value(r)),
             Outcome::Persona { files, .. } => {
                 let files: Vec<Value> = files
                     .iter()

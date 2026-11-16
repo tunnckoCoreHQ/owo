@@ -29,15 +29,15 @@ pub struct LogDay {
 }
 
 #[derive(Debug, Serialize)]
-pub struct ReviewPacket {
+pub struct ReflectionDigest {
     pub identity: String,
-    pub last_reviewed: Option<String>,
-    pub reviewed_through: Option<String>,
+    pub last_reflected: Option<String>,
+    pub reflected_through: Option<String>,
     pub memory: String,
     pub memory_words: usize,
-    pub memory_changed_outside_review: bool,
+    pub memory_changed_outside_reflection: bool,
     pub changed: Vec<Changed>,
-    pub unreviewed_days: Vec<LogDay>,
+    pub unreflected_days: Vec<LogDay>,
     pub events: Vec<Link>,
     pub lessons: Vec<Link>,
     pub journal: Vec<String>,
@@ -75,19 +75,19 @@ fn recurring(days: &[LogDay]) -> Vec<(String, usize)> {
     out
 }
 
-pub fn packet(id: &Identity) -> ReviewPacket {
-    let review = crate::state::review(id);
-    let last = review.last_reviewed.clone();
-    let after_through = |d: &Option<String>| review.unreviewed(d.as_deref());
+pub fn digest(id: &Identity) -> ReflectionDigest {
+    let reflection = crate::state::reflection(id);
+    let last = reflection.last_reflected.clone();
+    let after_through = |d: &Option<String>| reflection.unreflected(d.as_deref());
     let git = crate::git::is_repo(&id.dir);
     let mut changed = vec![];
     for e in crate::state::tracked(id) {
         let updated = crate::state::updated(id, &e.rel)
             .unwrap_or_default()
             .to_string();
-        let reviewed =
+        let reflected =
             !updated.is_empty() && last.as_deref().is_some_and(|l| updated.as_str() <= l);
-        if reviewed || e.rel == "persona/MEMORY.md" {
+        if reflected || e.rel == "persona/MEMORY.md" {
             continue;
         }
         changed.push(Changed {
@@ -125,13 +125,13 @@ pub fn packet(id: &Identity) -> ReviewPacket {
     let of_kind = |k: Kind| id.entries.iter().filter(move |e| e.kind == k);
     let changed_paths: BTreeSet<&str> = changed.iter().map(|c| c.path.as_str()).collect();
     let memory = id.entry("persona/MEMORY.md");
-    ReviewPacket {
+    ReflectionDigest {
         identity: id.slug.clone(),
         memory: memory.map(|e| e.text.clone()).unwrap_or_default(),
         memory_words: memory
             .map(|e| crate::markdown::word_count(e.body()))
             .unwrap_or(0),
-        memory_changed_outside_review: review.memory_changed,
+        memory_changed_outside_reflection: reflection.memory_changed,
         events: of_kind(Kind::Event)
             .filter(|e| after_through(&e.field_str("date")))
             .map(Link::of)
@@ -148,21 +148,21 @@ pub fn packet(id: &Identity) -> ReviewPacket {
         open_conflicts: open_links(id, Kind::Conflict),
         recurring: recurring(&days),
         last_persona_change: persona_changelog(id, None).pop(),
-        unreviewed_days: days,
+        unreflected_days: days,
         changed,
-        last_reviewed: last,
-        reviewed_through: review.reviewed_through.map(|d| d.to_string()),
+        last_reflected: last,
+        reflected_through: reflection.reflected_through.map(|d| d.to_string()),
     }
 }
 
 #[derive(Debug, Serialize)]
-pub struct ReviewRecord {
-    pub last_reviewed: String,
-    pub reviewed_through: Option<String>,
+pub struct ReflectionRecord {
+    pub last_reflected: String,
+    pub reflected_through: Option<String>,
     pub memory_hash: Option<String>,
 }
 
-pub fn done(id: &Identity, through: Option<NaiveDate>) -> Result<ReviewRecord> {
+pub fn done(id: &Identity, through: Option<NaiveDate>) -> Result<ReflectionRecord> {
     let mut doc = id
         .read_object("persona/state.json")?
         .ok_or(crate::Fault::NoPersonaState)?;
@@ -180,14 +180,14 @@ pub fn done(id: &Identity, through: Option<NaiveDate>) -> Result<ReviewRecord> {
     let memory = id
         .entry("persona/MEMORY.md")
         .map(|e| crate::state::hash(&e.text));
-    let review = ReviewRecord {
-        last_reviewed: crate::state::now(),
-        reviewed_through: through,
+    let record = ReflectionRecord {
+        last_reflected: crate::state::now(),
+        reflected_through: through,
         memory_hash: memory,
     };
-    doc["review"] = serde_json::to_value(&review)?;
+    doc["reflection"] = serde_json::to_value(&record)?;
     crate::write::json(&id.dir.join("persona/state.json"), &doc)?;
-    Ok(review)
+    Ok(record)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

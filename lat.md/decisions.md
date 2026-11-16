@@ -14,7 +14,7 @@ Indexes and the timeline depend only on entry content, so `owo index --check` an
 
 `owo stamp` moves a file's stamp only when its hash changes, and then sets `updated:` in that entry's frontmatter to the local day (the day `owo add` uses) and re-hashes it.
 
-A changed persona file bumps the minor version in `persona/soul.json`. New identities get `review.memory_hash` set at creation, so a fresh identity lints without a memory warning.
+A changed persona file bumps the minor version in `persona/soul.json`. New identities get `reflection.memory_hash` set at creation, so a fresh identity lints without a memory warning.
 
 ## Identifier check is literal
 
@@ -42,7 +42,7 @@ The flag for IDENTITY is `--id`, not `--identity`. The global `-i/--identity` fl
 
 ## Examples are built with owo
 
-`examples/nicole` and `examples/reviewer` were scaffolded with `owo new` and `owo add`, filled by hand, then indexed, stamped and reviewed. `crates/cli/tests/examples.rs` checks they stay lint clean and current.
+`examples/nicole` and `examples/reviewer` were scaffolded with `owo new` and `owo add`, filled by hand, then indexed and stamped, and a first reflection was recorded. `crates/cli/tests/examples.rs` checks they stay lint clean and current.
 
 ## Changes read Git, else stamps
 
@@ -52,11 +52,11 @@ Outside a repo `--since` takes only a `YYYY-MM-DD` day and exits 1 on anything e
 
 `lint --changed` keeps diagnostics whose path is uncommitted in Git or drifts from its stamp (`stamp --check`). Outside Git, files stamped today count too, so a session that ends with `stamp` still checks its own edits. The full lint still runs; only the report is filtered.
 
-## Review window uses two cursors
+## Reflection window uses two cursors
 
-Files count as changed when their stamp is newer than `last_reviewed`. Log days, events and journal count as unreviewed when their story date is after `reviewed_through`. Stamps track edits; story dates track the life.
+Files count as changed when their stamp is newer than `last_reflected`. Log days, events and journal count as new for a reflection when their story date is after `reflected_through`. Stamps track edits; story dates track the life.
 
-`owo review done` sets `reviewed_through` to the newest date of a non-blank log, an event or a journal entry, not today, because story time can run behind or ahead of real time.
+`owo reflect done` sets `reflected_through` to the newest date of a non-blank log, an event or a journal entry, not today, because story time can run behind or ahead of real time.
 
 ## Lint reuses find
 

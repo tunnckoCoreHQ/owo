@@ -31,13 +31,13 @@ const CHECKS: &[(&str, Check)] = &[
     ("journal", journal),
     ("supersede", supersede),
     ("generated", generated),
-    ("memory-review", memory_review),
+    ("memory-reflection", memory_reflection),
     ("state", state_rule),
     ("budget", budget),
     ("dupes", dupes),
     ("orphans", orphans),
     ("persona-evidence", persona_evidence),
-    ("review-due", review_due),
+    ("reflection-due", reflection_due),
     ("kb", kb_links),
 ];
 
@@ -518,13 +518,13 @@ fn generated(id: &Identity, out: &mut Vec<Diagnostic>) {
     }
 }
 
-fn memory_review(id: &Identity, out: &mut Vec<Diagnostic>) {
-    if state::doc(id, "persona").is_null() || !state::review(id).memory_changed {
+fn memory_reflection(id: &Identity, out: &mut Vec<Diagnostic>) {
+    if state::doc(id, "persona").is_null() || !state::reflection(id).memory_changed {
         return;
     }
     out.push(warn(
         "persona/MEMORY.md",
-        "MEMORY.md changed outside a review; review compiles MEMORY (`owo review`)",
+        "MEMORY.md changed outside a reflection; a reflection compiles MEMORY (`owo reflect`)",
     ));
 }
 
@@ -650,16 +650,18 @@ fn persona_evidence(id: &Identity, out: &mut Vec<Diagnostic>) {
     }
 }
 
-fn review_due(id: &Identity, out: &mut Vec<Diagnostic>) {
-    let r = state::review(id);
-    let msg = match (&r.last_reviewed, r.days_since) {
-        (None, _) => {
-            Some("never reviewed; run `owo review` when there is something to compile".to_string())
+fn reflection_due(id: &Identity, out: &mut Vec<Diagnostic>) {
+    let r = state::reflection(id);
+    let msg = match (&r.last_reflected, r.days_since) {
+        (None, _) => Some(
+            "never reflected; run `owo reflect` when there is something to compile".to_string(),
+        ),
+        (Some(_), None) => {
+            Some("reflection.last_reflected is not an RFC 3339 timestamp".to_string())
         }
-        (Some(_), None) => Some("review.last_reviewed is not an RFC 3339 timestamp".to_string()),
         (Some(_), Some(days)) => r.due.then(|| {
             format!(
-                "review is due: {days} days since the last review (every {})",
+                "reflection is due: {days} days since the last reflection (every {})",
                 r.every_days
             )
         }),

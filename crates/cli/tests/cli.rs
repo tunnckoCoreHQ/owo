@@ -100,7 +100,7 @@ fn valid_fixture_has_no_errors() {
     assert!(
         warnings
             .iter()
-            .all(|w| w.starts_with("state:") || w.starts_with("memory-review:")),
+            .all(|w| w.starts_with("state:") || w.starts_with("memory-reflection:")),
         "{warnings:?}"
     );
 }
@@ -192,14 +192,14 @@ fn memory_budget_and_dupes_warn() {
     let passage = "the tide came in fast and we pulled the boat up past the stones together";
     fs::write(dir.join("life/journal/2026-06-14_salt.md"), format!("---\ntype: journal\ntitle: Salt\nstatus: canon\ncreated: 2026-06-14\nupdated: 2026-06-14\ndate: 2026-06-14\n---\n# Salt\n\n{passage}\n")).unwrap();
     fs::write(dir.join("life/log/2026-06-14.md"), format!("---\ntype: log\ntitle: Sailing day\nstatus: canon\ncreated: 2026-06-14\nupdated: 2026-06-14\ndate: 2026-06-14\n---\n# Sailing day\n\n- [[First Sail]] {passage}\n")).unwrap();
-    let v = lint_json(tmp.path(), &["budget", "memory-review", "dupes"]);
+    let v = lint_json(tmp.path(), &["budget", "memory-reflection", "dupes"]);
     let warnings = rules_in(&v, "warnings");
     assert!(
         warnings.contains(&"budget:persona/MEMORY.md".to_string()),
         "{warnings:?}"
     );
     assert!(
-        warnings.contains(&"memory-review:persona/MEMORY.md".to_string()),
+        warnings.contains(&"memory-reflection:persona/MEMORY.md".to_string()),
         "{warnings:?}"
     );
     assert!(

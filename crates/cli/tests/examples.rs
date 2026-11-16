@@ -305,10 +305,10 @@ fn export_soulspec_package() {
 }
 
 #[test]
-fn review_packet_then_done() {
+fn reflect_digest_then_done() {
     let tmp = copy_example("reviewer");
-    let p = json(owo_as(tmp.path(), "reviewer").arg("review"));
-    assert_eq!(p["data"]["unreviewed_days"].as_array().unwrap().len(), 0);
+    let p = json(owo_as(tmp.path(), "reviewer").arg("reflect"));
+    assert_eq!(p["data"]["unreflected_days"].as_array().unwrap().len(), 0);
     assert!(p["data"]["memory"]
         .as_str()
         .unwrap()
@@ -320,8 +320,8 @@ fn review_packet_then_done() {
     let log = tmp.path().join("reviewer/life/log/2026-11-04.md");
     let text = fs::read_to_string(&log).unwrap();
     fs::write(&log, format!("{text}- Paired on the parser.\n")).unwrap();
-    let p = json(owo_as(tmp.path(), "reviewer").arg("review"));
-    let days = p["data"]["unreviewed_days"].as_array().unwrap();
+    let p = json(owo_as(tmp.path(), "reviewer").arg("reflect"));
+    let days = p["data"]["unreflected_days"].as_array().unwrap();
     assert_eq!(days.len(), 1);
     assert_eq!(days[0]["date"], "2026-11-04");
     fs::write(
@@ -333,17 +333,17 @@ fn review_packet_then_done() {
         .args(["add", "event", "Release Day", "--date", "2026-11-06"])
         .assert()
         .success();
-    let lint = json(owo_as(tmp.path(), "reviewer").args(["lint", "--rule", "memory-review"]));
+    let lint = json(owo_as(tmp.path(), "reviewer").args(["lint", "--rule", "memory-reflection"]));
     assert_eq!(lint["warnings"].as_array().unwrap().len(), 1);
     owo_as(tmp.path(), "reviewer")
-        .args(["review", "done"])
+        .args(["reflect", "done"])
         .assert()
         .success();
-    let lint = json(owo_as(tmp.path(), "reviewer").args(["lint", "--rule", "memory-review"]));
+    let lint = json(owo_as(tmp.path(), "reviewer").args(["lint", "--rule", "memory-reflection"]));
     assert_eq!(lint["warnings"].as_array().unwrap().len(), 0);
-    let p = json(owo_as(tmp.path(), "reviewer").arg("review"));
+    let p = json(owo_as(tmp.path(), "reviewer").arg("reflect"));
     assert_eq!(
-        p["data"]["reviewed_through"], "2026-11-06",
+        p["data"]["reflected_through"], "2026-11-06",
         "newest story date"
     );
 }
@@ -477,13 +477,13 @@ fn changes_and_lint_changed_read_git() {
 }
 
 #[test]
-fn review_lists_unstamped_files() {
+fn reflect_lists_unstamped_files() {
     let tmp = copy_example("reviewer");
     owo_as(tmp.path(), "reviewer")
         .args(["add", "lesson", "Fresh Lesson"])
         .assert()
         .success();
-    let p = json(owo_as(tmp.path(), "reviewer").arg("review"));
+    let p = json(owo_as(tmp.path(), "reviewer").arg("reflect"));
     assert!(p["data"]
         .to_string()
         .contains("life/lessons/fresh-lesson.md"));
@@ -817,14 +817,14 @@ fn context_look_and_with() {
 }
 
 #[test]
-fn review_done_through_a_date() {
+fn reflect_done_through_a_date() {
     let tmp = copy_example("reviewer");
     let v =
-        json(owo_as(tmp.path(), "reviewer").args(["review", "done", "--through", "2026-10-28"]));
-    assert_eq!(v["data"]["reviewed_through"], "2026-10-28");
-    let p = json(owo_as(tmp.path(), "reviewer").arg("review"));
-    assert_eq!(p["data"]["reviewed_through"], "2026-10-28");
-    let days: Vec<&str> = p["data"]["unreviewed_days"]
+        json(owo_as(tmp.path(), "reviewer").args(["reflect", "done", "--through", "2026-10-28"]));
+    assert_eq!(v["data"]["reflected_through"], "2026-10-28");
+    let p = json(owo_as(tmp.path(), "reviewer").arg("reflect"));
+    assert_eq!(p["data"]["reflected_through"], "2026-10-28");
+    let days: Vec<&str> = p["data"]["unreflected_days"]
         .as_array()
         .unwrap()
         .iter()
@@ -835,7 +835,7 @@ fn review_done_through_a_date() {
         "{days:?}"
     );
     owo_as(tmp.path(), "reviewer")
-        .args(["review", "done", "--through", "nope"])
+        .args(["reflect", "done", "--through", "nope"])
         .assert()
         .code(2);
 }

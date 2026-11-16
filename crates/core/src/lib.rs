@@ -19,7 +19,7 @@ pub mod mcp;
 mod migrate;
 mod operation;
 mod output;
-mod review;
+mod reflect;
 mod search;
 mod slug;
 mod stamp;
@@ -42,20 +42,22 @@ pub use lint::Rule;
 pub use migrate::Report as MigrateReport;
 pub use operation::{operations, Envelope, Operation, Outcome, Ran};
 pub use output::{warning_line, Diagnostic, Level};
+pub use reflect::{
+    Changed, LogDay, PersonaChange, PersonaChangeReport, ReflectionDigest, ReflectionRecord,
+};
 pub use request::{
     AddRequest, Args, CardRequest, ChangesRequest, ContextRequest, Field, IndexRequest,
     LinksRequest, LintRequest, MigrateRequest, Named, NewRequest, PersonaChangeRequest,
-    PersonaChangelogRequest, PersonaRequest, Reader, Request, ResolveRequest, ReviewDoneRequest,
+    PersonaChangelogRequest, PersonaRequest, Reader, ReflectDoneRequest, Request, ResolveRequest,
     SearchRequest, ShowRequest, SkillRequest, SlugRequest, SoulspecRequest, StampRequest,
     StateRequest, SyncDoneRequest, SyncOptions, SyncPushRequest, SyncStartRequest, TemplateRequest,
     Type, WriteRequest, MAX_DAYS,
 };
-pub use review::{Changed, LogDay, PersonaChange, PersonaChangeReport, ReviewPacket, ReviewRecord};
 pub use search::{Hit as SearchHit, Scope};
 pub use stamp::Report as StampReport;
 pub use state::{day, parse_day};
 pub use status::{
-    join_links, now_block, CurrentState, Link, ListedIdentity, ProjectState, ReviewStatus,
+    join_links, now_block, CurrentState, Link, ListedIdentity, ProjectState, ReflectionStatus,
 };
 pub use sync::{
     parse_turns, Bookmark, Format as SyncFormat, PendingRun, PendingSession, Role, SyncReport, Turn,
@@ -395,18 +397,18 @@ impl Identity {
         Ok(search::search(self, req))
     }
 
-    pub fn review(&self) -> ReviewPacket {
-        review::packet(self)
+    pub fn reflect(&self) -> ReflectionDigest {
+        reflect::digest(self)
     }
 
-    pub fn review_done(&self, req: &ReviewDoneRequest) -> Result<ReviewRecord> {
+    pub fn reflect_done(&self, req: &ReflectDoneRequest) -> Result<ReflectionRecord> {
         req.check()?;
-        Ok(review::done(self, req.through)?)
+        Ok(reflect::done(self, req.through)?)
     }
 
     pub fn persona_change(&self, req: &PersonaChangeRequest) -> Result<PersonaChangeReport> {
         req.check()?;
-        Ok(review::persona_change(
+        Ok(reflect::persona_change(
             self,
             &req.file,
             &req.change,
@@ -439,7 +441,7 @@ impl Identity {
 
     pub fn persona_changelog(&self, req: &PersonaChangelogRequest) -> Result<Vec<PersonaChange>> {
         req.check()?;
-        Ok(review::persona_changelog(self, req.file.as_deref()))
+        Ok(reflect::persona_changelog(self, req.file.as_deref()))
     }
 
     pub fn changes(&self, req: &ChangesRequest) -> Result<Changes> {

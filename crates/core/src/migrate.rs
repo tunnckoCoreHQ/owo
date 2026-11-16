@@ -555,7 +555,7 @@ fn fill(src: &Path, refs: &Path, root: &Path, slug: &str, manifest: &Value) -> R
         "Move exact personal identifiers into each character's `## Identifiers` (`owo lint --rule identifiers`).".into(),
         "Name account kinds in IDENTITY.md and keep handles in identity.json accounts.".into(),
         "Fill empty summaries, and link each room from its location overview.".into(),
-        "Run `owo stamp && owo index && owo lint`, then the first review (`owo review`, `owo review done`).".into(),
+        "Run `owo stamp && owo index && owo lint`, then the first reflection (`owo reflect`, `owo reflect done`).".into(),
     ];
     Ok(r)
 }

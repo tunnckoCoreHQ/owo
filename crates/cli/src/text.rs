@@ -1,5 +1,5 @@
 use owo_core::{
-    day, join_links, now_block, Diagnostic, Hit, Kind, Level, Origin, Outcome, ReviewPacket,
+    day, join_links, now_block, Diagnostic, Hit, Kind, Level, Origin, Outcome, ReflectionDigest,
     SyncReport,
 };
 
@@ -215,8 +215,8 @@ impl Text {
                         join_links(&p.notes)
                     ));
                 }
-                if s.review.memory_changed_outside_review {
-                    self.line("- MEMORY.md changed outside a review");
+                if s.reflection.memory_changed_outside_reflection {
+                    self.line("- MEMORY.md changed outside a reflection");
                 }
             }
             Outcome::Search(hits) => {
@@ -253,10 +253,10 @@ impl Text {
                     self.line(format!("- [ ] {c}"));
                 }
             }
-            Outcome::Review(p) => self.review(p),
-            Outcome::ReviewDone(review) => {
-                let through = review.reviewed_through.as_deref().unwrap_or("-");
-                self.say(format!("review recorded through {through}"))
+            Outcome::Reflect(p) => self.digest(p),
+            Outcome::ReflectDone(record) => {
+                let through = record.reflected_through.as_deref().unwrap_or("-");
+                self.say(format!("reflection recorded through {through}"))
             }
             Outcome::PersonaChange(note) => self.say(format!(
                 "noted {}: {}",
@@ -337,15 +337,15 @@ impl Text {
         }
     }
 
-    fn review(&mut self, p: &ReviewPacket) {
-        self.line(format!("# Review packet: {}\n", p.identity));
+    fn digest(&mut self, p: &ReflectionDigest) {
+        self.line(format!("# Reflection digest: {}\n", p.identity));
         self.line(format!(
-            "Last reviewed: {}. Reviewed through: {}.\n",
-            p.last_reviewed.as_deref().unwrap_or("never"),
-            p.reviewed_through.as_deref().unwrap_or("-")
+            "Last reflected: {}. Reflected through: {}.\n",
+            p.last_reflected.as_deref().unwrap_or("never"),
+            p.reflected_through.as_deref().unwrap_or("-")
         ));
-        let outside = if p.memory_changed_outside_review {
-            ", changed outside a review"
+        let outside = if p.memory_changed_outside_reflection {
+            ", changed outside a reflection"
         } else {
             ""
         };
@@ -355,7 +355,7 @@ impl Text {
             p.memory.trim_end()
         ));
         self.line(format!(
-            "## Changed since last review ({})\n",
+            "## Changed since the last reflection ({})\n",
             p.changed.len()
         ));
         for c in &p.changed {
@@ -372,10 +372,10 @@ impl Text {
             ));
         }
         self.line(format!(
-            "\n## Unreviewed days ({})",
-            p.unreviewed_days.len()
+            "\n## Log days since the last reflection ({})",
+            p.unreflected_days.len()
         ));
-        for d in &p.unreviewed_days {
+        for d in &p.unreflected_days {
             let heading = if d.title == d.date {
                 d.date.clone()
             } else {
@@ -416,6 +416,6 @@ impl Text {
                 c.change.as_deref().unwrap_or("")
             ));
         }
-        self.line("\nWhen MEMORY is compiled: `owo stamp && owo index && owo lint`, then `owo review done`.");
+        self.line("\nWhen MEMORY is compiled: `owo stamp && owo index && owo lint`, then `owo reflect done`.");
     }
 }

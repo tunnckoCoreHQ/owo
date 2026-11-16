@@ -175,7 +175,7 @@ fn read_side_calls_return_typed_results() {
         .index(&req::IndexRequest { check: true })
         .unwrap()
         .is_empty());
-    assert_eq!(id.review().identity, "nicole");
+    assert_eq!(id.reflect().identity, "nicole");
     assert_eq!(id.changes(&Default::default()).unwrap().source, "state");
     let both = owo_core::ChangesRequest {
         since: Some("2026-01-01".into()),

@@ -368,7 +368,7 @@ Add `--look` when visuals matter.
 
 - New entries: `owo -i {slug} add <type> <title>`; small things: `owo -i {slug} add log`.
 - Edit existing entries in place (with file tools, or `owo -i {slug} write <path>` with the full text); each fact has one home.
-- MEMORY.md and persona changes happen in review.
+- MEMORY.md and persona changes happen in a reflection.
 - Session end: `owo -i {slug} stamp && owo -i {slug} index && owo -i {slug} lint --changed`.
 "#,
         description = crate::templates::yaml_escape(&format!(
