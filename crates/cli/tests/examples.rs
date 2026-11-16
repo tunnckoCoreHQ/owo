@@ -156,16 +156,23 @@ fn search_ranks_title_matches_first() {
 
 #[test]
 fn changes_days_lists_stamped_files() {
-    let v = json(owo_as(&examples(), "reviewer").args(["changes", "--days", "36500"]));
-    let n: usize = v["data"]["days"]
-        .as_object()
-        .unwrap()
-        .values()
-        .map(|d| d.as_array().unwrap().len())
-        .sum();
-    assert!(n > 20, "{v}");
-    let v = json(owo_as(&examples(), "reviewer").args(["changes", "--days", "0"]));
-    assert!(v["data"]["days"].as_object().unwrap().is_empty(), "{v}");
+    let count = |v: &Value| -> usize {
+        v["data"]["days"]
+            .as_object()
+            .unwrap()
+            .values()
+            .map(|d| d.as_array().unwrap().len())
+            .sum()
+    };
+    let tmp = copy_example("reviewer");
+    for root in [tmp.path(), examples().as_path()] {
+        for since in [["--days", "36500"], ["--since", "1926-12-11"]] {
+            let v = json(owo_as(root, "reviewer").arg("changes").args(since));
+            assert!(count(&v) > 20, "{since:?}: {v}");
+        }
+        let v = json(owo_as(root, "reviewer").args(["changes", "--since", "2999-01-01"]));
+        assert_eq!(count(&v), 0, "{v}");
+    }
 }
 
 fn check_card(card: &Value, name: &str) {

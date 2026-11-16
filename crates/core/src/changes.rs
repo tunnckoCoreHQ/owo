@@ -35,15 +35,26 @@ pub fn changes(id: &Identity, since: Option<&str>) -> anyhow::Result<Changes> {
             "--name-status".into(),
             "--relative".into(),
         ];
-        if let Some(s) = since {
+        // Git reads a day only from 1970 to 2099 and misreads 1970-01-01 at a local midnight
+        // east of UTC. Every commit is after an earlier day and before a later one.
+        let first_day = chrono::NaiveDate::from_ymd_opt(1970, 1, 2).expect("a date");
+        let past_day = chrono::NaiveDate::from_ymd_opt(2100, 1, 1).expect("a date");
+        let mut no_commit = false;
+        match since.map(|s| (s, crate::state::parse_day(s))) {
+            Some((_, Ok(day))) if day < first_day => {}
+            Some((_, Ok(day))) if day >= past_day => no_commit = true,
             // Git reads a bare day as that day at the current time; start at midnight instead.
-            let midnight = crate::state::parse_day(s).map_or("", |_| " 00:00:00");
-            args.push(format!("--since={s}{midnight}"));
+            Some((s, Ok(_))) => args.push(format!("--since={s} 00:00:00")),
+            Some((s, Err(_))) => args.push(format!("--since={s}")),
+            None => {}
         }
         args.extend(["--".into(), ".".into()]);
         let args: Vec<&str> = args.iter().map(String::as_str).collect();
         let mut days: BTreeMap<String, Vec<Change>> = BTreeMap::new();
-        if let Some(out) = crate::git::run(&id.dir, &args) {
+        let log = (!no_commit)
+            .then(|| crate::git::run(&id.dir, &args))
+            .flatten();
+        if let Some(out) = log {
             for block in out.split('\u{1}').filter(|b| !b.trim().is_empty()) {
                 let mut lines = block.lines();
                 let head: Vec<&str> = lines.next().unwrap_or_default().split('\u{2}').collect();

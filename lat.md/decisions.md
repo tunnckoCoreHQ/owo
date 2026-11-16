@@ -48,7 +48,7 @@ The flag for IDENTITY is `--id`, not `--identity`. The global `-i/--identity` fl
 
 `owo changes` reads `git log --name-status` for the identity folder when it sits in a repo, and lists uncommitted paths separately. Outside a repo it groups state-file `updated` stamps by local day, so the command always answers.
 
-Outside a repo `--since` takes only a `YYYY-MM-DD` day and exits 1 on anything else; in a repo it takes whatever `git log --since` accepts, and a plain day starts at its midnight.
+Outside a repo `--since` takes only a `YYYY-MM-DD` day and exits 1 on anything else; in a repo it takes whatever `git log --since` accepts, and a plain day starts at its midnight. Git reads a day only from 1970 to 2099, so a day before 1970-01-02 lists every commit and a day from 2100 lists none, and owo does not pass either day to Git.
 
 `lint --changed` keeps diagnostics whose path is uncommitted in Git or drifts from its stamp (`stamp --check`). Outside Git, files stamped today count too, so a session that ends with `stamp` still checks its own edits. The full lint still runs; only the report is filtered.
 
