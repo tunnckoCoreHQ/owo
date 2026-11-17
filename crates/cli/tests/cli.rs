@@ -622,7 +622,9 @@ fn config_prints_each_path_and_where_it_comes_from() {
         .output()
         .unwrap();
     assert!(out.status.success() && out.stderr.is_empty());
-    let here = tmp.path().display();
+    // The working folder is the real path, which on macOS is not the path of the temp dir.
+    let here = fs::canonicalize(tmp.path()).unwrap();
+    let here = here.display();
     assert_eq!(
         String::from_utf8_lossy(&out.stdout),
         format!(
