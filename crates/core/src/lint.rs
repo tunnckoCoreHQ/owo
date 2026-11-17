@@ -251,32 +251,20 @@ fn check_entry_schema(e: &Entry, out: &mut Vec<Diagnostic>) {
         .next()
         .unwrap_or_default()
         .trim_end_matches(".md");
-    match e.kind.dated() {
-        Some(with_slug) => {
-            let date = e.field_str("date");
-            match date.as_deref().and_then(parse_date) {
-                None => out.push(err(rel, "date is missing or not YYYY-MM-DD")),
-                Some(d) => {
-                    let d = d.format("%Y-%m-%d").to_string();
-                    let (ok, want) = if with_slug {
-                        (
-                            file.strip_prefix(&format!("{d}_")).is_some_and(is_slug),
-                            format!("{d}_<slug>.md"),
-                        )
-                    } else {
-                        (file == d, format!("{d}.md"))
-                    };
-                    if !ok {
-                        out.push(err(rel, format!("file name must be {want}")));
-                    }
+    if e.kind.dated() {
+        match e.field_str("date").as_deref().and_then(parse_date) {
+            None => out.push(err(rel, "date is missing or not YYYY-MM-DD")),
+            Some(d) => {
+                let d = d.format("%Y-%m-%d").to_string();
+                if !file.strip_prefix(&format!("{d}_")).is_some_and(is_slug) {
+                    out.push(err(rel, format!("file name must be {d}_<slug>.md")));
                 }
             }
         }
-        None => {
-            let stem = e.stem_key();
-            if !is_slug(&stem) && !(e.kind == Kind::Location && file == "overview") {
-                out.push(err(rel, format!("file name {stem:?} must be a slug")));
-            }
+    } else {
+        let stem = e.stem_key();
+        if !is_slug(&stem) && !(e.kind == Kind::Location && file == "overview") {
+            out.push(err(rel, format!("file name {stem:?} must be a slug")));
         }
     }
     let state_field =

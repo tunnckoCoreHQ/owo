@@ -11,9 +11,7 @@
 
 ## Insights
 
-- [[Read the Tests First]]
-- [[Name the Risk]]
-- [[Small Diffs Win]]
+- [[Say My Part First]]
 
 ## Hints
 

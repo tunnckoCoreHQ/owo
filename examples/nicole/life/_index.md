@@ -12,5 +12,5 @@
 - [Insights](insights/_index.md): 1
 - [Writing](writing/_index.md): 0
 - [Daily Log](daily-log/_index.md): 4
-- [Journal](journal/_index.md): 1
+- [Journal](journal/_index.md): 3
 - [Timeline](timeline.md)

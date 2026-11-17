@@ -132,12 +132,11 @@ impl Kind {
         self.kind_row().template
     }
 
-    pub fn dated(self) -> Option<bool> {
-        match self {
-            Kind::DailyLog => Some(false),
-            Kind::Journal | Kind::Writing | Kind::ProjectNote => Some(true),
-            _ => None,
-        }
+    pub fn dated(self) -> bool {
+        matches!(
+            self,
+            Kind::DailyLog | Kind::Journal | Kind::Writing | Kind::ProjectNote
+        )
     }
 
     pub fn rel(
@@ -152,12 +151,12 @@ impl Kind {
             Kind::LocationDetail => format!("life/locations/{}/{slug}.md", parent?),
             Kind::ProjectReadme => format!("work/projects/{slug}/README.md"),
             Kind::ProjectNote => format!("work/projects/{}/notes/{date}_{slug}.md", project?),
-            Kind::DailyLog => format!("life/daily-log/{date}.md"),
             _ => {
                 let dir = self.kind_row().category?;
-                match self.dated() {
-                    Some(true) => format!("life/{dir}/{date}_{slug}.md"),
-                    _ => format!("life/{dir}/{slug}.md"),
+                if self.dated() {
+                    format!("life/{dir}/{date}_{slug}.md")
+                } else {
+                    format!("life/{dir}/{slug}.md")
                 }
             }
         })
@@ -467,7 +466,10 @@ mod tests {
             Kind::LocationDetail
         );
         assert_eq!(classify("life/locations/flat.md"), Kind::Unknown);
-        assert_eq!(classify("life/daily-log/2026-11-01.md"), Kind::DailyLog);
+        assert_eq!(
+            classify("life/daily-log/2026-11-01_quiet-day.md"),
+            Kind::DailyLog
+        );
         assert_eq!(classify("life/events/_index.md"), Kind::Generated);
         assert_eq!(classify("life/timeline.md"), Kind::Generated);
         assert_eq!(classify("work/PROFILE.md"), Kind::WorkProfile);

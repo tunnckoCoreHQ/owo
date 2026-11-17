@@ -8,7 +8,7 @@ Run `owo reflect`. It prints the Reflection Digest: the current MEMORY, the Entr
 
 ## Compile
 
-- Write or update an Insight for each experience that repeats, with `owo add insight <title>` and `evidence` Wikilinks.
+- Write or update an Insight only when the experience really taught a life lesson, with `owo add insight <title>` and `evidence` Wikilinks. A pattern alone, or a tip about the craft, is not an Insight.
 - Compile `persona/MEMORY.md` again, with patterns, defining moments, Wikilinks to Insights and hints. Write Wikilinks, not retellings. Keep it near 1500 words.
 - Close each Thread that is resolved. Set `state: closed` on it.
 

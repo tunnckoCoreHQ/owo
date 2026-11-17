@@ -178,12 +178,13 @@ fn pr10_date_outside_four_digit_years_is_a_usage_error() {
     let before = fs::read_to_string(&state).unwrap();
     usage(id.add(&AddRequest {
         kind: Kind::DailyLog,
+        title: "Far".into(),
         date: Some(far),
         ..Default::default()
     }));
     assert!(!tmp
         .path()
-        .join("ids/nicole/life/daily-log/+12345-01-01.md")
+        .join("ids/nicole/life/daily-log/+12345-01-01_far.md")
         .exists());
     usage(id.reflect_done(&ReflectDoneRequest { through: Some(far) }));
     assert_eq!(fs::read_to_string(&state).unwrap(), before);

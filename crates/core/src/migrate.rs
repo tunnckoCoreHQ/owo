@@ -456,7 +456,11 @@ fn fill(src: &Path, refs: &Path, root: &Path, slug: &str, manifest: &Value) -> R
                 rest.clone()
             };
             let name = match *kind {
-                "daily-log" => format!("{}.md", date.clone().unwrap_or_default()),
+                "daily-log" => format!(
+                    "{}_{}.md",
+                    date.clone().unwrap_or_default(),
+                    slugify(&title_of(&text, &label))
+                ),
                 "journal" => format!(
                     "{}_{}.md",
                     date.clone().unwrap_or_default(),
@@ -465,6 +469,14 @@ fn fill(src: &Path, refs: &Path, root: &Path, slug: &str, manifest: &Value) -> R
                 _ if !slugify(&rest).is_empty() => format!("{}.md", slugify(&rest)),
                 _ => format!("{}.md", slugify(&title_of(&text, &label))),
             };
+            if *kind == "daily-log" {
+                let day = format!("{to}/{}_", date.as_deref().unwrap_or_default());
+                if let Some((_, have)) = r.moved.iter().find(|(_, t)| t.starts_with(&day)) {
+                    let why = format!("{have} holds this day; merge by hand");
+                    r.skip(rel(&p), why);
+                    continue;
+                }
+            }
             r.place(
                 &dir.join(to).join(&name),
                 rel(&p),

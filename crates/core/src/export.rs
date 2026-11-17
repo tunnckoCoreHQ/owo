@@ -366,7 +366,7 @@ Add `--look` when visuals matter.
 
 ## Write
 
-- New entries: `owo -i {slug} add <type> <title>`; small things: `owo -i {slug} add daily-log`.
+- New entries: `owo -i {slug} add <type> <title>`; small things: `owo -i {slug} add daily-log` (prints the day's Daily Log, or add a title to make it).
 - Edit existing entries in place (with file tools, or `owo -i {slug} write <path>` with the full text); each fact has one home.
 - MEMORY.md and persona changes happen in a reflection.
 - Session end: `owo -i {slug} stamp && owo -i {slug} index && owo -i {slug} lint --changed`.

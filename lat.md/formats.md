@@ -37,7 +37,7 @@ Persona files are plain Markdown with no frontmatter; their stamps live in `pers
 
 One slug function turns a name into a path segment: transliterate to ASCII, lowercase, drop apostrophes, collapse every other run of non-alphanumeric characters to one hyphen, trim hyphens.
 
-`Jay's Penthouse` becomes `jays-penthouse`. On a collision, add a short disambiguator to the slug and keep the short name as an alias. Daily logs are `YYYY-MM-DD.md`; journal, writing and project notes are `YYYY-MM-DD_<slug>.md`. Entry file names and project folder names must be slugs (the `schema` rule). A name gives a slug and a slug gives a path, so agents can predict a path and fall back to `owo resolve`.
+`Jay's Penthouse` becomes `jays-penthouse`. On a collision, add a short disambiguator to the slug and keep the short name as an alias. Daily logs, journal, writing and project notes are `YYYY-MM-DD_<slug>.md`. Entry file names and project folder names must be slugs (the `schema` rule). A name gives a slug and a slug gives a path, so agents can predict a path and fall back to `owo resolve`.
 
 ## Wikilinks
 

@@ -12,6 +12,6 @@ sources: []
 
 # {{title}}
 
-## What I learned
+## The lesson
 
-## Guidance
+## What I do now

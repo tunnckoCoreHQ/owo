@@ -33,10 +33,10 @@ fn examples_are_lint_clean_and_current() {
 #[test]
 fn resolve_show_links() {
     owo_as(&examples(), "nicole")
-        .args(["resolve", "life/daily-log/2026-10-30.md"])
+        .args(["resolve", "life/daily-log/2026-10-30_lighthouse.md"])
         .assert()
         .success()
-        .stdout("life/daily-log/2026-10-30.md\n");
+        .stdout("life/daily-log/2026-10-30_lighthouse.md\n");
     let root = examples();
     owo_as(&root, "reviewer")
         .args(["resolve", "Mina Okafor"])
@@ -135,7 +135,11 @@ fn context_writes_nothing_and_last_project_comes_from_stamps() {
     assert_eq!(fs::read_to_string(&state).unwrap(), before);
     let s = json(owo_as(tmp.path(), "reviewer").args(["--project", "build-cache", "state"]));
     assert_eq!(s["data"]["last_project"][0], "ledger-api", "{s}");
-    assert_eq!(s["data"]["project"]["last_updated"], "2026-11-04T03:33:55Z");
+    let stamps: Value = serde_json::from_str(&before).unwrap();
+    assert_eq!(
+        s["data"]["project"]["last_updated"],
+        stamps["files"]["projects/build-cache/README.md"]["updated"]
+    );
 }
 
 #[test]
@@ -317,7 +321,9 @@ fn reflect_digest_then_done() {
         .args(["add", "daily-log", "Pairing", "--date", "2026-11-04"])
         .assert()
         .success();
-    let log = tmp.path().join("reviewer/life/daily-log/2026-11-04.md");
+    let log = tmp
+        .path()
+        .join("reviewer/life/daily-log/2026-11-04_pairing.md");
     let text = fs::read_to_string(&log).unwrap();
     fs::write(&log, format!("{text}- Paired on the parser.\n")).unwrap();
     let p = json(owo_as(tmp.path(), "reviewer").arg("reflect"));

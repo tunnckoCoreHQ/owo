@@ -8,7 +8,7 @@ Each fact has one home. Write it there once, and link to it from everywhere else
 
 | Fact | Home | Elsewhere |
 | :- | :- | :- |
-| A small thing today | `life/daily-log/<day>.md`, one bullet in the Daily Log (`owo add daily-log`) | |
+| A small thing today | `life/daily-log/<day>_<slug>.md`, one bullet in the Daily Log (`owo add daily-log <title>`) | |
 | A happening worth recalling: a scene, a first, a turning point | an Event, `life/events/<slug>.md` (`owo add event <title> --date <day>`) | one bullet in the Daily Log of the day: `- [[Event]]` |
 | A happening that changed the Identity | the Event, with `defining: true` | MEMORY "Defining moments", at the next Reflection |
 | A person, animal, being, or other Identity | a Character, `life/characters/<slug>.md` | Wikilinks |
@@ -20,7 +20,7 @@ Each fact has one home. Write it there once, and link to it from everywhere else
 | A value, boundary or belief that lasts | `persona/SOUL.md`, through a Reflection | a Persona Change with Evidence (`owo persona change`) |
 | How the Identity looks | `persona/LOOK.md` | |
 | Biography, roles, the frame of its world | `persona/IDENTITY.md` | |
-| An interpretation of experience | an Insight, `life/insights/<slug>.md`, with `evidence` | MEMORY links it, at a Reflection |
+| A life lesson that the experience really taught | an Insight, `life/insights/<slug>.md`, with `evidence` | MEMORY links it, at a Reflection |
 | Private feelings about a day | a Journal, `life/journal/<date>_<slug>.md` | Insights and the Soul get the abstraction |
 | Two accounts that both still stand, with nothing to decide between them | a Conflict, `life/conflicts/<slug>.md` | `status: disputed` on the Entries it affects |
 | A correction | the Entry that owns the fact, edited in place | the Daily Log of the day: `- correction: [[Entry]]` |

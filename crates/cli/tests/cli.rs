@@ -145,7 +145,7 @@ fn broken_entries_are_reported() {
         "---\ntype: event\ntitle: Storm\nsummary: A storm.\nstatus: disputed\ncreated: 2026-10-01\nupdated: 2026-10-01\ndate: 2026-07-01\n---\n\n# Storm\n\nSee [[Nowhere]] and [[Salt]]. Sam was born 1990-04-12.\n",
     );
     w("life/characters/bad.md", "---\ntype: event\ntitle: Bad\nsummary: x\nstatus: maybe\ncreated: 2026-13-01\nupdated: 2026-10-01\n---\n# Bad\n");
-    w("life/daily-log/2026-07-02.md", "---\ntype: daily-log\ntitle: Day\nstatus: canon\ncreated: 2026-07-02\nupdated: 2026-07-02\ndate: 2026-07-03\n---\n- x\n");
+    w("life/daily-log/2026-07-02_day.md", "---\ntype: daily-log\ntitle: Day\nstatus: canon\ncreated: 2026-07-02\nupdated: 2026-07-02\ndate: 2026-07-03\n---\n- x\n");
     w("life/characters/samuel-two.md", "---\ntype: character\ntitle: Sam Two\naliases: [Samuel]\nsummary: x\nstatus: canon\ncreated: 2026-10-01\nupdated: 2026-10-01\n---\n# Sam Two\n");
     w("life/notes.md", "# stray\n");
     w("life/locations/empty-place/detail.md", "---\ntype: location-detail\ntitle: Detail\nsummary: x\nstatus: canon\ncreated: 2026-10-01\nupdated: 2026-10-01\nparent: \"[[Harbor House]]\"\n---\n# Detail\n");
@@ -160,7 +160,7 @@ fn broken_entries_are_reported() {
         "identifiers:life/events/storm.md",
         "supersede:life/events/storm.md",
         "schema:life/characters/bad.md",
-        "schema:life/daily-log/2026-07-02.md",
+        "schema:life/daily-log/2026-07-02_day.md",
         "unique:life/characters/samuel-two.md",
         "tree:life/notes.md",
         "tree:life/locations/empty-place",
@@ -191,7 +191,7 @@ fn memory_budget_and_dupes_warn() {
     .unwrap();
     let passage = "the tide came in fast and we pulled the boat up past the stones together";
     fs::write(dir.join("life/journal/2026-06-14_salt.md"), format!("---\ntype: journal\ntitle: Salt\nstatus: canon\ncreated: 2026-06-14\nupdated: 2026-06-14\ndate: 2026-06-14\n---\n# Salt\n\n{passage}\n")).unwrap();
-    fs::write(dir.join("life/daily-log/2026-06-14.md"), format!("---\ntype: daily-log\ntitle: Sailing day\nstatus: canon\ncreated: 2026-06-14\nupdated: 2026-06-14\ndate: 2026-06-14\n---\n# Sailing day\n\n- [[First Sail]] {passage}\n")).unwrap();
+    fs::write(dir.join("life/daily-log/2026-06-14_sailing-day.md"), format!("---\ntype: daily-log\ntitle: Sailing day\nstatus: canon\ncreated: 2026-06-14\nupdated: 2026-06-14\ndate: 2026-06-14\n---\n# Sailing day\n\n- [[First Sail]] {passage}\n")).unwrap();
     let v = lint_json(tmp.path(), &["budget", "memory-reflection", "dupes"]);
     let warnings = rules_in(&v, "warnings");
     assert!(
@@ -278,11 +278,29 @@ fn add_creates_entries_at_deterministic_paths() {
     owo(tmp.path())
         .args(["-i", "thea", "add", "daily-log", "--date", "2026-10-25"])
         .assert()
-        .success();
+        .code(2);
     owo(tmp.path())
-        .args(["-i", "thea", "add", "daily-log", "--date", "2026-10-25"])
+        .args([
+            "-i",
+            "thea",
+            "add",
+            "daily-log",
+            "Rainy day",
+            "--date",
+            "2026-10-25",
+        ])
         .assert()
-        .success();
+        .success()
+        .stdout("life/daily-log/2026-10-25_rainy-day.md\n");
+    for title in [&[][..], &["Other day"]] {
+        owo(tmp.path())
+            .args(["-i", "thea", "add", "daily-log"])
+            .args(title)
+            .args(["--date", "2026-10-25"])
+            .assert()
+            .success()
+            .stdout("exists life/daily-log/2026-10-25_rainy-day.md\n");
+    }
 
     owo(tmp.path())
         .args(["-i", "thea", "index"])
@@ -418,8 +436,9 @@ fn add_defaults_and_escapes() {
             .args(args)
             .assert()
     };
-    add(&["daily-log", "--date", "2026-01-01"]).success();
-    add(&["daily-log", "--date", "2026-01-02"]).success();
+    add(&["daily-log", "--date", "2026-01-01"]).code(2);
+    add(&["daily-log", "New Year", "--date", "2026-01-01"]).success();
+    add(&["daily-log", "Quiet", "--date", "2026-01-02"]).success();
     add(&["project-readme", "API Server"]).success();
     add(&[
         "character",

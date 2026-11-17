@@ -13,64 +13,60 @@
       "hash": "b3:f56b7b05a48f548fda77e6cf391c6a3da7c7c6702a91b8475f66dfa26057bea9"
     },
     "events/the-rollback.md": {
-      "updated": "2026-11-04T06:44:38Z",
-      "hash": "b3:a14c7baebb6f88405c619f3bf22a483a80c4df8b8239a402e374fb745e3e5924"
+      "updated": "2026-11-17T12:05:44Z",
+      "hash": "b3:6f396fa6bf58abbb8ff2ac5de7ccdb67783b385d81141e12e496e357a404f20b"
     },
-    "insights/name-the-risk.md": {
-      "updated": "2026-11-04T06:44:38Z",
-      "hash": "b3:4f6062b73430d491d56c2f44e28238e2c073d01f64c37f5c749c14bd2b67befe"
+    "insights/say-my-part-first.md": {
+      "updated": "2026-11-17T12:05:44Z",
+      "hash": "b3:71ee9528a70d7442236f5347e96946755712aacacdf6d42fd3dcd358f43c8a21"
     },
-    "insights/read-the-tests-first.md": {
-      "updated": "2026-11-04T06:44:38Z",
-      "hash": "b3:24e11e8dcbee53c6d427aeac8b6ebf75e1360ac358c8b9f89c0a970098d5ade1"
+    "journal/2026-10-24_my-name-on-it.md": {
+      "updated": "2026-11-17T12:03:32Z",
+      "hash": "b3:3235d06d3f3ae941cbbe5350daec599e24ecdc3aca75ed8083e504bf0390c983"
     },
-    "insights/small-diffs-win.md": {
-      "updated": "2026-11-04T06:44:38Z",
-      "hash": "b3:f9d5937ed8e07c32389e9eea1dd2ebb8c48434b9cf5c16fa9d0eac5920911851"
+    "writing/2026-11-04_review-opinions.md": {
+      "updated": "2026-11-17T12:06:50Z",
+      "hash": "b3:1472c3800b9e77b0a3b9c3d729f4f4419c670bf262a6ef2f8f6188c26d9db1ac"
     },
-    "daily-log/2026-10-22.md": {
+    "daily-log/2026-10-22_onboarding-mina.md": {
       "updated": "2026-11-04T03:33:55Z",
       "hash": "b3:b0e0674f149e4848ef8fc05e36258384e19bf9ba84a2e6f27eed524aee055a7d"
     },
-    "daily-log/2026-10-23.md": {
+    "daily-log/2026-10-23_retry-review.md": {
       "updated": "2026-11-04T03:33:55Z",
       "hash": "b3:a5d9fcc2a36084006233e1b2d8a7647732fc373718ab7afc89f32933a22ba6a9"
     },
-    "daily-log/2026-10-24.md": {
+    "daily-log/2026-10-24_rollback-day.md": {
       "updated": "2026-11-04T03:33:55Z",
       "hash": "b3:457dae34de8af8019357bcd8b29db8eb7038a2d1c093b93547e920844e7c5ee6"
     },
-    "daily-log/2026-10-27.md": {
-      "updated": "2026-11-04T03:33:55Z",
-      "hash": "b3:db4a4e63b2b30d4603e106a7a2a569addf4ca22797fb9b09f710683ae48022cf"
+    "daily-log/2026-10-27_checklist.md": {
+      "updated": "2026-11-17T12:05:44Z",
+      "hash": "b3:b22e9ff16efeaeb199e14a13c0574ff94529f9e1c53ccaac179e4695096956dc"
     },
-    "daily-log/2026-10-28.md": {
+    "daily-log/2026-10-28_quiet-day.md": {
       "updated": "2026-11-04T03:33:55Z",
       "hash": "b3:5df449f0705f09e8f278f68a9f7ecb8a9d06c2114f49760d88404d7c3fb26f24"
     },
-    "daily-log/2026-10-29.md": {
+    "daily-log/2026-10-29_cache-keys.md": {
       "updated": "2026-11-04T03:33:55Z",
       "hash": "b3:bd5bf9fc33cea73dbd68710739474d279e9d3607c02fc855f6a18bbfe6e86e83"
     },
-    "daily-log/2026-10-30.md": {
-      "updated": "2026-11-04T03:33:55Z",
-      "hash": "b3:aaccdc5d6dc395f78bdfe80f4d18c1acc8dc1286a91a8269f1800435324e58cb"
+    "daily-log/2026-10-30_big-diff.md": {
+      "updated": "2026-11-17T12:05:44Z",
+      "hash": "b3:a0d1458f260d0b5fe1bc40521f155eaad9a74ebb2c0d8dc74ac7b6b1f5cd2d08"
     },
-    "daily-log/2026-11-02.md": {
+    "daily-log/2026-11-02_merge-rules.md": {
       "updated": "2026-11-04T03:33:55Z",
       "hash": "b3:004eb44800ada429207579f381d8a4f26f92fddadd0e1a8158200a1df334c8df"
     },
-    "daily-log/2026-11-03.md": {
-      "updated": "2026-11-04T03:33:55Z",
-      "hash": "b3:83d3d6712239ab8f2b2e14c336171e3a6b9ba26b9e243ee0e75dbc4b2d7bb6d6"
+    "daily-log/2026-11-03_weekly-hour.md": {
+      "updated": "2026-11-17T12:05:44Z",
+      "hash": "b3:6d5f9ca764e86a075a7cdf831135bf81437264352bac4d8ffada77edcafc1432"
     },
     "threads/flaky-cache-test.md": {
-      "updated": "2026-11-04T03:33:55Z",
-      "hash": "b3:b6a7b9639343801ad32f6049b323f844bb6f2bee9cb50ff8f86dc30155838b23"
-    },
-    "writing/2026-11-04_review-opinions.md": {
-      "updated": "2026-11-04T03:33:55Z",
-      "hash": "b3:50890442fa24956ca69924e091ee003c0584e34c2dd119c5f376921c97281141"
+      "updated": "2026-11-17T12:03:32Z",
+      "hash": "b3:34510aaf5884ef39a0ed4bfde05364a2af5db363ef12daa8ad60bce6614a6219"
     }
   }
 }

@@ -33,10 +33,20 @@ pub fn add(id: &Identity, req: &Request, project: Option<&str>) -> Result<(Strin
         .date
         .map(|d| d.to_string())
         .unwrap_or_else(|| today.clone());
-    let title = match req.title.trim() {
-        "" if req.kind == Kind::DailyLog => date.as_str(),
-        t => t,
-    };
+    if req.kind == Kind::DailyLog {
+        let day = format!("life/daily-log/{date}_");
+        if let Some(e) = id
+            .entries
+            .iter()
+            .find(|e| e.kind == Kind::DailyLog && e.rel.starts_with(&day))
+        {
+            return Ok((e.rel.clone(), false));
+        }
+    }
+    let title = req.title.trim();
+    if title.is_empty() {
+        return Err(Fault::NeedsTitle(req.kind).into());
+    }
     for name in std::iter::once(title).chain(req.aliases.iter().map(String::as_str)) {
         if name.contains(crate::markdown::WIKILINK_BREAKERS) {
             bail!("{name:?} holds # | [ or ], which break a [[wikilink]] to it");

@@ -9,44 +9,52 @@
       "hash": "b3:0d21cf39d0079eddca45cfc4460e1c8cf5b56b8b3e530918881fed3729bbc2d5"
     },
     "eras/studio-year.md": {
-      "updated": "2026-11-10T02:05:52Z",
-      "hash": "b3:8e764bc4f80becee8ef19132de7617de21858abf1f7b324b6528c46362b587f6"
+      "updated": "2026-11-17T12:05:44Z",
+      "hash": "b3:fcfb21889b1902e783b14090193558b8a3cd6df2b485c8fd80ef79ec78a56c3a"
     },
     "events/first-firing.md": {
-      "updated": "2026-11-04T06:44:38Z",
-      "hash": "b3:8fb270a4c8cbf5d3d2f253fdbe1646f638133e0937c9a20cb7d99546798c880f"
+      "updated": "2026-11-17T12:05:44Z",
+      "hash": "b3:0b8808d84da116e1b1a41d338a9e648d82f14d718d12ce8dc9ed151ae90050dd"
     },
     "journal/2026-10-31_rain-on-the-roof.md": {
-      "updated": "2026-11-04T03:34:43Z",
-      "hash": "b3:00f0a2e96965f533cd7bfe2af22fe8d401e473af73876c953908d0b1a8767d17"
+      "updated": "2026-11-17T12:05:44Z",
+      "hash": "b3:7896176c486bcfc934afd7c972255c5bc16c2a6c5a37180870ff44b24c292e80"
     },
     "insights/let-it-dry.md": {
-      "updated": "2026-11-04T06:44:38Z",
-      "hash": "b3:4cb721be01acb1be3c26d6bbbdfe62cf9bbb983906a2eb273c5f7d79b0911f5a"
+      "updated": "2026-11-17T12:06:49Z",
+      "hash": "b3:235cbf8df7bea7fea450a431c9514efc7e5d54565587538e455454479e8141c2"
     },
     "locations/kiln-studio/overview.md": {
-      "updated": "2026-11-04T03:34:43Z",
-      "hash": "b3:a04b4b1ca4513e1a902876b9af9f0d683575029558e37213197dce000f3de55d"
+      "updated": "2026-11-17T12:02:50Z",
+      "hash": "b3:84be9f19b24c4acbc082deb37636282d5c7a985020d492472ef1444f796d3221"
     },
-    "daily-log/2026-10-28.md": {
+    "daily-log/2026-10-28_glaze-tiles.md": {
       "updated": "2026-11-04T03:34:43Z",
       "hash": "b3:66998e6a05f761e6911f630f0df53b544d96ac63243003d5141c49fa584ee3d0"
     },
-    "daily-log/2026-10-30.md": {
+    "daily-log/2026-10-30_lighthouse.md": {
       "updated": "2026-11-04T03:34:43Z",
       "hash": "b3:1a5d4d9c4e98ed203cadfb01e463011e11daf1f99333d7d011ce2987ea43aaf5"
     },
-    "daily-log/2026-10-31.md": {
+    "daily-log/2026-10-31_rain.md": {
       "updated": "2026-11-04T03:34:48Z",
       "hash": "b3:dd715769de91a1ec5c3e71c0da79598dfb1fe677a3b12c8876798423b0ab6e9c"
     },
-    "daily-log/2026-11-02.md": {
+    "daily-log/2026-11-02_kiln-day.md": {
       "updated": "2026-11-04T03:34:43Z",
       "hash": "b3:900a74a8806c55090d1cec1590582e0a9ad3b7765abf71f714616e0b1f4caf42"
     },
     "threads/the-blue-glaze.md": {
-      "updated": "2026-11-04T03:34:43Z",
-      "hash": "b3:3ae9e297a7835d625795982dc634a0ee7b4e0d7eb84a34dedeebc44202a86212"
+      "updated": "2026-11-17T12:05:44Z",
+      "hash": "b3:244257f838745e30b395f32b73c39c7e91c7ac56e55bd49e997fbb50ade01fbf"
+    },
+    "journal/2026-09-12_all-eleven.md": {
+      "updated": "2026-11-17T12:05:44Z",
+      "hash": "b3:c9f0ae522f2898e012ef84d4c5a53056f68c268e3e4911e2f6861ddec6b2f233"
+    },
+    "journal/2026-11-03_nearly-blue.md": {
+      "updated": "2026-11-17T12:05:44Z",
+      "hash": "b3:749e7ad8074f2b08db7c870019edac1831bdddaa9e607acbbf88ca704e80042f"
     }
   }
 }

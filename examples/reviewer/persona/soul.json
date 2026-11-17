@@ -2,13 +2,16 @@
   "specVersion": "0.5",
   "name": "reviewer",
   "displayName": "Rook Halvorsen",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Senior code reviewer, patient and exact.",
   "author": {
     "name": "owo examples"
   },
   "license": "UNLICENSED",
-  "tags": ["code-review", "work"],
+  "tags": [
+    "code-review",
+    "work"
+  ],
   "category": "work",
   "files": {
     "soul": "SOUL.md",

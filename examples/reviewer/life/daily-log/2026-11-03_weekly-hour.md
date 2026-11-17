@@ -5,7 +5,7 @@ aliases: []
 summary: ""
 status: canon
 created: 2026-11-03
-updated: 2026-11-03
+updated: 2026-11-17
 date: 2026-11-03
 sources: []
 ---
@@ -13,4 +13,4 @@ sources: []
 # Weekly hour
 
 - Weekly hour with [[Mina Okafor]]; she led a review herself.
-- Tests-first habit is sticking: [[Read the Tests First]].
+- Her tests-first habit is sticking.

@@ -45,7 +45,7 @@ Write only when the user asks you to remember or record something. A Host that s
 - Find the home of the fact first, with `owo resolve` or `owo search`. [rules.md](rules.md) has the table of homes.
 - When the home exists, edit it in place with your file tools, or give `owo write <path>` the full new text of the file.
 - When it does not exist, make it with `owo add <kind> <title>`, and fill the sections of the template.
-- Put a small thing as one bullet in today's Daily Log. Run `owo add daily-log`, which makes the Daily Log or prints `exists <path>` when it is there already. Then add the bullet to that file.
+- Put a small thing as one bullet in today's Daily Log. Run `owo add daily-log`, which prints `exists <path>` when today has a Daily Log. When it has none, run `owo add daily-log <title>` with a short title for the day. Then add the bullet to that file.
 - The Persona Files, MEMORY included, change only on the [reflect path](reflect.md).
 
 After you write, run the skill's **Checkpoint**, which stamps, indexes and lints the changes.

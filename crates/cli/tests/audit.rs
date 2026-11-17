@@ -178,11 +178,11 @@ fn card(root: &Path) -> Value {
 fn a_blank_log_does_not_hide_recent_events() {
     let tmp = thea();
     add(tmp.path(), &["event", "Storm", "--date", "2020-05-01"]);
-    add(tmp.path(), &["daily-log", "--date", "2020-05-03"]);
-    let log = tmp.path().join("thea/life/daily-log/2020-05-03.md");
+    add(tmp.path(), &["daily-log", "Day", "--date", "2020-05-03"]);
+    let log = tmp.path().join("thea/life/daily-log/2020-05-03_day.md");
     let text = fs::read_to_string(&log).unwrap();
     fs::write(&log, format!("{text}\n- Rowed out.\n")).unwrap();
-    add(tmp.path(), &["daily-log", "--date", "2020-06-01"]);
+    add(tmp.path(), &["daily-log", "Day", "--date", "2020-06-01"]);
     let out = owo(tmp.path())
         .args(["-i", "thea", "state"])
         .output()
@@ -352,8 +352,8 @@ fn stamp_with_a_broken_soul_json_touches_no_entry() {
 fn recurring_phrases_stay_inside_one_line() {
     let tmp = thea();
     for day in ["2026-01-01", "2026-01-02", "2026-01-03"] {
-        add(tmp.path(), &["daily-log", "--date", day]);
-        let log = tmp.path().join(format!("thea/life/daily-log/{day}.md"));
+        add(tmp.path(), &["daily-log", "Day", "--date", day]);
+        let log = tmp.path().join(format!("thea/life/daily-log/{day}_day.md"));
         let text = fs::read_to_string(&log).unwrap();
         fs::write(&log, format!("{text}\n- Fed cat\n- Walked home\n")).unwrap();
     }

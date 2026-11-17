@@ -5,32 +5,32 @@
       "hash": "b3:a169bcb6358f28cee949ba8a524ca186e7663a8eac719aafc0be900f76afa623"
     },
     "projects/build-cache/notes/2026-10-29_cache-key-review.md": {
-      "updated": "2026-11-04T03:33:55Z",
-      "hash": "b3:8314abcbcc70a39b2b92199ef81e2eda43a680c9b1250bceb29e9588a634fc3e"
+      "updated": "2026-11-17T12:03:32Z",
+      "hash": "b3:c16fd463cfab6fc35a1bfc618f5cc79f7ca3d54b4cf11110bd98f6ee972b342d"
     },
     "projects/build-cache/README.md": {
-      "updated": "2026-11-04T03:33:55Z",
-      "hash": "b3:619a7a108b81e5110b841a70759e65a9415971f1a1a3c0a04b058a8da88f8543"
+      "updated": "2026-11-17T12:03:32Z",
+      "hash": "b3:d541c635ae1abd92ffb28e38bec36b9c92948438266fb45195ddef461e062713"
     },
     "projects/ledger-api/notes/2026-10-23_idempotency-keys.md": {
-      "updated": "2026-11-04T03:46:34Z",
-      "hash": "b3:9d5d0ac8485aa328ace2562d917413e68d68771966bcde7f9d53dee97244cc31"
+      "updated": "2026-11-17T12:03:34Z",
+      "hash": "b3:7d81c0ca5bf0c77a7099b1422922a30fb202f96bf1e548268c4030b389874f7a"
     },
     "projects/ledger-api/notes/2026-10-26_rollback-postmortem.md": {
-      "updated": "2026-11-04T03:33:55Z",
-      "hash": "b3:f52398bc3960e5f51da7667aeb032575b40f20f7d2c65c4f59131e4182038287"
+      "updated": "2026-11-17T12:03:34Z",
+      "hash": "b3:da6f244759567b22bea26f97f85c4fe183641ededca5cc635eb63312a4836209"
     },
     "projects/ledger-api/README.md": {
-      "updated": "2026-11-04T03:33:55Z",
-      "hash": "b3:fdb85fc239093ee87f70567a87d3e6234cd9904cd90322c1f8961f358c2454c8"
+      "updated": "2026-11-17T12:03:34Z",
+      "hash": "b3:63043546eaf8b9115bff44cfea97a0f4718479923966e98fda752dc4cd7d7c5d"
     },
     "projects/mobile-sync/notes/2026-11-02_conflict-merge-rules.md": {
-      "updated": "2026-11-04T03:33:55Z",
-      "hash": "b3:a683226c176989949e5168046be9b60a9e58dfa700b77d10a824a0fead99bff9"
+      "updated": "2026-11-17T12:03:32Z",
+      "hash": "b3:58e0356e4185b93aa6cee1798ef5d28371e0f9e7bc44e7d03bce5853a3c99746"
     },
     "projects/mobile-sync/README.md": {
-      "updated": "2026-11-04T03:33:55Z",
-      "hash": "b3:ae2198cc303a9b800e95b4d2dae89c20da0a39363076c6fffea56b4fb5514f9e"
+      "updated": "2026-11-17T12:03:32Z",
+      "hash": "b3:e10c5ab1e688bf1756ba2699a89f354cbfc9efb8773fde5cf6c4288148ad2a2f"
     }
   }
 }

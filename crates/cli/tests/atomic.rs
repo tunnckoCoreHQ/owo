@@ -118,7 +118,18 @@ fn atomic_index_replaces_the_files() {
 fn atomic_stamp_replaces_the_entry() {
     let tmp = setup();
     let file = nicole(tmp.path()).join("life/insights/let-it-dry.md");
-    let text = fs::read_to_string(&file).unwrap();
+    let text = fs::read_to_string(&file)
+        .unwrap()
+        .lines()
+        .map(|l| {
+            if l.starts_with("updated: ") {
+                "updated: 2000-01-01"
+            } else {
+                l
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
     fs::write(&file, format!("{text}\nMore.\n")).unwrap();
     let before = ino(&file);
     assert!(run(tmp.path(), &["-i", "nicole", "stamp"]));

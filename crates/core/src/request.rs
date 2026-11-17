@@ -560,7 +560,7 @@ impl Request for AddRequest {
             title: r.words(
                 Field::new(
                     "title",
-                    "Title (a daily log without one is titled by its date)",
+                    "Title (a daily log needs one only to make the day's log)",
                 ),
                 b.title,
             ),

@@ -9,8 +9,8 @@
 - [Eras](eras/_index.md): 0
 - [Threads](threads/_index.md): 1
 - [Conflicts](conflicts/_index.md): 0
-- [Insights](insights/_index.md): 3
+- [Insights](insights/_index.md): 1
 - [Writing](writing/_index.md): 1
 - [Daily Log](daily-log/_index.md): 9
-- [Journal](journal/_index.md): 0
+- [Journal](journal/_index.md): 1
 - [Timeline](timeline.md)

@@ -154,12 +154,12 @@ Two pieces of **Raw Material** that disagree about a fact. It stays open until o
 _Avoid: dispute, contradiction, merge conflict_
 
 **Insight**:
-An interpretation of experience, with the **Evidence** for it, kept in `life/insights/`.
+A life lesson that the **Identity** learned from what it lived, with the **Evidence** for it, kept in `life/insights/`. An **Identity** writes one only when its experience really taught it something.
 
-_Avoid: lesson, takeaway, learning_
+_Avoid: lesson, takeaway, tip, learning_
 
 **Daily Log**:
-The bullet list of the small things of one story day. Each day has one **Daily Log**.
+The bullet list of the small things of one story day. Each day has one **Daily Log**, with a file name that starts with its date, then a slug of its title.
 
 _Avoid: log, diary, daily note, journal_
 

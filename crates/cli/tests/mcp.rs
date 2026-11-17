@@ -102,7 +102,7 @@ fn mcp_lists_and_calls_tools() {
     assert_eq!(resolved["data"]["path"], "life/events/first-firing.md");
     assert!(text(&replies[3]).starts_with("## Lines"));
     assert!(
-        text(&replies[4]).contains("life/daily-log/2026-11-02.md"),
+        text(&replies[4]).contains("life/daily-log/2026-11-02_kiln-day.md"),
         "values never parse as flags"
     );
     assert!(text(&replies[5]).contains("unknown argument"));
