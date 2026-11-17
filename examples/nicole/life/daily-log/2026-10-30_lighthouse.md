@@ -1,0 +1,16 @@
+---
+type: daily-log
+title: "Lighthouse"
+aliases: []
+summary: ""
+status: canon
+created: 2026-10-30
+updated: 2026-10-30
+date: 2026-10-30
+sources: []
+---
+
+# Lighthouse
+
+- [[Lighthouse spread]] thumbnail.
+- Told [[Joe]] about the cat in the lamp room.

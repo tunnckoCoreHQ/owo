@@ -1,7 +1,3 @@
-//! `owo context`: the tiered load set for an identity.
-//! Core (always): IDENTITY, SOUL, MEMORY. Voice: VOICE.md. Look: LOOK.md.
-//! Project: work README, project.md, recent notes, KB pointer. The generated "Now" block is last.
-
 use crate::identity::Identity;
 use crate::status;
 use anyhow::Result;
@@ -9,6 +5,15 @@ use serde::Serialize;
 use std::fs;
 
 use crate::ContextRequest as Request;
+
+named! {
+    #[derive(Default)]
+    pub enum Format {
+        Paths = "paths",
+        #[default]
+        Text = "text",
+    }
+}
 
 #[derive(Debug, Serialize)]
 pub struct Item {
@@ -22,28 +27,25 @@ pub struct Context {
     pub identity: String,
     pub project: Option<String>,
     pub items: Vec<Item>,
-    pub now: String,
-    pub kb: Option<crate::kb::Kb>,
+    pub current_state: String,
+    pub wiki: Option<crate::wiki::WikiPath>,
     pub warnings: Vec<String>,
 }
 
 impl Context {
-    /// The file list of the load set: one `tier path (reason)` line per file, then the KB pointer,
-    /// then the Now block, last as in the text.
     pub fn paths_text(&self) -> String {
-        let mut out = String::new();
-        for it in &self.items {
-            out.push_str(&format!("{:<8} {}  ({})\n", it.tier, it.path, it.reason));
-        }
-        if let Some(kb) = &self.kb {
-            out.push_str(&format!(
-                "kb       {}{}\n",
-                kb.path,
-                if kb.exists { "" } else { "  (missing)" }
-            ));
-        }
-        out.push_str("now      (generated block)\n");
-        out
+        let items = self
+            .items
+            .iter()
+            .map(|it| format!("{:<8} {}  ({})\n", it.tier, it.path, it.reason));
+        let wiki = self.wiki.iter().map(|wiki| {
+            let missing = if wiki.exists { "" } else { "  (missing)" };
+            format!("wiki     {}{missing}\n", wiki.path)
+        });
+        items
+            .chain(wiki)
+            .chain(["state    (generated current state)\n".to_string()])
+            .collect()
     }
 }
 
@@ -55,39 +57,37 @@ fn item(tier: &'static str, path: &str, reason: &str) -> Item {
     }
 }
 
-/// The load set; `project` is checked to exist.
 pub fn build(id: &Identity, req: &Request, project: Option<&str>) -> Result<Context> {
     let mut items = vec![
-        item("core", "soul/IDENTITY.md", "who the identity is"),
-        item("core", "soul/SOUL.md", "first-person core"),
-        item("core", "soul/MEMORY.md", "compiled long-term memory"),
+        item("core", "persona/IDENTITY.md", "who the identity is"),
+        item("core", "persona/SOUL.md", "first-person core"),
+        item("core", "persona/MEMORY.md", "compiled long-term memory"),
     ];
     if req.voice {
         items.push(item(
             "voice",
-            "soul/VOICE.md",
+            "persona/VOICE.md",
             "talking or writing as itself",
         ));
     }
     if req.look {
-        items.push(item("look", "soul/LOOK.md", "visuals matter"));
+        items.push(item("look", "persona/LOOK.md", "visuals matter"));
     }
     let mut warnings = vec![];
-    let mut kb = None;
+    let mut wiki = None;
     if let Some(p) = project {
-        let project_md = format!("work/projects/{p}/project.md");
-        items.push(item("project", "work/README.md", "work profile"));
-        items.push(item("project", &project_md, "role on this project"));
-        for n in id.notes(p).into_iter().take(req.notes) {
-            items.push(item("project", &n.rel, "recent project note"));
+        let readme = format!("work/projects/{p}/README.md");
+        items.push(item("work", "work/PROFILE.md", "work profile"));
+        items.push(item("work", &readme, "role on this project"));
+        for n in id.project_notes(p).into_iter().take(req.notes) {
+            items.push(item("work", &n.rel, "recent project note"));
         }
-        let (pointer, warning) = crate::kb::pointer(id, p);
-        kb = pointer;
+        let (path, warning) = crate::wiki::path(id, p);
+        wiki = path;
         warnings.extend(warning);
     }
     for name in &req.with {
         match crate::find::one(id, name) {
-            // A file already in the load set is loaded once.
             Ok(i) if items.iter().any(|it| it.path == id.entries[i].rel) => {}
             Ok(i) => items.push(item(
                 "with",
@@ -107,8 +107,8 @@ pub fn build(id: &Identity, req: &Request, project: Option<&str>) -> Result<Cont
         identity: id.slug.clone(),
         project: project.map(str::to_string),
         items,
-        now: status::now_block(&state, project),
-        kb,
+        current_state: status::current_state_text(&state, project),
+        wiki,
         warnings,
     })
 }
@@ -118,23 +118,25 @@ pub fn render_text(id: &Identity, c: &Context) -> String {
     for it in &c.items {
         let text = fs::read_to_string(id.dir.join(&it.path)).unwrap_or_default();
         out.push_str(&format!(
-            "<!-- owo: {} ({}) -->\n{}\n",
+            "<!-- owo: {} ({}) -->\n{}\n\n",
             it.path,
             it.tier,
             text.trim_end()
         ));
-        out.push('\n');
     }
-    if let Some(kb) = &c.kb {
-        let note = if kb.exists {
-            kb.entry.clone().unwrap_or_else(|| kb.path.clone())
+    if let Some(wiki) = &c.wiki {
+        let shown = if wiki.exists {
+            wiki.entry.clone().unwrap_or_else(|| wiki.path.clone())
         } else {
-            format!("{} (not found)", kb.path)
+            format!("{} (not found)", wiki.path)
         };
         out.push_str(&format!(
-            "<!-- owo: project kb -->\nProject knowledge base: {note}\n\n"
+            "<!-- owo: project wiki -->\nProject wiki: {shown}\n\n"
         ));
     }
-    out.push_str(&format!("<!-- owo: now -->\n{}\n", c.now));
+    out.push_str(&format!(
+        "<!-- owo: current state -->\n{}\n",
+        c.current_state
+    ));
     out
 }

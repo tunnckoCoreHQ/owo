@@ -1,5 +1,3 @@
-//! `owo export card` (Character Card V3 or V2) and `owo export soulspec` (SoulSpec v0.5).
-
 use crate::identity::{Entry, Identity, Kind};
 use crate::markdown;
 use crate::write::Writes;
@@ -8,30 +6,13 @@ use serde_json::{json, Value};
 use std::fs;
 use std::path::Path;
 
-/// The Character Card spec version of a card.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Spec {
-    V2,
-    /// V3, with the V2 fields too.
-    V3,
-}
-
-impl Spec {
-    pub const ALL: [Spec; 2] = [Spec::V2, Spec::V3];
-
-    pub fn name(self) -> &'static str {
-        match self {
-            Spec::V2 => "v2",
-            Spec::V3 => "v3",
-        }
-    }
-
-    pub fn from_name(name: &str) -> Option<Spec> {
-        Spec::ALL.into_iter().find(|s| s.name() == name)
+named! {
+    pub enum CardSpec {
+        V2 = "v2",
+        V3 = "v3",
     }
 }
 
-/// Licenses `export soulspec` accepts without a warning.
 pub const LICENSES: &[&str] = &[
     "MIT",
     "Apache-2.0",
@@ -45,8 +26,6 @@ pub const LICENSES: &[&str] = &[
     "UNLICENSED",
 ];
 
-/// Body text without its `# ` headings and without the listed sections at any level.
-/// Headings inside fenced code do not count.
 fn body_without(text: &str, drop: &[&str]) -> String {
     let body = markdown::split(text).body;
     let mut out = vec![];
@@ -83,15 +62,9 @@ fn section(id: &Identity, rel: &str, name: &str) -> String {
         .unwrap_or_default()
 }
 
-/// `## ` sections of a file as separate strings (greetings, one per section).
 fn sections(id: &Identity, rel: &str) -> Vec<String> {
-    let body = id
-        .entry(rel)
-        .map(|e| body_without(&e.text, &[]))
-        .unwrap_or_default();
-    // Intro text before the first `## ` heading is not a greeting; headings in fences do not count.
     let mut out: Vec<String> = vec![];
-    for (_, line, open) in markdown::unfenced(&body) {
+    for (_, line, open) in markdown::unfenced(&text(id, rel)) {
         if open && line.starts_with("## ") {
             out.push(String::new());
         } else if let Some(section) = out.last_mut() {
@@ -111,8 +84,8 @@ fn order(kind: Kind) -> Option<i64> {
         Kind::Location | Kind::LocationDetail => 30,
         Kind::Culture | Kind::Faction => 40,
         Kind::Era | Kind::Event => 50,
-        Kind::Lesson => 60,
-        Kind::Project => 70,
+        Kind::Insight => 60,
+        Kind::ProjectReadme => 70,
         _ => return None,
     })
 }
@@ -122,7 +95,6 @@ fn lore(e: &Entry, n: usize) -> Value {
     let mut keys = vec![title.clone()];
     keys.extend(e.aliases.iter().cloned());
     let summary = e.field_str("summary").unwrap_or_default();
-    // Summary plus `## Key facts`; an entry whose key facts are missing or empty gives its body.
     let facts = markdown::section_text(e.body(), "Key facts")
         .map(|(_, text)| text.trim().to_string())
         .filter(|t| !t.is_empty());
@@ -139,43 +111,43 @@ fn lore(e: &Entry, n: usize) -> Value {
     })
 }
 
-pub fn card(
+pub fn persona_card(
     id: &Identity,
-    spec: Spec,
+    spec: CardSpec,
     project: Option<&str>,
     scenario_from: Option<&str>,
 ) -> Result<Value> {
     let name = id.name().to_string();
-    let soul_json = id.read_json("soul/soul.json").unwrap_or(Value::Null);
-    let mut description = text(id, "soul/IDENTITY.md");
-    let look = text(id, "soul/LOOK.md");
+    let soul_json = id.read_json("persona/soul.json").unwrap_or(Value::Null);
+    let mut description = text(id, "persona/IDENTITY.md");
+    let look = text(id, "persona/LOOK.md");
     if !look.is_empty() {
         description.push_str(&format!("\n\n## Look\n\n{}", markdown::demote(&look)));
     }
-    let who = section(id, "soul/IDENTITY.md", "Who she is")
-        + &section(id, "soul/IDENTITY.md", "Who he is")
-        + &section(id, "soul/IDENTITY.md", "Who they are");
+    let who = section(id, "persona/IDENTITY.md", "Who she is")
+        + &section(id, "persona/IDENTITY.md", "Who he is")
+        + &section(id, "persona/IDENTITY.md", "Who they are");
     let mut system_prompt = if who.is_empty() {
-        text(id, "soul/IDENTITY.md")
+        text(id, "persona/IDENTITY.md")
     } else {
         who
     };
-    let voice = text(id, "soul/VOICE.md");
+    let voice = text(id, "persona/VOICE.md");
     if !voice.is_empty() {
         system_prompt.push_str(&format!("\n\nVoice: {voice}"));
     }
-    let good = text(id, "soul/examples/good.md");
+    let good = text(id, "persona/examples/good.md");
     let mes_example = if good.is_empty() || good.starts_with("<START>") {
         good
     } else {
         format!("<START>\n{good}")
     };
-    let mut greetings = sections(id, "soul/examples/greetings.md").into_iter();
+    let mut greetings = sections(id, "persona/examples/greetings.md").into_iter();
     let first_mes = greetings.next().unwrap_or_default();
     let mut scenario = String::new();
     let mut entries = vec![json!({
-        "id": 0, "keys": ["memory"], "content": text(id, "soul/MEMORY.md"), "extensions": {}, "enabled": true,
-        "insertion_order": 10, "case_sensitive": false, "use_regex": false, "constant": true, "name": "Memory", "priority": 0, "comment": "soul/MEMORY.md"
+        "id": 0, "keys": ["memory"], "content": text(id, "persona/MEMORY.md"), "extensions": {}, "enabled": true,
+        "insertion_order": 10, "case_sensitive": false, "use_regex": false, "constant": true, "name": "Memory", "priority": 0, "comment": "persona/MEMORY.md"
     })];
     let project_md = project.and_then(|p| id.project(p));
     if let Some(e) = project_md {
@@ -202,31 +174,22 @@ pub fn card(
         .entries
         .iter()
         .filter(|e| match e.kind {
-            Kind::Project => project_md.is_some_and(|p| p.rel == e.rel),
+            Kind::ProjectReadme => project_md.is_some_and(|p| p.rel == e.rel),
             k => order(k).is_some(),
         })
         .collect();
-    // Kinds in lorebook order; within a kind, path order.
     lorebook.sort_by_key(|e| order(e.kind));
     for e in lorebook {
         entries.push(lore(e, entries.len()));
     }
     let tags = soul_json.get("tags").cloned().unwrap_or(json!([]));
-    let creator = soul_json
-        .pointer("/author/name")
-        .and_then(Value::as_str)
-        .unwrap_or("")
-        .to_string();
-    let version = soul_json
-        .get("version")
-        .and_then(Value::as_str)
-        .unwrap_or("1.0.0")
-        .to_string();
+    let creator = soul_json["author"]["name"].as_str().unwrap_or("");
+    let version = soul_json["version"].as_str().unwrap_or("1.0.0");
     let today = crate::state::today();
     let mut data = json!({
         "name": name,
         "description": description,
-        "personality": text(id, "soul/SOUL.md"),
+        "personality": text(id, "persona/SOUL.md"),
         "scenario": scenario,
         "first_mes": first_mes,
         "mes_example": mes_example,
@@ -243,7 +206,7 @@ pub fn card(
             "recursive_scanning": false, "extensions": {}, "entries": entries
         }
     });
-    if spec == Spec::V2 {
+    if spec == CardSpec::V2 {
         return Ok(json!({ "spec": "chara_card_v2", "spec_version": "2.0", "data": data }));
     }
     let now = chrono::Utc::now().timestamp();
@@ -263,7 +226,6 @@ pub fn card(
     Ok(json!({ "spec": "chara_card_v3", "spec_version": "3.0", "data": data }))
 }
 
-/// Warnings for a built card: a card without a greeting or an example message opens on nothing.
 pub fn warnings(card: &Value) -> Vec<String> {
     ["first_mes", "mes_example"]
         .iter()
@@ -272,13 +234,11 @@ pub fn warnings(card: &Value) -> Vec<String> {
                 .as_str()
                 .is_none_or(|s| s.trim().is_empty())
         })
-        .map(|k| format!("{k} is empty; fill soul/examples/"))
+        .map(|k| format!("{k} is empty; fill persona/examples/"))
         .collect()
 }
 
-/// Writes the built `main` card to `out`: JSON, or embedded in the `png` avatar (the V2 card
-/// as `chara`, plus the V3 card as `ccv3` for V3).
-pub fn write_card(
+pub fn write_persona_card(
     id: &Identity,
     main: &Value,
     project: Option<&str>,
@@ -288,31 +248,30 @@ pub fn write_card(
     png: Option<&Path>,
 ) -> Result<()> {
     let Some(png) = png else {
-        return Writes::new().json(out, shown, main)?.commit();
+        return Writes::default().json(out, shown, main)?.commit();
     };
     let avatar = fs::read(png)?;
     let image = if main["spec"] == "chara_card_v3" {
-        let v2 = card(id, Spec::V2, project, scenario)?;
+        let v2 = persona_card(id, CardSpec::V2, project, scenario)?;
         embed_png(&avatar, &[("chara", &v2), ("ccv3", main)])?
     } else {
         embed_png(&avatar, &[("chara", main)])?
     };
-    Writes::new().file(out, shown, image).commit()
+    Writes::default().file(out, shown, image).commit()
 }
 
-pub struct Report {
+pub struct SoulspecReport {
     pub files: Vec<String>,
     pub warnings: Vec<String>,
 }
 
-/// Writes the package into `dir`; error text names it as `shown`, as the request gave it.
-pub fn soulspec(id: &Identity, dir: &Path, shown: &Path) -> Result<Report> {
-    let soul = id.dir.join("soul");
+pub fn soulspec(id: &Identity, dir: &Path, shown: &Path) -> Result<SoulspecReport> {
+    let persona = id.dir.join("persona");
     let mut manifest = id
-        .read_object("soul/soul.json")?
+        .read_object("persona/soul.json")?
         .unwrap_or_else(|| json!({}));
     if !(manifest["files"].is_object() || manifest["files"].is_null()) {
-        bail!("soul/soul.json `files` is not an object");
+        bail!("persona/soul.json `files` is not an object");
     }
     let mut warnings = vec![];
     let license = manifest["license"].as_str().unwrap_or("").to_string();
@@ -324,8 +283,8 @@ pub fn soulspec(id: &Identity, dir: &Path, shown: &Path) -> Result<Report> {
     }
     manifest["files"]["style"] = json!("STYLE.md");
     manifest["files"]["memory"] = json!("MEMORY.md");
-    let read = |rel: &str| fs::read_to_string(soul.join(rel)).unwrap_or_default();
-    let look = text(id, "soul/LOOK.md");
+    let read = |rel: &str| fs::read_to_string(persona.join(rel)).unwrap_or_default();
+    let look = text(id, "persona/LOOK.md");
     let mut identity = read("IDENTITY.md").trim_end().to_string();
     if !look.is_empty() {
         identity.push_str(&format!("\n\n## Look\n\n{}", markdown::demote(&look)));
@@ -341,14 +300,14 @@ pub fn soulspec(id: &Identity, dir: &Path, shown: &Path) -> Result<Report> {
     ];
     for name in ["good.md", "bad.md", "greetings.md"] {
         let rel = format!("examples/{name}");
-        if soul.join(&rel).is_file() {
+        if persona.join(&rel).is_file() {
             parts.push((rel.clone(), read(&rel)));
         }
     }
     parts
         .iter()
         .fold(
-            Writes::new()
+            Writes::default()
                 .dir(dir.join("examples"), shown.join("examples"))
                 .json(dir.join("soul.json"), shown.join("soul.json"), &manifest)?,
             |w, (rel, body)| w.file(dir.join(rel), shown.join(rel), body.as_str()),
@@ -357,18 +316,16 @@ pub fn soulspec(id: &Identity, dir: &Path, shown: &Path) -> Result<Report> {
     let files = std::iter::once("soul.json".to_string())
         .chain(parts.into_iter().map(|(rel, _)| rel))
         .collect();
-    Ok(Report { files, warnings })
+    Ok(SoulspecReport { files, warnings })
 }
 
-/// A `SKILL.md` wrapper for hosts that load identities as skills.
 pub fn skill(id: &Identity, dir: &Path) -> Result<()> {
     let name = id.name().to_string();
-    let soul = id.read_json("soul/soul.json").unwrap_or(Value::Null);
-    let about = soul["description"]
+    let manifest = id.read_json("persona/soul.json").unwrap_or(Value::Null);
+    let about = manifest["description"]
         .as_str()
         .filter(|s| !s.is_empty())
-        .map(str::to_string)
-        .unwrap_or_else(|| format!("The {name} identity."));
+        .map_or_else(|| format!("The {name} identity."), str::to_string);
     let slug = &id.slug;
     let projects = id.projects();
     let project_line = if projects.is_empty() {
@@ -409,9 +366,9 @@ Add `--look` when visuals matter.
 
 ## Write
 
-- New entries: `owo -i {slug} add <type> <title>`; small things: `owo -i {slug} add log`.
+- New entries: `owo -i {slug} add <type> <title>`; small things: `owo -i {slug} add daily-log` (prints the day's Daily Log, or add a title to make it).
 - Edit existing entries in place (with file tools, or `owo -i {slug} write <path>` with the full text); each fact has one home.
-- MEMORY.md and soul changes happen in review.
+- MEMORY.md and persona changes happen in a reflection.
 - Session end: `owo -i {slug} stamp && owo -i {slug} index && owo -i {slug} lint --changed`.
 "#,
         description = crate::templates::yaml_escape(&format!(
@@ -427,11 +384,7 @@ fn crc32(bytes: &[u8]) -> u32 {
     for &b in bytes {
         crc ^= u32::from(b);
         for _ in 0..8 {
-            crc = if crc & 1 == 1 {
-                (crc >> 1) ^ 0xEDB8_8320
-            } else {
-                crc >> 1
-            };
+            crc = (crc >> 1) ^ if crc & 1 == 1 { 0xEDB8_8320 } else { 0 };
         }
     }
     !crc
@@ -445,18 +398,13 @@ fn base64(bytes: &[u8]) -> String {
             | (u32::from(*chunk.get(1).unwrap_or(&0)) << 8)
             | u32::from(*chunk.get(2).unwrap_or(&0));
         for i in 0..4 {
-            if i <= chunk.len() {
-                out.push(T[(n >> (18 - 6 * i) & 63) as usize] as char);
-            } else {
-                out.push('=');
-            }
+            let c = T[(n >> (18 - 6 * i) & 63) as usize] as char;
+            out.push(if i <= chunk.len() { c } else { '=' });
         }
     }
     out
 }
 
-/// Writes `png` with the card embedded as tEXt chunks: `chara` (V2 JSON) always,
-/// `ccv3` (V3 JSON) for V3 cards. Existing `chara`/`ccv3` chunks are replaced.
 pub fn embed_png(png: &[u8], cards: &[(&str, &Value)]) -> Result<Vec<u8>> {
     const SIG: &[u8] = b"\x89PNG\r\n\x1a\n";
     if !png.starts_with(SIG) {

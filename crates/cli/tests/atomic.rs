@@ -1,5 +1,3 @@
-//! Every write is all or nothing: a file is replaced through a temporary file and a rename, no
-//! temporary file stays, and a command that writes several files leaves all of them or none.
 #![cfg(unix)]
 
 mod common;
@@ -11,7 +9,6 @@ use std::os::unix::fs::{MetadataExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 use tempfile::TempDir;
 
-/// A folder holding `ids/nicole` and `work/`, the caller's folder.
 fn setup() -> TempDir {
     let tmp = TempDir::new().unwrap();
     copy_tree(&examples().join("nicole"), &tmp.path().join("ids/nicole"));
@@ -23,7 +20,6 @@ fn nicole(tmp: &Path) -> PathBuf {
     tmp.join("ids/nicole")
 }
 
-/// Runs `owo` in `work` with `args`; returns whether it succeeded.
 fn run(tmp: &Path, args: &[&str]) -> bool {
     owo(&tmp.join("ids"))
         .current_dir(tmp.join("work"))
@@ -34,7 +30,6 @@ fn run(tmp: &Path, args: &[&str]) -> bool {
         .success()
 }
 
-/// Every path under `dir` with its bytes (None for a folder).
 fn snapshot(dir: &Path) -> BTreeMap<PathBuf, Option<Vec<u8>>> {
     walkdir::WalkDir::new(dir)
         .into_iter()
@@ -61,14 +56,12 @@ fn ino(path: &Path) -> u64 {
     fs::metadata(path).unwrap().ino()
 }
 
-/// Runs `f` with `dir` read-only, then makes it writable again.
 fn read_only(dir: &Path, f: impl FnOnce()) {
     fs::set_permissions(dir, fs::Permissions::from_mode(0o555)).unwrap();
     f();
     fs::set_permissions(dir, fs::Permissions::from_mode(0o755)).unwrap();
 }
 
-/// A non-empty folder at `path`, so a rename onto it fails.
 fn block(path: &Path) {
     fs::create_dir_all(path.join("x")).unwrap();
 }
@@ -79,7 +72,7 @@ fn atomic_card_failed_rename_leaves_no_tmp() {
     block(&tmp.path().join("work/x.json"));
     assert!(!run(
         tmp.path(),
-        &["-i", "nicole", "export", "card", "--out", "x.json"]
+        &["-i", "nicole", "export", "persona-card", "--out", "x.json"]
     ));
     no_tmp(tmp.path());
 }
@@ -87,7 +80,7 @@ fn atomic_card_failed_rename_leaves_no_tmp() {
 #[test]
 fn atomic_write_replaces_the_file() {
     let tmp = setup();
-    let file = nicole(tmp.path()).join("life/lessons/let-it-dry.md");
+    let file = nicole(tmp.path()).join("life/insights/let-it-dry.md");
     let before = ino(&file);
     assert!(run(
         tmp.path(),
@@ -95,7 +88,7 @@ fn atomic_write_replaces_the_file() {
             "-i",
             "nicole",
             "write",
-            "life/lessons/let-it-dry.md",
+            "life/insights/let-it-dry.md",
             "--content",
             "# Let It Dry\n"
         ]
@@ -109,7 +102,7 @@ fn atomic_write_replaces_the_file() {
 fn atomic_index_replaces_the_files() {
     let tmp = setup();
     let dir = nicole(tmp.path());
-    let files = ["life/lessons/_index.md", "life/timeline.md"].map(|r| dir.join(r));
+    let files = ["life/insights/_index.md", "life/timeline.md"].map(|r| dir.join(r));
     let before = files.clone().map(|f| {
         fs::write(&f, "stale\n").unwrap();
         ino(&f)
@@ -124,8 +117,19 @@ fn atomic_index_replaces_the_files() {
 #[test]
 fn atomic_stamp_replaces_the_entry() {
     let tmp = setup();
-    let file = nicole(tmp.path()).join("life/lessons/let-it-dry.md");
-    let text = fs::read_to_string(&file).unwrap();
+    let file = nicole(tmp.path()).join("life/insights/let-it-dry.md");
+    let text = fs::read_to_string(&file)
+        .unwrap()
+        .lines()
+        .map(|l| {
+            if l.starts_with("updated: ") {
+                "updated: 2000-01-01"
+            } else {
+                l
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
     fs::write(&file, format!("{text}\nMore.\n")).unwrap();
     let before = ino(&file);
     assert!(run(tmp.path(), &["-i", "nicole", "stamp"]));
@@ -166,7 +170,14 @@ fn atomic_png_card_replaces_the_file() {
     let tmp = setup();
     fs::write(tmp.path().join("work/a.png"), PNG_1X1).unwrap();
     let args = [
-        "-i", "nicole", "export", "card", "--png", "a.png", "--out", "c.png",
+        "-i",
+        "nicole",
+        "export",
+        "persona-card",
+        "--png",
+        "a.png",
+        "--out",
+        "c.png",
     ];
     assert!(run(tmp.path(), &args));
     let file = tmp.path().join("work/c.png");
@@ -254,11 +265,11 @@ fn atomic_failed_sync_leaves_no_session_folder() {
 fn atomic_stamp_is_all_or_nothing() {
     let tmp = setup();
     let dir = nicole(tmp.path());
-    let file = dir.join("life/lessons/let-it-dry.md");
+    let file = dir.join("life/insights/let-it-dry.md");
     let text = fs::read_to_string(&file).unwrap();
     fs::write(&file, format!("{text}\nMore.\n")).unwrap();
     let before = snapshot(&dir);
-    read_only(&dir.join("soul"), || {
+    read_only(&dir.join("persona"), || {
         assert!(!run(tmp.path(), &["-i", "nicole", "stamp"]));
     });
     assert_eq!(snapshot(&dir), before);
@@ -268,7 +279,7 @@ fn atomic_stamp_is_all_or_nothing() {
 fn atomic_index_is_all_or_nothing() {
     let tmp = setup();
     let dir = nicole(tmp.path());
-    for rel in ["life/lessons/_index.md", "work/_index.md"] {
+    for rel in ["life/insights/_index.md", "work/_index.md"] {
         fs::write(dir.join(rel), "stale\n").unwrap();
     }
     let last = dir.join("work/_index.md");

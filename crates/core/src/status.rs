@@ -1,6 +1,3 @@
-//! Derived current state: `owo state` and the "Now" block of `owo context`.
-//! Everything here is computed from the state files and frontmatter dates.
-
 use crate::identity::{Entry, Identity, Kind};
 use crate::state::date_of;
 use chrono::{Duration, Utc};
@@ -22,38 +19,30 @@ impl Link {
             date: e.field_str("date"),
         }
     }
-
-    pub(crate) fn wiki(&self) -> String {
-        match &self.date {
-            Some(d) if !self.title.starts_with(d.as_str()) => format!("[[{}]] ({d})", self.title),
-            _ => format!("[[{}]]", self.title),
-        }
-    }
 }
 
 #[derive(Debug, Serialize)]
-pub struct Review {
-    pub last_reviewed: Option<String>,
+pub struct ReflectionStatus {
+    pub last_reflected: Option<String>,
     pub days_since: Option<i64>,
     pub every_days: i64,
     pub due: bool,
-    pub unreviewed_log_days: usize,
-    pub memory_changed_outside_review: bool,
+    pub unreflected_daily_logs: usize,
+    pub memory_changed_outside_reflection: bool,
 }
 
 #[derive(Debug, Serialize)]
-pub struct State {
+pub struct CurrentState {
     pub identity: String,
     pub last_activity: Option<String>,
     pub last_activity_by_scope: Vec<(String, String)>,
     pub last_project: Option<(String, String)>,
-    pub recent_logs: Vec<Link>,
+    pub recent_daily_logs: Vec<Link>,
     pub recent_events: Vec<Link>,
     pub open_threads: Vec<Link>,
     pub open_conflicts: Vec<Link>,
-    pub review: Review,
-    pub last_soul_change: Option<crate::review::SoulChange>,
-    /// With `--project`: last update and recent notes for that project.
+    pub reflection: ReflectionStatus,
+    pub last_persona_change: Option<crate::reflect::PersonaChange>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub project: Option<ProjectState>,
 }
@@ -61,7 +50,6 @@ pub struct State {
 #[derive(Debug, Serialize)]
 pub struct ProjectState {
     pub slug: String,
-    /// Newest stamp among the project's files.
     pub last_updated: Option<String>,
     pub notes: Vec<Link>,
 }
@@ -70,30 +58,34 @@ pub fn project(id: &Identity, slug: &str) -> ProjectState {
     ProjectState {
         slug: slug.into(),
         last_updated: project_stamps(id).remove(slug),
-        notes: id.notes(slug).into_iter().take(5).map(Link::of).collect(),
+        notes: id
+            .project_notes(slug)
+            .into_iter()
+            .take(5)
+            .map(Link::of)
+            .collect(),
     }
 }
 
 #[derive(Debug, Serialize)]
-pub struct Row {
+pub struct ListedIdentity {
     pub slug: String,
     pub name: String,
     pub last_activity: Option<String>,
     pub projects: Vec<String>,
 }
 
-/// One row per identity in the root for `owo list`.
-pub fn list(root: &std::path::Path) -> Vec<Row> {
+pub fn list(root: &std::path::Path) -> Vec<ListedIdentity> {
     crate::config::list_identities(root)
         .into_iter()
         .map(|slug| match Identity::load(root, &slug) {
-            Ok(id) => Row {
+            Ok(id) => ListedIdentity {
                 name: id.name().to_string(),
                 last_activity: scope_activity(&id).into_iter().map(|(_, t)| t).max(),
                 projects: id.projects(),
                 slug,
             },
-            Err(_) => Row {
+            Err(_) => ListedIdentity {
                 name: slug.clone(),
                 slug,
                 last_activity: None,
@@ -109,7 +101,6 @@ fn by_date_desc(id: &Identity, kind: Kind) -> Vec<&Entry> {
     v
 }
 
-/// Latest `updated` stamp per scope from the state files.
 fn scope_activity(id: &Identity) -> Vec<(String, String)> {
     crate::state::SCOPES
         .iter()
@@ -123,70 +114,63 @@ fn scope_activity(id: &Identity) -> Vec<(String, String)> {
         .collect()
 }
 
-/// Newest `work/state.json` stamp per project, from its files under `projects/<p>/`.
 fn project_stamps(id: &Identity) -> std::collections::BTreeMap<String, String> {
     let mut out = std::collections::BTreeMap::<String, String>::new();
     for (scope, rel, at) in crate::state::stamps(id) {
-        if scope != "work" {
-            continue;
-        }
-        let Some((p, _)) = rel
+        let project = rel
             .strip_prefix("projects/")
-            .and_then(|rest| rest.split_once('/'))
-        else {
-            continue;
-        };
-        let newest = out.entry(p.to_string()).or_default();
-        if at > newest.as_str() {
-            *newest = at.to_string();
+            .and_then(|r| r.split_once('/'));
+        if let Some((p, _)) = project.filter(|_| scope == "work") {
+            let newest = out.entry(p.to_string()).or_default();
+            *newest = at.max(newest.as_str()).to_string();
         }
     }
     out
 }
 
-/// The project with the newest stamp, as (project, stamp).
 pub fn last_project(id: &Identity) -> Option<(String, String)> {
     project_stamps(id).into_iter().max_by(|a, b| a.1.cmp(&b.1))
 }
 
-pub fn compute(id: &Identity, days: i64, logs: usize) -> State {
+pub(crate) fn open_links(id: &Identity, kind: Kind) -> Vec<Link> {
+    id.entries
+        .iter()
+        .filter(|e| e.kind == kind && e.field_str("state").as_deref() == Some("open"))
+        .map(Link::of)
+        .collect()
+}
+
+pub fn compute(id: &Identity, days: i64, daily_logs: usize) -> CurrentState {
     let today = Utc::now().date_naive();
-    // Recent events count back from the newest story date, since story time can run behind or
-    // ahead of real time.
-    let newest = id
+    let story_today = id
         .entries
         .iter()
-        .filter(|e| matches!(e.kind, Kind::Log | Kind::Event))
-        // A log with nothing written yet is not a day that happened.
-        .filter(|e| !(e.kind == Kind::Log && e.is_blank()))
+        .filter(|e| matches!(e.kind, Kind::DailyLog | Kind::Event))
+        .filter(|e| !(e.kind == Kind::DailyLog && e.is_blank()))
         .filter_map(|e| date_of(&e.field_str("date")?))
         .max()
         .unwrap_or(today);
-    let since = newest - Duration::days(days);
-    let review = crate::state::review(id);
-    // A log with nothing written yet is not a day that happened.
-    let log_entries: Vec<&Entry> = by_date_desc(id, Kind::Log)
+    let since = story_today - Duration::days(days);
+    let reflection = crate::state::reflection(id);
+    let log_entries: Vec<&Entry> = by_date_desc(id, Kind::DailyLog)
         .into_iter()
         .filter(|e| !e.is_blank())
         .collect();
-    let unreviewed = log_entries
+    let unreflected = log_entries
         .iter()
-        .filter(|e| review.unreviewed(e.field_str("date").as_deref()))
+        .filter(|e| reflection.unreflected(e.field_str("date").as_deref()))
         .count();
     let by_scope = scope_activity(id);
-    let open = |kind: Kind, state: &str| -> Vec<Link> {
-        id.entries
-            .iter()
-            .filter(|e| e.kind == kind && e.field_str("state").as_deref() == Some(state))
-            .map(Link::of)
-            .collect()
-    };
-    State {
+    CurrentState {
         identity: id.slug.clone(),
         last_activity: by_scope.iter().map(|(_, t)| t.clone()).max(),
         last_activity_by_scope: by_scope,
         last_project: last_project(id),
-        recent_logs: log_entries.iter().take(logs).map(|e| Link::of(e)).collect(),
+        recent_daily_logs: log_entries
+            .iter()
+            .take(daily_logs)
+            .map(|e| Link::of(e))
+            .collect(),
         recent_events: by_date_desc(id, Kind::Event)
             .into_iter()
             .filter(|e| {
@@ -197,78 +181,85 @@ pub fn compute(id: &Identity, days: i64, logs: usize) -> State {
             })
             .map(Link::of)
             .collect(),
-        open_threads: open(Kind::Thread, "open"),
-        open_conflicts: open(Kind::Conflict, "open"),
-        last_soul_change: crate::review::last_soul_change(id),
-        review: Review {
-            last_reviewed: review.last_reviewed,
-            days_since: review.days_since,
-            every_days: review.every_days,
-            due: review.due,
-            unreviewed_log_days: unreviewed,
-            memory_changed_outside_review: review.memory_changed,
+        open_threads: open_links(id, Kind::Thread),
+        open_conflicts: open_links(id, Kind::Conflict),
+        last_persona_change: crate::reflect::persona_changelog(id, None).pop(),
+        reflection: ReflectionStatus {
+            last_reflected: reflection.last_reflected,
+            days_since: reflection.days_since,
+            every_days: reflection.every_days,
+            due: reflection.due,
+            unreflected_daily_logs: unreflected,
+            memory_changed_outside_reflection: reflection.memory_changed,
         },
         project: None,
     }
 }
 
-/// The links as `[[title]]` wiki-links joined with commas, or "none".
-pub(crate) fn join(links: &[Link]) -> String {
-    if links.is_empty() {
-        "none".into()
-    } else {
-        links.iter().map(Link::wiki).collect::<Vec<_>>().join(", ")
+pub fn join_wikilinks(links: &[Link]) -> String {
+    let wiki = |l: &Link| match &l.date {
+        Some(d) if !l.title.starts_with(d.as_str()) => format!("[[{}]] ({d})", l.title),
+        _ => format!("[[{}]]", l.title),
+    };
+    match links {
+        [] => "none".into(),
+        _ => links.iter().map(wiki).collect::<Vec<_>>().join(", "),
     }
 }
 
-/// The short generated "Now" block injected by `owo context`.
-pub fn now_block(s: &State, project: Option<&str>) -> String {
-    let mut out = String::from("## Now\n\n");
+pub fn current_state_text(s: &CurrentState, project: Option<&str>) -> String {
     let scopes: Vec<String> = s
         .last_activity_by_scope
         .iter()
         .map(|(scope, t)| format!("{scope} {}", crate::state::day(t)))
         .collect();
-    out.push_str(&format!(
-        "- Last activity: {}\n",
+    let mut lines = vec![format!(
+        "- Last activity: {}",
         if scopes.is_empty() {
             "none".into()
         } else {
             scopes.join(", ")
         }
-    ));
+    )];
     if let Some((p, t)) = &s.last_project {
-        out.push_str(&format!("- Last project: {p} ({})\n", crate::state::day(t)));
+        lines.push(format!("- Last project: {p} ({})", crate::state::day(t)));
     }
-    out.push_str(&format!("- Recent days: {}\n", join(&s.recent_logs)));
-    out.push_str(&format!("- Recent events: {}\n", join(&s.recent_events)));
-    out.push_str(&format!("- Open threads: {}\n", join(&s.open_threads)));
+    lines.push(format!(
+        "- Recent days: {}",
+        join_wikilinks(&s.recent_daily_logs)
+    ));
+    lines.push(format!(
+        "- Recent events: {}",
+        join_wikilinks(&s.recent_events)
+    ));
+    lines.push(format!(
+        "- Open threads: {}",
+        join_wikilinks(&s.open_threads)
+    ));
     if !s.open_conflicts.is_empty() {
-        out.push_str(&format!("- Open conflicts: {}\n", join(&s.open_conflicts)));
+        lines.push(format!(
+            "- Open conflicts: {}",
+            join_wikilinks(&s.open_conflicts)
+        ));
     }
-    let r = &s.review;
-    let review = match r.days_since {
-        None => "never reviewed".to_string(),
+    let r = &s.reflection;
+    let reflection = match r.days_since {
+        None => "never reflected".to_string(),
         Some(d) => format!(
             "{} ({d} days since, every {})",
             if r.due { "due" } else { "not due" },
             r.every_days
         ),
     };
-    out.push_str(&format!(
-        "- Review: {review}, {} unreviewed log days\n",
-        r.unreviewed_log_days
+    lines.push(format!(
+        "- Reflection: {reflection}, {} daily logs since the last reflection",
+        r.unreflected_daily_logs
     ));
-    let mut more = vec!["life/_index.md", "life/timeline.md", "work/_index.md"]
-        .into_iter()
-        .map(String::from)
-        .collect::<Vec<_>>();
-    if let Some(p) = project {
-        more.push(format!("work/projects/{p}/notes/"));
-    }
-    out.push_str(&format!(
-        "- More: {} (or `owo search`, `owo resolve`)\n",
-        more.join(", ")
+    let notes = project
+        .map(|p| format!(", work/projects/{p}/notes/"))
+        .unwrap_or_default();
+    lines.push(format!(
+        "- More: life/_index.md, life/timeline.md, work/_index.md{notes} (or `owo search`, `owo resolve`)"
     ));
-    out
+    format!("## Current state\n\n{}\n", lines.join("\n"))
 }

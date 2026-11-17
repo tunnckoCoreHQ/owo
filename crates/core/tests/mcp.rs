@@ -1,5 +1,3 @@
-//! The MCP server on in-memory streams, with no process.
-
 use owo_core::mcp;
 use owo_core::{Env, Select};
 use serde_json::{json, Value};
@@ -7,7 +5,6 @@ use serde_json::{json, Value};
 use std::path::Path;
 use tempfile::TempDir;
 
-/// A temporary root holding a copy of each example identity in `ids`.
 fn root(ids: &[&str]) -> TempDir {
     let tmp = TempDir::new().unwrap();
     let examples = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples");
@@ -29,7 +26,6 @@ fn root(ids: &[&str]) -> TempDir {
     tmp
 }
 
-/// The environment of a process in `root` with no owo variables.
 fn env(root: &Path) -> Env {
     Env {
         cwd: root.to_path_buf(),
@@ -37,7 +33,6 @@ fn env(root: &Path) -> Env {
     }
 }
 
-/// The server's own root, with no identity or project.
 fn select(root: &Path) -> Select {
     Select {
         root: Some(root.to_path_buf()),
@@ -74,7 +69,7 @@ fn mcp_reply_answers_one_message() {
         .iter()
         .map(|t| t["name"].as_str().unwrap())
         .collect();
-    assert!(names.contains(&"slug") && names.contains(&"review_done"));
+    assert!(names.contains(&"slug") && names.contains(&"reflect_done"));
     assert!(!names.contains(&"mcp") && !names.contains(&"acp"));
 
     let r = reply(call("slug", json!({ "text": "Hello World" })), &sel, &env);

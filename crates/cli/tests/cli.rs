@@ -1,5 +1,3 @@
-//! End-to-end tests: run the built `owo` binary against temporary roots.
-
 mod common;
 
 use common::{copy_example, copy_tree, examples, json, owo};
@@ -8,7 +6,6 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use tempfile::TempDir;
 
-/// A fresh "Aria" identity with the fixture entries copied in and indexes regenerated.
 fn aria() -> (TempDir, PathBuf) {
     let tmp = TempDir::new().unwrap();
     owo(tmp.path()).args(["new", "Aria"]).assert().success();
@@ -59,12 +56,12 @@ fn new_identity_lints_clean() {
         .success();
     for rel in [
         "identity.json",
-        "soul/soul.json",
-        "soul/VOICE.md",
-        "soul/state.json",
+        "persona/soul.json",
+        "persona/VOICE.md",
+        "persona/state.json",
         "life/state.json",
         "work/state.json",
-        "work/README.md",
+        "work/PROFILE.md",
         "life/timeline.md",
     ] {
         assert!(tmp.path().join("thea").join(rel).is_file(), "{rel}");
@@ -103,7 +100,7 @@ fn valid_fixture_has_no_errors() {
     assert!(
         warnings
             .iter()
-            .all(|w| w.starts_with("state:") || w.starts_with("memory-review:")),
+            .all(|w| w.starts_with("state:") || w.starts_with("memory-reflection:")),
         "{warnings:?}"
     );
 }
@@ -143,22 +140,17 @@ fn broken_entries_are_reported() {
         fs::create_dir_all(p.parent().unwrap()).unwrap();
         fs::write(p, text).unwrap();
     };
-    // links + journal + identifiers
     w(
         "life/events/storm.md",
         "---\ntype: event\ntitle: Storm\nsummary: A storm.\nstatus: disputed\ncreated: 2026-10-01\nupdated: 2026-10-01\ndate: 2026-07-01\n---\n\n# Storm\n\nSee [[Nowhere]] and [[Salt]]. Sam was born 1990-04-12.\n",
     );
-    // schema: bad type, bad status, bad date filename
     w("life/characters/bad.md", "---\ntype: event\ntitle: Bad\nsummary: x\nstatus: maybe\ncreated: 2026-13-01\nupdated: 2026-10-01\n---\n# Bad\n");
-    w("life/log/2026-07-02.md", "---\ntype: log\ntitle: Day\nstatus: canon\ncreated: 2026-07-02\nupdated: 2026-07-02\ndate: 2026-07-03\n---\n- x\n");
-    // unique: alias collides with a title
+    w("life/daily-log/2026-07-02_day.md", "---\ntype: daily-log\ntitle: Day\nstatus: canon\ncreated: 2026-07-02\nupdated: 2026-07-02\ndate: 2026-07-03\n---\n- x\n");
     w("life/characters/samuel-two.md", "---\ntype: character\ntitle: Sam Two\naliases: [Samuel]\nsummary: x\nstatus: canon\ncreated: 2026-10-01\nupdated: 2026-10-01\n---\n# Sam Two\n");
-    // tree: stray file and location without overview
     w("life/notes.md", "# stray\n");
     w("life/locations/empty-place/detail.md", "---\ntype: location-detail\ntitle: Detail\nsummary: x\nstatus: canon\ncreated: 2026-10-01\nupdated: 2026-10-01\nparent: \"[[Harbor House]]\"\n---\n# Detail\n");
-    // soul-plain and supersede
-    w("soul/LOOK.md", "---\nupdated: 2026-10-01\n---\n# Look\n");
-    w("life/lessons/old.md", "---\ntype: lesson\ntitle: Old\nsummary: x\nstatus: superseded\ncreated: 2026-10-01\nupdated: 2026-10-01\n---\n# Old\n");
+    w("persona/LOOK.md", "---\nupdated: 2026-10-01\n---\n# Look\n");
+    w("life/insights/old.md", "---\ntype: insight\ntitle: Old\nsummary: x\nstatus: superseded\ncreated: 2026-10-01\nupdated: 2026-10-01\n---\n# Old\n");
 
     let v = lint_json(tmp.path(), &[]);
     let errors = rules_in(&v, "errors");
@@ -168,12 +160,12 @@ fn broken_entries_are_reported() {
         "identifiers:life/events/storm.md",
         "supersede:life/events/storm.md",
         "schema:life/characters/bad.md",
-        "schema:life/log/2026-07-02.md",
+        "schema:life/daily-log/2026-07-02_day.md",
         "unique:life/characters/samuel-two.md",
         "tree:life/notes.md",
         "tree:life/locations/empty-place",
-        "soul-plain:soul/LOOK.md",
-        "supersede:life/lessons/old.md",
+        "persona-plain:persona/LOOK.md",
+        "supersede:life/insights/old.md",
         "generated:life/events/_index.md",
     ] {
         assert!(
@@ -192,18 +184,22 @@ fn broken_entries_are_reported() {
 fn memory_budget_and_dupes_warn() {
     let (tmp, dir) = aria();
     let long = "word ".repeat(1600);
-    fs::write(dir.join("soul/MEMORY.md"), format!("# Memory\n\n{long}\n")).unwrap();
+    fs::write(
+        dir.join("persona/MEMORY.md"),
+        format!("# Memory\n\n{long}\n"),
+    )
+    .unwrap();
     let passage = "the tide came in fast and we pulled the boat up past the stones together";
     fs::write(dir.join("life/journal/2026-06-14_salt.md"), format!("---\ntype: journal\ntitle: Salt\nstatus: canon\ncreated: 2026-06-14\nupdated: 2026-06-14\ndate: 2026-06-14\n---\n# Salt\n\n{passage}\n")).unwrap();
-    fs::write(dir.join("life/log/2026-06-14.md"), format!("---\ntype: log\ntitle: Sailing day\nstatus: canon\ncreated: 2026-06-14\nupdated: 2026-06-14\ndate: 2026-06-14\n---\n# Sailing day\n\n- [[First Sail]] {passage}\n")).unwrap();
-    let v = lint_json(tmp.path(), &["budget", "memory-review", "dupes"]);
+    fs::write(dir.join("life/daily-log/2026-06-14_sailing-day.md"), format!("---\ntype: daily-log\ntitle: Sailing day\nstatus: canon\ncreated: 2026-06-14\nupdated: 2026-06-14\ndate: 2026-06-14\n---\n# Sailing day\n\n- [[First Sail]] {passage}\n")).unwrap();
+    let v = lint_json(tmp.path(), &["budget", "memory-reflection", "dupes"]);
     let warnings = rules_in(&v, "warnings");
     assert!(
-        warnings.contains(&"budget:soul/MEMORY.md".to_string()),
+        warnings.contains(&"budget:persona/MEMORY.md".to_string()),
         "{warnings:?}"
     );
     assert!(
-        warnings.contains(&"memory-review:soul/MEMORY.md".to_string()),
+        warnings.contains(&"memory-reflection:persona/MEMORY.md".to_string()),
         "{warnings:?}"
     );
     assert!(
@@ -239,7 +235,7 @@ fn add_creates_entries_at_deterministic_paths() {
     );
     add(&["event", "The Café Night", "--date", "2026-10-25"]);
     add(&["journal", "Two beds", "--date", "2026-10-28"]);
-    add(&["project", "API Server"]);
+    add(&["project-readme", "API Server"]);
     let note = owo(tmp.path())
         .args([
             "-i",
@@ -247,7 +243,7 @@ fn add_creates_entries_at_deterministic_paths() {
             "--project",
             "api-server",
             "add",
-            "note",
+            "project-note",
             "Release steps",
             "--date",
             "2026-11-12",
@@ -263,7 +259,7 @@ fn add_creates_entries_at_deterministic_paths() {
         "life/locations/joes-apartment/overview.md",
         "life/events/the-cafe-night.md",
         "life/journal/2026-10-28_two-beds.md",
-        "work/projects/api-server/project.md",
+        "work/projects/api-server/README.md",
     ] {
         assert!(dir.join(rel).is_file(), "{rel}");
     }
@@ -280,13 +276,31 @@ fn add_creates_entries_at_deterministic_paths() {
         .assert()
         .code(1);
     owo(tmp.path())
-        .args(["-i", "thea", "add", "log", "--date", "2026-10-25"])
+        .args(["-i", "thea", "add", "daily-log", "--date", "2026-10-25"])
         .assert()
-        .success();
+        .code(2);
     owo(tmp.path())
-        .args(["-i", "thea", "add", "log", "--date", "2026-10-25"])
+        .args([
+            "-i",
+            "thea",
+            "add",
+            "daily-log",
+            "Rainy day",
+            "--date",
+            "2026-10-25",
+        ])
         .assert()
-        .success();
+        .success()
+        .stdout("life/daily-log/2026-10-25_rainy-day.md\n");
+    for title in [&[][..], &["Other day"]] {
+        owo(tmp.path())
+            .args(["-i", "thea", "add", "daily-log"])
+            .args(title)
+            .args(["--date", "2026-10-25"])
+            .assert()
+            .success()
+            .stdout("exists life/daily-log/2026-10-25_rainy-day.md\n");
+    }
 
     owo(tmp.path())
         .args(["-i", "thea", "index"])
@@ -325,12 +339,16 @@ fn stamp_tracks_changes_by_hash() {
     assert_eq!(v["warnings"].as_array().unwrap().len(), 0, "{v:#}");
 
     let soul_version = |d: &Path| {
-        serde_json::from_str::<Value>(&fs::read_to_string(d.join("soul/soul.json")).unwrap())
+        serde_json::from_str::<Value>(&fs::read_to_string(d.join("persona/soul.json")).unwrap())
             .unwrap()["version"]
             .clone()
     };
     let before = soul_version(&dir);
-    fs::write(dir.join("soul/SOUL.md"), "# Soul\n\nI am Aria. I sail.\n").unwrap();
+    fs::write(
+        dir.join("persona/SOUL.md"),
+        "# Soul\n\nI am Aria. I sail.\n",
+    )
+    .unwrap();
     let sam = dir.join("life/characters/sam.md");
     fs::write(
         &sam,
@@ -353,7 +371,7 @@ fn stamp_tracks_changes_by_hash() {
         .iter()
         .map(|v| v.as_str().unwrap())
         .collect();
-    assert_eq!(changed, vec!["life/characters/sam.md", "soul/SOUL.md"]);
+    assert_eq!(changed, vec!["life/characters/sam.md", "persona/SOUL.md"]);
     assert_ne!(soul_version(&dir), before);
     assert!(!fs::read_to_string(&sam)
         .unwrap()
@@ -368,10 +386,10 @@ fn stamp_tracks_changes_by_hash() {
 fn templates_list_show_and_override() {
     let tmp = TempDir::new().unwrap();
     let tpl = tmp.path().join(".templates");
-    fs::create_dir_all(tpl.join("soul")).unwrap();
+    fs::create_dir_all(tpl.join("persona")).unwrap();
     let character = "---\ntype: character\ntitle: \"{{title_yaml}}\"\naliases: []\nsummary: \"\"\nstatus: canon\ncreated: {{today}}\nupdated: {{today}}\nsources: []\n---\n\n# {{title}}\n\nCustom.\n";
     fs::write(tpl.join("character.md"), character).unwrap();
-    fs::write(tpl.join("soul/IDENTITY.md"), "# Custom identity\n").unwrap();
+    fs::write(tpl.join("persona/IDENTITY.md"), "# Custom identity\n").unwrap();
     fs::write(tpl.join("README.md"), "notes about this folder\n").unwrap();
 
     let out = owo(tmp.path())
@@ -382,8 +400,8 @@ fn templates_list_show_and_override() {
     let list = v["data"]["templates"].as_array().unwrap();
     let row = |n: &str| list.iter().find(|r| r["name"] == n).unwrap().clone();
     assert!(row("character")["override"].is_string());
-    assert!(row("soul/IDENTITY.md")["override"].is_string());
-    assert!(row("work/README.md")["override"].is_null());
+    assert!(row("persona/IDENTITY.md")["override"].is_string());
+    assert!(row("work/PROFILE.md")["override"].is_null());
     owo(tmp.path())
         .args(["templates", "show", "character"])
         .assert()
@@ -393,10 +411,10 @@ fn templates_list_show_and_override() {
     owo(tmp.path()).args(["new", "Zed"]).assert().success();
     let dir = tmp.path().join("zed");
     assert_eq!(
-        fs::read_to_string(dir.join("soul/IDENTITY.md")).unwrap(),
+        fs::read_to_string(dir.join("persona/IDENTITY.md")).unwrap(),
         "# Custom identity\n"
     );
-    assert!(!fs::read_to_string(dir.join("work/README.md"))
+    assert!(!fs::read_to_string(dir.join("work/PROFILE.md"))
         .unwrap()
         .contains("notes about this folder"));
     owo(tmp.path())
@@ -418,9 +436,10 @@ fn add_defaults_and_escapes() {
             .args(args)
             .assert()
     };
-    add(&["log", "--date", "2026-01-01"]).success();
-    add(&["log", "--date", "2026-01-02"]).success();
-    add(&["project", "API Server"]).success();
+    add(&["daily-log", "--date", "2026-01-01"]).code(2);
+    add(&["daily-log", "New Year", "--date", "2026-01-01"]).success();
+    add(&["daily-log", "Quiet", "--date", "2026-01-02"]).success();
+    add(&["project-readme", "API Server"]).success();
     add(&[
         "character",
         "Q",
@@ -443,7 +462,7 @@ fn add_defaults_and_escapes() {
         .args(["-i", "zed", "resolve", "api-server"])
         .assert()
         .success()
-        .stdout("work/projects/api-server/project.md\n");
+        .stdout("work/projects/api-server/README.md\n");
     owo(tmp.path())
         .args(["-i", "zed", "resolve", r"back\slash"])
         .assert()
@@ -475,14 +494,14 @@ fn identifiers_stay_under_their_section() {
 #[test]
 fn write_refuses_empty_text_and_generated_files() {
     let (tmp, dir) = aria();
-    let memory = fs::read_to_string(dir.join("soul/MEMORY.md")).unwrap();
+    let memory = fs::read_to_string(dir.join("persona/MEMORY.md")).unwrap();
     owo(tmp.path())
-        .args(["-i", "aria", "write", "soul/MEMORY.md"])
+        .args(["-i", "aria", "write", "persona/MEMORY.md"])
         .write_stdin("")
         .assert()
         .failure();
     assert_eq!(
-        fs::read_to_string(dir.join("soul/MEMORY.md")).unwrap(),
+        fs::read_to_string(dir.join("persona/MEMORY.md")).unwrap(),
         memory
     );
     let timeline = fs::read_to_string(dir.join("life/timeline.md")).unwrap();
@@ -503,7 +522,7 @@ fn write_refuses_empty_text_and_generated_files() {
 }
 
 #[test]
-fn soul_prints_identity_and_soul_or_the_flagged_files() {
+fn persona_prints_identity_and_soul_or_the_flagged_files() {
     let tmp = TempDir::new().unwrap();
     owo(tmp.path()).args(["new", "Thea"]).assert().success();
     let headers = |args: &[&str]| -> Vec<String> {
@@ -516,20 +535,22 @@ fn soul_prints_identity_and_soul_or_the_flagged_files() {
             .map(str::to_string)
             .collect()
     };
-    let header = |file: &str| format!("<!-- owo: soul/{file} -->");
+    let header = |file: &str| format!("<!-- owo: persona/{file} -->");
     assert_eq!(
-        headers(&["soul"]),
+        headers(&["persona"]),
         [header("IDENTITY.md"), header("SOUL.md")]
     );
-    assert_eq!(headers(&["soul", "--look"]), [header("LOOK.md")]);
+    assert_eq!(headers(&["persona", "--look"]), [header("LOOK.md")]);
     assert_eq!(
-        headers(&["-i", "thea", "soul", "--look", "--id"]),
+        headers(&["-i", "thea", "persona", "--look", "--id"]),
         [header("IDENTITY.md"), header("LOOK.md")]
     );
-    owo(tmp.path()).args(["soul", "history"]).assert().success();
+    owo(tmp.path())
+        .args(["persona", "changelog"])
+        .assert()
+        .success();
 }
 
-/// `owo` run from `cwd` with no `--root` and the user config folders inside `home`.
 fn owo_in(cwd: &Path, home: &Path) -> assert_cmd::Command {
     let mut cmd = assert_cmd::Command::cargo_bin("owo").unwrap();
     cmd.current_dir(cwd)
@@ -537,7 +558,6 @@ fn owo_in(cwd: &Path, home: &Path) -> assert_cmd::Command {
         .env_remove("OWO_IDENTITY")
         .env_remove("OWO_PROJECT")
         .env("HOME", home)
-        .env("XDG_CONFIG_HOME", home.join(".config"))
         .env("XDG_DATA_HOME", home.join(".local/share"));
     cmd
 }
@@ -547,16 +567,16 @@ fn owo_toml_in_a_parent_sets_identity_and_project() {
     let tmp = copy_example("reviewer");
     copy_tree(&examples().join("nicole"), &tmp.path().join("nicole"));
     owo(tmp.path())
-        .args(["-i", "reviewer", "add", "project", "Mural"])
-        .args(["--kb", "../repo/kb/mural"])
+        .args(["-i", "reviewer", "add", "project-readme", "Mural"])
+        .args(["--wiki", "../repo/wiki/mural"])
         .assert()
         .success();
     let repo = tmp.path().join("repo");
     let home = tmp.path().join("home");
     fs::create_dir_all(repo.join("sub")).unwrap();
-    fs::create_dir_all(repo.join("kb/mural")).unwrap();
+    fs::create_dir_all(repo.join("wiki/mural")).unwrap();
     fs::create_dir_all(&home).unwrap();
-    fs::write(repo.join("kb/mural/lat.md"), "# Mural\n").unwrap();
+    fs::write(repo.join("wiki/mural/lat.md"), "# Mural\n").unwrap();
     fs::write(
         repo.join(".owo.toml"),
         "identity = \"reviewer\"\nproject = \"mural\"\n",
@@ -574,11 +594,11 @@ fn owo_toml_in_a_parent_sets_identity_and_project() {
     let v: Value = serde_json::from_slice(&out.stdout).unwrap();
     assert_eq!(v["data"]["identity"], "reviewer");
     assert_eq!(v["data"]["project"], "mural");
-    assert_eq!(v["data"]["kb"]["exists"], true, "{v}");
-    assert!(v["data"]["kb"]["path"]
+    assert_eq!(v["data"]["wiki"]["exists"], true, "{v}");
+    assert!(v["data"]["wiki"]["path"]
         .as_str()
         .unwrap()
-        .ends_with("repo/kb/mural"));
+        .ends_with("repo/wiki/mural"));
     let v = json(
         owo_in(&repo.join("sub"), &home)
             .arg("--root")

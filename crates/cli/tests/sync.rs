@@ -1,5 +1,3 @@
-//! End-to-end tests for `owo sync`.
-
 mod common;
 
 use common::{copy_example, copy_tree, examples, json, owo};
@@ -33,7 +31,7 @@ fn sync_start_and_done() {
     ]);
     assert_eq!(v["data"]["due"], true);
     assert_eq!(v["data"]["until"], 8);
-    let src = v["data"]["source"].as_str().unwrap();
+    let src = v["data"]["slice"].as_str().unwrap();
     assert!(src.starts_with("sources/nicole/") && src.ends_with("_s1_0-8.md"));
     assert!(fs::read_to_string(tmp.path().join(src))
         .unwrap()
@@ -112,7 +110,7 @@ fn sync_reads_claude_jsonl() {
             .arg(&t),
     );
     assert_eq!(v["data"]["until"], 2);
-    let src = fs::read_to_string(tmp.path().join(v["data"]["source"].as_str().unwrap())).unwrap();
+    let src = fs::read_to_string(tmp.path().join(v["data"]["slice"].as_str().unwrap())).unwrap();
     assert!(src.contains("A cat it is.") && !src.contains("tool_result"));
     assert!(src.contains("## 0 user (u-1)"), "slice shows the host id");
 }
@@ -228,7 +226,7 @@ fn sync_push_stores_turns_once() {
     );
     assert_eq!(v["data"]["due"], true);
     assert_eq!(v["data"]["until"], 4);
-    assert!(v["data"]["source_text"]
+    assert!(v["data"]["slice_text"]
         .as_str()
         .unwrap()
         .contains("## 3 user (4)"));
@@ -259,7 +257,7 @@ fn sync_push_stores_turns_once() {
     assert_eq!(v["data"]["added"], 1);
     assert_eq!(
         v["data"]["from"], 2,
-        "two overlap user turns before the bookmark"
+        "two overlap user turns before the sync cursor"
     );
 }
 
@@ -335,7 +333,7 @@ fn sync_reads_opencode_json() {
             .arg(&t),
     );
     assert_eq!(v["data"]["until"], 2);
-    let src = fs::read_to_string(tmp.path().join(v["data"]["source"].as_str().unwrap())).unwrap();
+    let src = fs::read_to_string(tmp.path().join(v["data"]["slice"].as_str().unwrap())).unwrap();
     assert!(src.contains("## 0 user (m1)") && src.contains("## 1 assistant (m2)\n\nPainted."));
     assert!(!src.contains("hidden"));
 }
@@ -399,7 +397,6 @@ fn sync_every_from_config_and_sync_due() {
         json(
             owo(tmp.path())
                 .current_dir(tmp.path())
-                .env("XDG_CONFIG_HOME", tmp.path())
                 .args(["-i", "nicole", "sync"])
                 .args(args),
         )

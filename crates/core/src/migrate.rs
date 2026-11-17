@@ -1,11 +1,9 @@
-//! `owo migrate v1 <path> --out <root>/<slug>`: the mechanical part of moving a v1
-//! identity (a `references/` tree) into the owo layout. Prints a checklist for the rest.
-
 use crate::markdown::{first_heading, parse_frontmatter, Fields};
 use crate::slug::slugify;
 use anyhow::{bail, Result};
 use serde::Serialize;
 use serde_json::{json, Value};
+use std::fmt::Display;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -18,7 +16,29 @@ pub struct Report {
     pub checklist: Vec<String>,
 }
 
-const SOUL: &[(&str, &str)] = &[
+impl Report {
+    fn skip(&mut self, what: impl Display, why: impl Display) {
+        self.skipped.push(format!("{what} ({why})"));
+    }
+
+    fn place<B: Into<Vec<u8>>>(
+        &mut self,
+        target: &Path,
+        from: String,
+        to: String,
+        body: impl FnOnce() -> Result<B>,
+    ) -> Result<()> {
+        if crate::write::exists(target) {
+            self.skip(from, format!("target {to} exists; merge by hand"));
+            return Ok(());
+        }
+        crate::write::file(target, body()?)?;
+        self.moved.push((from, to));
+        Ok(())
+    }
+}
+
+const PERSONA: &[(&str, &str)] = &[
     ("IDENTITY.md", "IDENTITY.md"),
     ("SOUL.md", "SOUL.md"),
     ("LOOK.md", "LOOK.md"),
@@ -38,15 +58,16 @@ fn frontmatter(text: &str) -> Fields {
         .unwrap_or_default()
 }
 
-/// The first line of why a v1 file's frontmatter does not parse, if it does not.
 fn frontmatter_error(text: &str) -> Option<String> {
     crate::markdown::split(text)
         .frontmatter
         .and_then(|fm| parse_frontmatter(fm).err())
-        .map(|e| e.lines().next().unwrap_or_default().to_string())
+        .map(|e| {
+            let line = e.lines().next().unwrap_or_default();
+            format!("frontmatter does not parse: {line}; move by hand")
+        })
 }
 
-/// The title a migrated file gets: frontmatter `title`, else the first `# ` heading, else the stem.
 fn title_of(text: &str, stem: &str) -> String {
     frontmatter(text)
         .get("title")
@@ -56,9 +77,6 @@ fn title_of(text: &str, stem: &str) -> String {
         .unwrap_or_else(|| stem.replace('-', " "))
 }
 
-/// Splits a v1 body into its `## Sources` citations, the links among them, and the body
-/// without that section. `sources/<file>` paths become `<slug>/<file>`. A bullet with a link
-/// counts as both: its links (with `#section`) for a lesson's `evidence`, its text as a citation.
 fn take_sources(body: &str, slug: &str) -> (Vec<String>, Vec<String>, String) {
     let (mut cites, mut links, mut rest) = (vec![], vec![], vec![]);
     let mut inside = false;
@@ -76,7 +94,7 @@ fn take_sources(body: &str, slug: &str) -> (Vec<String>, Vec<String>, String) {
         let Some(item) = line.trim().strip_prefix("- ") else {
             continue;
         };
-        let found = crate::markdown::links(item);
+        let found = crate::markdown::wikilinks(item);
         links.extend(found.iter().map(|l| match &l.section {
             Some(s) => format!("[[{}#{s}]]", l.target),
             None => format!("[[{}]]", l.target),
@@ -94,8 +112,6 @@ fn take_sources(body: &str, slug: &str) -> (Vec<String>, Vec<String>, String) {
     (cites, links, rest.join("\n"))
 }
 
-/// Appends `items` to the list at `key`, skipping ones it has. A missing key becomes a list,
-/// and a single string value becomes its first item.
 fn merge(map: &mut Fields, key: &str, items: Vec<String>) {
     let mut list = match map.remove(key) {
         Some(Value::Array(a)) => a,
@@ -110,8 +126,6 @@ fn merge(map: &mut Fields, key: &str, items: Vec<String>) {
     map.insert(key.to_string(), Value::Array(list));
 }
 
-/// Adds the owo frontmatter fields a v1 file lacks; keeps every existing field.
-/// `parent` is the overview title for a location detail.
 fn normalize(
     text: &str,
     kind: &str,
@@ -156,10 +170,8 @@ fn normalize(
         ),
         _ => {}
     }
-    // Body citations join any list the frontmatter already has. A lesson's linked bullets are its
-    // evidence, not citations.
     let cites: Vec<String> = match kind {
-        "lesson" => {
+        "insight" => {
             merge(&mut map, "evidence", links);
             cites.into_iter().filter(|c| !c.contains("[[")).collect()
         }
@@ -167,7 +179,6 @@ fn normalize(
     };
     merge(&mut map, "sources", cites);
     map.insert("type".to_string(), Value::from(kind));
-    // v1 status values such as "established" mean canon.
     if !matches!(
         map.get("status").and_then(Value::as_str),
         Some("canon" | "disputed" | "superseded")
@@ -185,16 +196,22 @@ fn normalize(
     format!("---\n{fm}---\n\n{body}\n")
 }
 
-fn md_files(dir: &Path) -> Vec<PathBuf> {
+fn sorted_in(dir: &Path, keep: fn(&Path) -> bool) -> Vec<PathBuf> {
     let mut v: Vec<PathBuf> = fs::read_dir(dir)
         .into_iter()
         .flatten()
         .flatten()
         .map(|e| e.path())
-        .filter(|p| p.extension().is_some_and(|x| x == "md") && p.is_file())
+        .filter(|p| keep(p))
         .collect();
     v.sort();
     v
+}
+
+fn md_files(dir: &Path) -> Vec<PathBuf> {
+    sorted_in(dir, |p| {
+        p.extension().is_some_and(|x| x == "md") && p.is_file()
+    })
 }
 
 fn stem_of(p: &Path) -> String {
@@ -203,10 +220,16 @@ fn stem_of(p: &Path) -> String {
         .unwrap_or_default()
 }
 
-/// v1 `world/locations/`: a folder `<x>/` becomes `life/locations/<x>/` with its overview
-/// (`overview.md`, `index.md`, `README.md`, `<x>.md` inside, or `<x>.md` beside it) and its
-/// other files as location details. A folder with no such file gets a stub overview.
-/// A loose `<x>.md` becomes `life/locations/<x>/overview.md`.
+fn is_index(p: &Path) -> bool {
+    matches!(stem_of(p).as_str(), "index" | "_index")
+}
+
+fn patch_json(path: &Path, edit: impl FnOnce(&mut Value)) -> Result<()> {
+    let mut doc: Value = serde_json::from_str(&crate::write::read_to_string(path)?)?;
+    edit(&mut doc);
+    crate::write::json(path, &doc)
+}
+
 fn migrate_locations(
     locs: &Path,
     dir: &Path,
@@ -217,41 +240,27 @@ fn migrate_locations(
 ) -> Result<()> {
     let mut write = |from: &Path, text: &str, to: String, kind: &str, parent: Option<&str>| {
         if let Some(e) = frontmatter_error(text) {
-            r.skipped.push(format!(
-                "{} (frontmatter does not parse: {e}; move by hand)",
-                rel(from)
-            ));
+            r.skip(rel(from), e);
             return anyhow::Ok(());
         }
-        let target = dir.join(&to);
-        if crate::write::exists(&target) {
-            r.skipped
-                .push(format!("{} (target {to} exists; merge by hand)", rel(from)));
-            return anyhow::Ok(());
-        }
-        let stem = from.file_stem().map(|s| s.to_string_lossy().into_owned());
-        let stem = stem.unwrap_or_default();
-        crate::write::file(
-            &target,
-            normalize(text, kind, &stem, None, parent, today, slug),
-        )?;
-        r.moved.push((rel(from), to));
-        anyhow::Ok(())
+        r.place(&dir.join(&to), rel(from), to, || {
+            Ok(normalize(
+                text,
+                kind,
+                &stem_of(from),
+                None,
+                parent,
+                today,
+                slug,
+            ))
+        })
     };
     let loose: Vec<PathBuf> = md_files(locs)
         .into_iter()
-        .filter(|p| !matches!(stem_of(p).as_str(), "index" | "_index"))
+        .filter(|p| !is_index(p))
         .collect();
     let mut used: Vec<PathBuf> = vec![];
-    let mut folders: Vec<PathBuf> = fs::read_dir(locs)
-        .into_iter()
-        .flatten()
-        .flatten()
-        .map(|e| e.path())
-        .filter(|p| p.is_dir())
-        .collect();
-    folders.sort();
-    for folder in folders {
+    for folder in sorted_in(locs, Path::is_dir) {
         let name = folder
             .file_name()
             .map(|s| s.to_string_lossy().into_owned())
@@ -287,10 +296,10 @@ fn migrate_locations(
             "location",
             None,
         )?;
-        // A v1 index that is not the overview is dropped, as everywhere else.
-        for p in inside.iter().filter(|p| {
-            Some(*p) != overview.as_ref() && !matches!(stem_of(p).as_str(), "index" | "_index")
-        }) {
+        for p in inside
+            .iter()
+            .filter(|p| Some(*p) != overview.as_ref() && !is_index(p))
+        {
             let text = fs::read_to_string(p)?;
             let to = format!("{base}/{}.md", slugify(&stem_of(p)));
             write(p, &text, to, "location-detail", Some(&title))?;
@@ -304,7 +313,6 @@ fn migrate_locations(
     Ok(())
 }
 
-/// Migrates `src` into `out`; relative paths join onto `cwd`. The report names `out` as given.
 pub fn v1(cwd: &Path, src: &Path, out: &Path) -> Result<Report> {
     let refs = cwd.join(src).join("references");
     if !refs.is_dir() {
@@ -337,7 +345,6 @@ pub fn v1(cwd: &Path, src: &Path, out: &Path) -> Result<Report> {
     let had_sources = sources.exists();
     crate::create::new_identity(root, shown, &name, &slug)?;
     let mut report = fill(src, &refs, root, &slug, &manifest).inspect_err(|_| {
-        // A dry run made nothing to remove.
         if crate::write::dry() {
             return;
         }
@@ -350,7 +357,6 @@ pub fn v1(cwd: &Path, src: &Path, out: &Path) -> Result<Report> {
     Ok(report)
 }
 
-/// Fills a just-created identity from a v1 folder. The caller removes the folder on error.
 fn fill(src: &Path, refs: &Path, root: &Path, slug: &str, manifest: &Value) -> Result<Report> {
     let dir = root.join(slug);
     let today = crate::state::today();
@@ -361,51 +367,47 @@ fn fill(src: &Path, refs: &Path, root: &Path, slug: &str, manifest: &Value) -> R
     };
     let rel = |p: &Path| p.strip_prefix(src).unwrap_or(p).display().to_string();
 
-    for (from, to) in SOUL {
+    for (from, to) in PERSONA {
         let p = refs.join("soul").join(from);
         if p.is_file() {
-            crate::write::file(&dir.join("soul").join(to), fs::read(&p)?)?;
-            r.moved.push((rel(&p), format!("soul/{to}")));
+            crate::write::file(&dir.join("persona").join(to), fs::read(&p)?)?;
+            r.moved.push((rel(&p), format!("persona/{to}")));
         }
     }
     if let Some(old) = fs::read_to_string(refs.join("soul/state.json"))
         .ok()
         .and_then(|t| serde_json::from_str::<Value>(&t).ok())
     {
-        let path = dir.join("soul/state.json");
-        let mut doc: Value = serde_json::from_str(&crate::write::read_to_string(&path)?)?;
-        if let Some(h) = old.get("history").filter(|h| h.is_array()) {
-            doc["history"] = h.clone();
-        }
-        crate::write::json(&path, &doc)?;
+        patch_json(&dir.join("persona/state.json"), |doc| {
+            if let Some(h) = old.get("history").filter(|h| h.is_array()) {
+                doc["changelog"] = h.clone();
+            }
+        })?;
         r.moved.push((
             "references/soul/state.json".into(),
-            "soul/state.json (history)".into(),
+            "persona/state.json (changelog)".into(),
         ));
     }
-    {
-        let path = dir.join("identity.json");
-        let mut doc: Value = serde_json::from_str(&crate::write::read_to_string(&path)?)?;
+    patch_json(&dir.join("identity.json"), |doc| {
         if let Some(acc) = manifest
             .get("accounts")
             .filter(|a| a.is_array() || a.is_object())
         {
             doc["accounts"] = acc.clone();
         }
-        crate::write::json(&path, &doc)?;
-        if refs.join("manifest.json").is_file() {
-            r.moved
-                .push(("references/manifest.json".into(), "identity.json".into()));
-        }
+    })?;
+    if refs.join("manifest.json").is_file() {
+        r.moved
+            .push(("references/manifest.json".into(), "identity.json".into()));
     }
 
     let world = refs.join("world");
     let groups: &[(&str, &str, &str, bool)] = &[
         ("characters", "life/characters", "character", false),
         ("history/events", "life/events", "event", true),
-        ("memory/daily", "life/log", "log", true),
+        ("memory/daily", "life/daily-log", "daily-log", true),
         ("memory/journal", "life/journal", "journal", true),
-        ("memory/lessons", "life/lessons", "lesson", false),
+        ("memory/lessons", "life/insights", "insight", false),
         ("cultures", "life/cultures", "culture", false),
         ("factions", "life/factions", "faction", false),
         ("eras", "life/eras", "era", false),
@@ -413,10 +415,9 @@ fn fill(src: &Path, refs: &Path, root: &Path, slug: &str, manifest: &Value) -> R
         ("threads", "life/threads", "thread", false),
     ];
     for (from, to, kind, dated) in groups {
-        // v1 index files are generated; owo writes its own.
         for p in md_files(&world.join(from))
             .into_iter()
-            .filter(|p| !matches!(stem_of(p).as_str(), "index" | "_index"))
+            .filter(|p| !is_index(p))
         {
             let stem = p
                 .file_stem()
@@ -425,16 +426,12 @@ fn fill(src: &Path, refs: &Path, root: &Path, slug: &str, manifest: &Value) -> R
                 .to_string();
             let date = date_prefix(&stem);
             if *dated && date.is_none() && *kind != "event" {
-                r.skipped
-                    .push(format!("{} (no date in the file name)", rel(&p)));
+                r.skip(rel(&p), "no date in the file name");
                 continue;
             }
             let text = fs::read_to_string(&p)?;
             if let Some(e) = frontmatter_error(&text) {
-                r.skipped.push(format!(
-                    "{} (frontmatter does not parse: {e}; move by hand)",
-                    rel(&p)
-                ));
+                r.skip(rel(&p), e);
                 continue;
             }
             let date = date.or_else(|| {
@@ -444,8 +441,7 @@ fn fill(src: &Path, refs: &Path, root: &Path, slug: &str, manifest: &Value) -> R
                     .map(str::to_string)
             });
             if *kind == "event" && date.is_none() {
-                r.skipped
-                    .push(format!("{} (event without a date)", rel(&p)));
+                r.skip(rel(&p), "event without a date");
                 continue;
             }
             let rest = match &date {
@@ -460,7 +456,11 @@ fn fill(src: &Path, refs: &Path, root: &Path, slug: &str, manifest: &Value) -> R
                 rest.clone()
             };
             let name = match *kind {
-                "log" => format!("{}.md", date.clone().unwrap_or_default()),
+                "daily-log" => format!(
+                    "{}_{}.md",
+                    date.clone().unwrap_or_default(),
+                    slugify(&title_of(&text, &label))
+                ),
                 "journal" => format!(
                     "{}_{}.md",
                     date.clone().unwrap_or_default(),
@@ -469,27 +469,30 @@ fn fill(src: &Path, refs: &Path, root: &Path, slug: &str, manifest: &Value) -> R
                 _ if !slugify(&rest).is_empty() => format!("{}.md", slugify(&rest)),
                 _ => format!("{}.md", slugify(&title_of(&text, &label))),
             };
-            let target = dir.join(to).join(&name);
-            if crate::write::exists(&target) {
-                r.skipped.push(format!(
-                    "{} (target {to}/{name} exists; merge by hand)",
-                    rel(&p)
-                ));
-                continue;
+            if *kind == "daily-log" {
+                let day = format!("{to}/{}_", date.as_deref().unwrap_or_default());
+                if let Some((_, have)) = r.moved.iter().find(|(_, t)| t.starts_with(&day)) {
+                    let why = format!("{have} holds this day; merge by hand");
+                    r.skip(rel(&p), why);
+                    continue;
+                }
             }
-            crate::write::file(
-                &target,
-                normalize(
-                    &text,
-                    kind,
-                    &label,
-                    date.as_deref().filter(|_| *dated),
-                    None,
-                    &today,
-                    slug,
-                ),
+            r.place(
+                &dir.join(to).join(&name),
+                rel(&p),
+                format!("{to}/{name}"),
+                || {
+                    Ok(normalize(
+                        &text,
+                        kind,
+                        &label,
+                        date.as_deref().filter(|_| *dated),
+                        None,
+                        &today,
+                        slug,
+                    ))
+                },
             )?;
-            r.moved.push((rel(&p), format!("{to}/{name}")));
         }
     }
     migrate_locations(&world.join("locations"), &dir, &today, slug, &rel, &mut r)?;
@@ -497,19 +500,14 @@ fn fill(src: &Path, refs: &Path, root: &Path, slug: &str, manifest: &Value) -> R
         for block in format!("\n{text}").split("\n## ").skip(1) {
             let (title, body) = block.split_once('\n').unwrap_or((block, ""));
             let name = slugify(title);
+            let what = format!("references/world/meta/conflicts.md ## {}", title.trim());
             if name.is_empty() {
-                r.skipped.push(format!(
-                    "references/world/meta/conflicts.md ## {} (heading has no slug characters; move by hand)",
-                    title.trim()
-                ));
+                r.skip(what, "heading has no slug characters; move by hand");
                 continue;
             }
             let file = format!("life/conflicts/{name}.md");
             if crate::write::exists(&dir.join(&file)) {
-                r.skipped.push(format!(
-                    "references/world/meta/conflicts.md ## {} (target {file} exists; merge by hand)",
-                    title.trim()
-                ));
+                r.skip(what, format!("target {file} exists; merge by hand"));
                 continue;
             }
             let doc = format!(
@@ -526,8 +524,10 @@ fn fill(src: &Path, refs: &Path, root: &Path, slug: &str, manifest: &Value) -> R
         }
     }
     if world.join("meta/changelog.md").is_file() {
-        r.skipped
-            .push("references/world/meta/changelog.md (Git history is the change log)".into());
+        r.skip(
+            "references/world/meta/changelog.md",
+            "Git history is the change log",
+        );
     }
     let from = src.join("sources");
     for e in walkdir::WalkDir::new(&from)
@@ -538,43 +538,36 @@ fn fill(src: &Path, refs: &Path, root: &Path, slug: &str, manifest: &Value) -> R
     {
         let name = e.path().strip_prefix(&from).expect("under sources");
         let name = name.to_string_lossy().replace('\\', "/");
-        let target = root.join("sources").join(slug).join(&name);
-        if crate::write::exists(&target) {
-            r.skipped.push(format!(
-                "{} (target <root>/sources/{slug}/{name} exists; merge by hand)",
-                rel(e.path())
-            ));
-            continue;
-        }
-        crate::write::file(&target, fs::read(e.path())?)?;
-        r.moved
-            .push((rel(e.path()), format!("<root>/sources/{slug}/{name}")));
+        r.place(
+            &root.join("sources").join(slug).join(&name),
+            rel(e.path()),
+            format!("<root>/sources/{slug}/{name}"),
+            || Ok(fs::read(e.path())?),
+        )?;
     }
     let known: Vec<String> = r.moved.iter().map(|(f, _)| f.clone()).collect();
     for e in walkdir::WalkDir::new(refs)
         .into_iter()
         .flatten()
-        .filter(|e| {
-            e.file_type().is_file() && !matches!(stem_of(e.path()).as_str(), "index" | "_index")
-        })
+        .filter(|e| e.file_type().is_file() && !is_index(e.path()))
     {
         let p = rel(e.path());
         if !known.contains(&p) && !r.skipped.iter().any(|s| s.starts_with(&p)) {
-            r.skipped.push(format!("{p} (no owo home; move by hand)"));
+            r.skip(p, "no owo home; move by hand");
         }
     }
 
     let id = crate::identity::Identity::load(root, slug)?;
-    crate::index::write(&id)?;
+    crate::index::write_as(&id, &id.dir)?;
     crate::stamp::run(&id, false)?;
     r.checklist = vec![
-        "Move MEMORY \"Moments\" into event links under \"Defining moments\".".into(),
+        "Move MEMORY \"Moments\" into event wikilinks under \"Defining moments\".".into(),
         "Move open promises and plans into life/threads/ (`owo add thread`).".into(),
-        "Replace repeated accounts and quotes in logs with event links (`owo lint --rule dupes`).".into(),
+        "Replace repeated accounts and quotes in daily logs with event wikilinks (`owo lint --rule dupes`).".into(),
         "Move exact personal identifiers into each character's `## Identifiers` (`owo lint --rule identifiers`).".into(),
         "Name account kinds in IDENTITY.md and keep handles in identity.json accounts.".into(),
         "Fill empty summaries, and link each room from its location overview.".into(),
-        "Run `owo stamp && owo index && owo lint`, then the first review (`owo review`, `owo review done`).".into(),
+        "Run `owo stamp && owo index && owo lint`, then the first reflection (`owo reflect`, `owo reflect done`).".into(),
     ];
     Ok(r)
 }

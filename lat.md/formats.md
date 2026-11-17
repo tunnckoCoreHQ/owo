@@ -7,52 +7,53 @@ The on-disk formats the code reads and writes.
 The root holds identity folders and shared working data. It works well as a Git repository; `owo changes` reads its history.
 
 - `<slug>/`: one identity per folder.
-- `sources/<slug>/`: raw source material (transcripts, notes, sync slices), outside every identity. Entries cite files here.
-- `.owo/sessions/`: sync bookmarks, prompts, locks and pushed turns (`<session>.turns.jsonl`).
+- `sources/<slug>/`: raw material (transcripts, notes, slices), outside every identity. Entries cite files here.
+- `.owo/sessions/`: sync cursors (`<session>.json`), ingest prompts, locks and turns files (`<session>.turns.jsonl`).
 - `.templates/`: optional template overrides; see [[formats#Templates]].
+- `owo.toml`: the optional global config; see [[formats#Config resolution]].
 
 ## Identity layout
 
-An identity is `<root>/<slug>/` with `identity.json`, `soul/`, `life/` and `work/`; `owo new` creates every folder and file listed here.
+An identity is `<root>/<slug>/` with `identity.json`, `persona/`, `life/` and `work/`; `owo new` creates every folder and file listed here.
 
-- `soul/`: `soul.json` (SoulSpec v0.5), `state.json`, `IDENTITY.md`, `SOUL.md`, `VOICE.md`, `LOOK.md`, `MEMORY.md`, `examples/{good,bad,greetings}.md`.
-- `life/`: `state.json`, `_index.md`, `timeline.md`, and one folder per category: characters, locations, cultures, factions, events, eras, threads, conflicts, lessons, writing, log, journal.
-- `work/`: `state.json`, `README.md`, `_index.md`, `projects/<p>/project.md`, `projects/<p>/notes/YYYY-MM-DD_<slug>.md`.
+- `persona/`: `soul.json` (SoulSpec v0.5), `state.json`, `IDENTITY.md`, `SOUL.md`, `VOICE.md`, `LOOK.md`, `MEMORY.md`, `examples/{good,bad,greetings}.md`.
+- `life/`: `state.json`, `_index.md`, `timeline.md`, and one folder per category: characters, locations, cultures, factions, events, eras, threads, conflicts, insights, writing, daily-log (the daily logs), journal.
+- `work/`: `state.json`, `PROFILE.md` (the work profile), `_index.md`, `projects/<p>/README.md` (the project readme), `projects/<p>/notes/YYYY-MM-DD_<slug>.md` (the project notes).
 
 Each top-level location is a folder with `overview.md`. Rooms and angles are sibling files beside it, and location folders sit one level deep.
 
-## Soul files
+## Persona files
 
-Soul Markdown files are plain Markdown with no frontmatter; their stamps live in `soul/state.json`. They are always loaded or loaded by tier, so they hold durable abstractions; scenes, quotes and dated happenings live in `life/`.
+Persona files are plain Markdown with no frontmatter; their stamps live in `persona/state.json`. They are always loaded or loaded by tier, so they hold durable abstractions; scenes, quotes and dated happenings live in `life/`.
 
 - `IDENTITY.md`: third person. Who the identity is, biography, roles, the frame of its world. It names the identity's accounts by kind only.
 - `SOUL.md`: first person. Beliefs, wants, emotional logic, boundaries.
 - `VOICE.md`: how the identity talks and writes, per medium.
 - `LOOK.md`: durable appearance, style, signature moves.
-- `MEMORY.md`: compiled long-term memory with sections Patterns, Defining moments, Lessons and Hints. Defining moments and lessons are links; hints point into `life/` and `work/`. Only review writes it.
+- `MEMORY.md`: compiled long-term memory with sections Patterns, Defining moments, Insights and Hints. Defining moments and insights are wikilinks; hints point into `life/` and `work/`. Only a reflection writes it.
 - `examples/`: `good.md`, `bad.md`, and `greetings.md` with one `##` per greeting. Exports read them.
 
 ## Slugs and paths
 
 One slug function turns a name into a path segment: transliterate to ASCII, lowercase, drop apostrophes, collapse every other run of non-alphanumeric characters to one hyphen, trim hyphens.
 
-`Jay's Penthouse` becomes `jays-penthouse`. On a collision, add a short disambiguator to the slug and keep the short name as an alias. Logs are `YYYY-MM-DD.md`; journal, writing and project notes are `YYYY-MM-DD_<slug>.md`. Entry file names and project folder names must be slugs (the `schema` rule). A name gives a slug and a slug gives a path, so agents can predict a path and fall back to `owo resolve`.
+`Jay's Penthouse` becomes `jays-penthouse`. On a collision, add a short disambiguator to the slug and keep the short name as an alias. Daily logs, journal, writing and project notes are `YYYY-MM-DD_<slug>.md`. Entry file names and project folder names must be slugs (the `schema` rule). A name gives a slug and a slug gives a path, so agents can predict a path and fall back to `owo resolve`.
 
-## Links
+## Wikilinks
 
-Links are Obsidian-style wiki-links: `[[Title]]`, `[[Title|shown text]]`, `[[Title#Section]]`. Resolution is in [[architecture#Link resolution]].
+Wikilinks are Obsidian-style links: `[[Title]]`, `[[Title|shown text]]`, `[[Title#Section]]`. Resolution is in [[architecture#Wikilink resolution]].
 
-Links inside inline code or fenced code do not count. A fence opens with three or more backticks or tildes and closes on a run of the same character at least as long. A backtick with no closing backtick on its line is plain text.
+Wikilinks inside inline code or fenced code do not count. A fence opens with three or more backticks or tildes and closes on a run of the same character at least as long. A backtick with no closing backtick on its line is plain text.
 
-Soul files link by name: `[[IDENTITY]]`, `[[SOUL]]`, `[[VOICE]]`, `[[LOOK]]`, `[[MEMORY]]`. Links into a project KB are `[[kb:<project>:<path>#<Section>]]`, resolved against the KB path in [[cli#Context]].
+Persona files link by name: `[[IDENTITY]]`, `[[SOUL]]`, `[[VOICE]]`, `[[LOOK]]`, `[[MEMORY]]`. Wikilinks into a project wiki are `[[wiki:<project>:<path>#<Section>]]`, resolved against the project wiki path in [[cli#Context]].
 
 ## Entry frontmatter
 
 Every life and work entry has YAML frontmatter with `type`, `title`, `aliases`, `summary`, `status`, `created`, `updated`, `sources`. Lists are block lists (`  - item`); an empty list is `[]`. A title or alias holds no `#`, `|`, `[` or `]`, because those break a `[[link]]` to it; `owo add` refuses them and the `schema` rule reports them.
 
-`summary` is one line; indexes, search, the Now block and card lorebooks use it. Citations live only in frontmatter: `sources` (paths relative to `sources/`, optional `#L<a>-L<b>`, or plain text), lesson `evidence` and thread `from` are links. Bodies have no Sources, Evidence or From section.
+`summary` is one line; indexes, search, the current state and persona card lorebooks use it. Citations live only in frontmatter: `sources` (paths relative to `sources/`, optional `#L<a>-L<b>`, or plain text), insight `evidence` and thread `from` are wikilinks. Bodies have no Sources, Evidence or From section, and hold no path of raw material; the rules of the `owo` skill say so too.
 
-`type` must match the folder. `status` is `canon`, `disputed` (an open conflict links the entry) or `superseded` (with `superseded_by`). Dates are `YYYY-MM-DD` and are story time: the dates inside the identity's life, not chat timestamps. Dated types (log, journal, writing, note) carry `date`, and the file name must start with it. Events need `date`; threads need `state: open|closed`; conflicts need `state: open|resolved`; location details need `parent`; notes need `project` equal to their project folder.
+`type` must match the folder. `status` is `canon`, `disputed` (an open conflict links the entry) or `superseded` (with `superseded_by`). Dates are `YYYY-MM-DD` and are story time: the dates inside the identity's life, not chat timestamps. Dated types (daily-log, journal, writing, project-note) carry `date`, and the file name must start with it. Events need `date`; threads need `state: open|closed`; conflicts need `state: open|resolved`; location details need `parent`; project notes need `project` equal to their project folder.
 
 Extra fields per type:
 
@@ -65,16 +66,16 @@ Extra fields per type:
 | `era` | `start`, `end` |
 | `thread` | `state`, `opened`, `from` |
 | `conflict` | `state`, `affects` |
-| `lesson` | `evidence` |
-| `writing`, `log`, `journal` | `date` |
-| `project` | `kb`, `repo`, `started` |
-| `note` | `date`, `project` |
+| `insight` | `evidence` |
+| `writing`, `daily-log`, `journal` | `date` |
+| `project-readme` | `wiki`, `repo`, `started` |
+| `project-note` | `date`, `project` |
 
 ## Entry bodies
 
 Bodies use the sections their template gives. Life entries are written in the identity's own voice, first person.
 
-Most entries use `## Description`, `## Key facts` and `## Relationships`. Events use `## What happened`, `## Key facts` and `## Lines` (exact quotes worth keeping, linked as `[[Event#Lines]]`). Logs are bullet lists. Journal, writing and `work/README.md` are free prose.
+Most entries use `## Description`, `## Key facts` and `## Relationships`. Events use `## What happened`, `## Key facts` and `## Lines` (exact quotes worth keeping, linked as `[[Event#Lines]]`). Daily logs are bullet lists. A project readme starts with `## About`, one or two sentences that say what the project is, then `## What I do here`. Journal, writing and `work/PROFILE.md` are free prose.
 
 A character's exact personal identifiers (birth date, handles, emails, phone numbers, addresses, full names of private people) go under `## Identifiers` in that character's file. Every other file refers to them by role and link; the `identifiers` rule in [[lint]] enforces this.
 
@@ -82,39 +83,41 @@ A character's exact personal identifiers (birth date, handles, emails, phone num
 
 The tool manifest, read by the CLI.
 
-- `schema` (`owo/1`), `slug`, `name`, and optional `nickname` (card export).
+- `schema` (`owo/1`), `slug`, `name`, and optional `nickname` (persona card export).
 - `accounts`: the identity's own accounts as `{kind, handle}`. Handles appear only here.
-- `budgets`: soul file word budgets that override the defaults in [[lint]].
-- `review_every_days` (default 7).
+- `budgets`: persona file word budgets that override the defaults in [[lint]].
+- `reflect_every_days` (default 7).
 
-`soul/soul.json` is the SoulSpec v0.5 manifest. `owo stamp` bumps its minor version when a soul file changes.
+`persona/soul.json` is the SoulSpec v0.5 manifest. `owo stamp` bumps its minor version when a persona file changes.
 
 ## State files
 
 Each `state.json` has `files`: a map from scope-relative path to `{updated, hash}`. Stamps are RFC 3339 UTC and move only when the hash changes. Hashes are `b3:<blake3 hex>` of the file text.
 
-`soul/state.json` adds `history` and `review`. Each history record is `{at, file, change, evidence}`, appended by `owo soul note`. The `review` object holds `last_reviewed`, `reviewed_through` and `memory_hash`; when MEMORY.md's hash differs from `memory_hash`, lint warns that MEMORY changed outside a review.
+`persona/state.json` adds `changelog` and `reflection`. Each persona change in `changelog` is `{at, file, change, evidence}`, appended by `owo persona change`. The `reflection` object holds `last_reflected`, `reflected_through` and `memory_hash`; when MEMORY.md's hash differs from `memory_hash`, lint warns that MEMORY changed outside a reflection.
 
-Every file write is all or nothing: owo writes `<name>.tmp` next to the file and renames it over the file, and a failed write removes the temporary file. A command that writes several files (`stamp`, `index`, `sync start`, `sync push`, `export soulspec`, `new`) writes them as one set: when one fails, it puts back the files it replaced and removes the files and folders it made. A write follows a symlink to its file, and a device or pipe such as `/dev/stdout` is written in place. A symlink whose file is missing is an error and stays. A replaced file keeps its mode. A file in a read-only folder, or a file the caller cannot write, is not replaced, and a file the caller cannot read fails as a read. When `<name>.tmp` already exists, as a file or a symlink, the write fails and leaves it. Error text names the file, not its temporary file. See [[decisions#Writes are all or nothing]]. A command that rewrites a state file, `soul/soul.json` or a sync bookmark exits 1 when the file exists but does not parse or is not an object, so a broken file is never replaced with an empty one. When a soul file changed, `owo stamp` reads `soul/soul.json` before it writes any file, so a broken one fails the stamp with nothing recorded or touched.
+Every file write is all or nothing: owo writes `<name>.tmp` next to the file and renames it over the file, and a failed write removes the temporary file. A command that writes several files (`stamp`, `index`, `sync start`, `sync push`, `export soulspec`, `new`) writes them as one set: when one fails, it puts back the files it replaced and removes the files and folders it made. A write follows a symlink to its file, and a device or pipe such as `/dev/stdout` is written in place. A symlink whose file is missing is an error and stays. A replaced file keeps its mode. A file in a read-only folder, or a file the caller cannot write, is not replaced, and a file the caller cannot read fails as a read. When `<name>.tmp` already exists, as a file or a symlink, the write fails and leaves it. Error text names the file, not its temporary file. See [[decisions#Writes are all or nothing]]. A command that rewrites a state file, `persona/soul.json` or a sync cursor exits 1 when the file exists but does not parse or is not an object, so a broken file is never replaced with an empty one. When a persona file changed, `owo stamp` reads `persona/soul.json` before it writes any file, so a broken one fails the stamp with nothing recorded or touched.
 
 ## Generated files
 
 Generated files start with a marker comment and depend only on entry content, so regeneration is deterministic and comparable. Only `owo index` writes them.
 
-Each life category `_index.md` lists `- [[Title]] (marks): summary (aliases: ...)`, where the marks name a `state` other than open (closed, resolved) and a `status` other than canon; location details nest under their overview. `life/_index.md` lists categories with counts. `life/timeline.md` groups events under eras sorted by `date`; `era` resolves like any link (title, alias, slug, `|label`). `work/_index.md` lists the profile and projects with note counts.
+Each life category `_index.md` lists `- [[Title]] (marks): summary (aliases: ...)`, where the marks name a `state` other than open (closed, resolved) and a `status` other than canon; location details nest under their overview. `life/_index.md` lists categories with counts. A category heading is its folder name in title case, so `daily-log` is `Daily Log`. `life/timeline.md` groups events under eras sorted by `date`; `era` resolves like any link (title, alias, slug, `|label`). `work/_index.md` lists the work profile and the projects with their project note counts.
 
 ## Config resolution
 
-Root resolves from `--root`, `OWO_ROOT`, `root` in the nearest `.owo.toml`, `root` in `$XDG_CONFIG_HOME/owo/config.toml`, then `$XDG_DATA_HOME/owo`.
+Root resolves from `--root`, `OWO_ROOT`, `root` in the nearest `.owo.toml` (the local config), then `$XDG_DATA_HOME/owo`.
 
 When the root comes from a `.owo.toml` in a parent of the working folder, owo prints a warning on stderr that names that file, since a cloned repo can ship one.
 
-Identity resolves from `-i`, `OWO_IDENTITY`, `.owo.toml`, user config, then the only identity in the root. Project resolves from `--project`, `OWO_PROJECT`, `.owo.toml`; see [[decisions#Working project versus project filter]]. A relative `root` value resolves against the config file's folder; `~/` expands to `$HOME`. The run size of `sync` (`sync_every`, a number) resolves from `.owo.toml`, then the user config, then 6; an explicit `every` wins over it.
+The global config is `<root>/owo.toml`, read after the root resolves. It takes every field of the local config except `root`, which it ignores, since the root must be known before owo can find the file.
 
-Two fields set the auto-ingest of `owo acp`, and each resolves from `.owo.toml`, then the user config: `auto_ingest` (true or false, false by default) turns it on, and `ingest_command` (an array of strings, such as `["claude", "-p"]`) is the command of the background agent, which gets the prompt as its last argument. Without `ingest_command` the proxy takes the command from the ACP agent command; see [[decisions#ACP proxy runs the ingest in the background]].
+Identity resolves from `-i`, `OWO_IDENTITY`, `.owo.toml`, the global config, then the only identity in the root. Project resolves from `--project`, `OWO_PROJECT`, `.owo.toml`; see [[decisions#Working project versus project filter]]. A relative `root` value resolves against the folder of the `.owo.toml`; `~/` expands to `$HOME`. The run size of `sync` (`sync_every`, a number) resolves from `.owo.toml`, then the global config, then 6; an explicit `every` wins over it.
+
+Two fields set the auto-ingest of `owo acp`, and each resolves from `.owo.toml`, then the global config: `auto_ingest` (true or false, false by default) turns it on, and `ingest_command` (an array of strings, such as `["claude", "--permission-mode", "acceptEdits", "--allowedTools", "Bash(owo:*)", "-p"]`) is the ingest command, which gets the ingest prompt as its last argument. Without `ingest_command` the proxy takes the ingest command from the ACP agent command; see [[decisions#ACP proxy runs the ingest in the background]].
 
 ## Templates
 
-Templates are embedded in the binary. `<root>/.templates/<name>` overrides one, where `<name>` is the identity-relative path for identity files (`soul/IDENTITY.md`, `work/README.md`) and `<type>.md` for entries (`character.md`).
+Templates are embedded in the binary. `<root>/.templates/<name>` overrides one, where `<name>` is the identity-relative path for identity files (`persona/IDENTITY.md`, `work/PROFILE.md`) and `<type>.md` for entries (`character.md`, `project-readme.md`).
 
 Placeholders are `{{name}}`, `{{slug}}`, `{{title}}`, `{{today}}`, `{{date}}`, `{{parent}}`, `{{project}}`. A `{{key_yaml}}` form escapes double quotes for YAML strings, and a `{{key_json}}` form escapes for JSON strings. Filling is one pass, so `{{key}}` text inside a value stays as written. An era's `start` and `end` are empty until the author sets them.

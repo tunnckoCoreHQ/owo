@@ -1,5 +1,3 @@
-//! End-to-end test for `owo mcp`: JSON-RPC over stdin and stdout.
-
 mod common;
 
 use common::{copy_example, examples, owo};
@@ -83,11 +81,11 @@ fn mcp_lists_and_calls_tools() {
         "new",
         "list",
         "changes",
-        "review",
-        "review_done",
-        "soul_note",
-        "soul_history",
-        "export_card",
+        "reflect",
+        "reflect_done",
+        "persona_change",
+        "persona_changelog",
+        "export_persona_card",
         "export_soulspec",
         "export_skill",
         "sync_start",
@@ -104,11 +102,11 @@ fn mcp_lists_and_calls_tools() {
     assert_eq!(resolved["data"]["path"], "life/events/first-firing.md");
     assert!(text(&replies[3]).starts_with("## Lines"));
     assert!(
-        text(&replies[4]).contains("life/log/2026-11-02.md"),
+        text(&replies[4]).contains("life/daily-log/2026-11-02_kiln-day.md"),
         "values never parse as flags"
     );
     assert!(text(&replies[5]).contains("unknown argument"));
-    assert!(text(&replies[6]).contains("soul/VOICE.md"));
+    assert!(text(&replies[6]).contains("persona/VOICE.md"));
     assert_eq!(replies[7]["error"]["code"], -32601);
 }
 
@@ -127,7 +125,7 @@ fn mcp_sends_turns_on_stdin_and_joins_flag_values() {
         ),
         call(
             2,
-            "soul_note",
+            "persona_change",
             json!({ "file": "SOUL.md", "change": "-ly adverbs removed" }),
         ),
     ]);
@@ -235,7 +233,6 @@ fn mcp_remote_serves_http() {
     );
 }
 
-/// The CLI's output joined as a tool result: stdout, or stderr when stdout is blank, or both.
 fn cli_result(root: &Path, args: &[&str], stdin: &str) -> (String, bool) {
     let out = owo(root)
         .args(["-i", "nicole"])
@@ -328,8 +325,6 @@ fn mcp_tool_results_equal_the_cli_output() {
         errors += failed as usize;
     }
     assert_eq!(errors, 1, "the failing call");
-    // A bad argument is refused before the library call, with its own text, and a library
-    // rule gives the library's usage error.
     let bad = [
         call(0, "search", json!({ "query": "kiln", "limit": "many" })),
         call(1, "changes", json!({ "since": "2026-01-01", "days": 3 })),

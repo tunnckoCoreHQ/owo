@@ -1,4 +1,3 @@
-//! Helpers shared by the end-to-end tests.
 #![allow(dead_code)]
 
 pub mod acp;
@@ -9,7 +8,6 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use tempfile::TempDir;
 
-/// The built `owo` binary with `--root` set and the owo environment cleared.
 pub fn owo(root: &Path) -> Command {
     let mut cmd = Command::cargo_bin("owo").unwrap();
     cmd.arg("--root")
@@ -20,7 +18,6 @@ pub fn owo(root: &Path) -> Command {
     cmd
 }
 
-/// Runs `cmd` with `--json` and parses stdout; panics with stderr when it is not JSON.
 pub fn json(cmd: &mut Command) -> Value {
     let out = cmd.arg("--json").output().unwrap();
     serde_json::from_slice(&out.stdout)
@@ -43,14 +40,12 @@ pub fn copy_tree(from: &Path, to: &Path) {
     }
 }
 
-/// A temporary root holding a copy of the example identity `id`.
 pub fn copy_example(id: &str) -> TempDir {
     let tmp = TempDir::new().unwrap();
     copy_tree(&examples().join(id), &tmp.path().join(id));
     tmp
 }
 
-/// A 1x1 PNG, the smallest avatar for a PNG card.
 pub const PNG_1X1: &[u8] = &[
     0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52,
     0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x06, 0x00, 0x00, 0x00, 0x1F, 0x15, 0xC4,

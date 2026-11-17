@@ -1,5 +1,3 @@
-//! Diagnostics: the findings a command reports, for example lint results.
-
 use serde::Serialize;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
@@ -10,7 +8,6 @@ pub enum Level {
     Info,
 }
 
-/// One finding from a command, for example a lint result.
 #[derive(Debug, Clone, Serialize)]
 pub struct Diagnostic {
     pub rule: String,
@@ -22,7 +19,6 @@ pub struct Diagnostic {
 }
 
 impl Diagnostic {
-    /// A finding with no rule name yet; the lint runner sets it.
     pub fn new(level: Level, path: impl Into<String>, message: impl Into<String>) -> Self {
         Self {
             rule: String::new(),
@@ -39,7 +35,6 @@ impl Diagnostic {
     }
 }
 
-/// One warning as the line owo writes it: `owo: warning: <text>`.
 pub fn warning_line(text: &str) -> String {
     format!("owo: warning: {text}\n")
 }

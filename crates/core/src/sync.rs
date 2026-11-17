@@ -1,11 +1,6 @@
-//! `owo sync start` / `owo sync done`: host-agnostic session sync.
-//! The host calls `start` after each turn; when enough new user turns exist, owo writes the
-//! slice to `<root>/sources/<slug>/` and an ingest prompt to `<root>/.owo/sessions/`.
-//! The host runs the ingest agent, whose last step is `done --until <n>`, which moves the bookmark.
-
 use crate::identity::read_object;
 use crate::write::Writes;
-use crate::Fault;
+use crate::{Fault, Named};
 use anyhow::{bail, Context, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -14,61 +9,40 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-/// The format of a host transcript; `Jsonl` by default.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum Format {
-    /// One `{"role", "text"}` object per line, with an optional turn `id`.
-    #[default]
-    Jsonl,
-    ClaudeJsonl,
-    OpencodeJson,
-}
-
-impl Format {
-    pub const ALL: [Format; 3] = [Format::Jsonl, Format::ClaudeJsonl, Format::OpencodeJson];
-
-    pub fn name(self) -> &'static str {
-        match self {
-            Format::Jsonl => "jsonl",
-            Format::ClaudeJsonl => "claude-jsonl",
-            Format::OpencodeJson => "opencode-json",
-        }
-    }
-
-    pub fn from_name(name: &str) -> Option<Format> {
-        Format::ALL.into_iter().find(|f| f.name() == name)
+named! {
+    #[derive(Default)]
+    pub enum Format {
+        #[default]
+        Jsonl = "jsonl",
+        ClaudeJsonl = "claude-jsonl",
+        OpencodeJson = "opencode-json",
     }
 }
 
-/// The bookmark of a session: where its transcript is, how far ingest got, and the run that
-/// waits for `Root::sync_done`.
 #[derive(Debug, Serialize, Deserialize)]
-pub struct Bookmark {
+pub struct SyncCursor {
     pub session: String,
     pub transcript: String,
-    /// The messages the last sync step read.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub messages: Option<usize>,
-    /// The message index ingest reached.
     pub until: usize,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub pending: Option<PendingRun>,
 }
 
-/// A run whose slice and prompt are written, and that has no `Root::sync_done` yet.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct PendingRun {
     pub from: usize,
     pub until: usize,
-    pub source: String,
+    pub slice: String,
     pub prompt: String,
 }
 
 const OVERLAP_TURNS: usize = 2;
+const STALE_LOCK: Duration = Duration::from_secs(60);
 
 #[derive(Debug, Clone)]
-pub struct Message {
-    /// The host's id for the message, when the transcript has one.
+pub struct TranscriptTurn {
     pub id: Option<String>,
     pub role: String,
     pub text: String,
@@ -91,7 +65,6 @@ fn text_of(content: &Value) -> String {
     }
 }
 
-/// A string or number id as text.
 fn id_of(v: &Value) -> Option<String> {
     match v {
         Value::String(s) if !s.is_empty() => Some(s.clone()),
@@ -100,13 +73,12 @@ fn id_of(v: &Value) -> Option<String> {
     }
 }
 
-/// Parses a transcript into user and assistant messages with text.
-pub fn parse(raw: &str, format: Format) -> Result<Vec<Message>> {
+pub fn parse(raw: &str, format: Format) -> Result<Vec<TranscriptTurn>> {
     let mut out = vec![];
     let mut push = |id: Option<String>, role: Option<&str>, text: String| {
         if let Some(role @ ("user" | "assistant")) = role {
             if !text.trim().is_empty() {
-                out.push(Message {
+                out.push(TranscriptTurn {
                     id,
                     role: role.to_string(),
                     text: text.trim().to_string(),
@@ -153,8 +125,8 @@ pub fn parse(raw: &str, format: Format) -> Result<Vec<Message>> {
     Ok(out)
 }
 
-#[derive(Debug, Serialize)]
-pub struct Start {
+#[derive(Debug, Default, Serialize)]
+pub struct SyncReport {
     pub due: bool,
     pub identity: String,
     pub session: String,
@@ -163,25 +135,21 @@ pub struct Start {
     pub from: usize,
     pub until: usize,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub source: Option<String>,
+    pub slice: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub prompt: Option<String>,
-    /// The prompt of a run that started earlier and has no `sync done` yet.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub pending: Option<String>,
-    /// Push only: turns stored by this push.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub added: Option<usize>,
-    /// Push only, when due: the slice and prompt text, for agents that cannot read the files.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub source_text: Option<String>,
+    pub slice_text: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub prompt_text: Option<String>,
 }
 
 pub struct StartRequest<'a> {
     pub root: &'a Path,
-    /// The caller's folder, which a relative transcript path joins onto.
     pub cwd: &'a Path,
     pub slug: &'a str,
     pub session: &'a str,
@@ -202,15 +170,11 @@ fn check_session(session: &str) -> Result<()> {
     Ok(())
 }
 
-/// Holds `<root>/.owo/sessions/<id>.lock` while one sync step reads and writes the bookmark,
-/// so parallel calls for one session run one after the other. The folders it made go when the
-/// lock goes and they are empty, so a failed step leaves none.
 struct Lock {
     path: PathBuf,
     _made: Made,
 }
 
-/// Folders a lock made, deepest first, removed when they are empty again.
 struct Made(Vec<PathBuf>);
 
 impl Drop for Made {
@@ -222,7 +186,6 @@ impl Drop for Made {
 }
 
 impl Lock {
-    /// None in a dry run, which writes no bookmark to guard.
     fn take(root: &Path, session: &str) -> Result<Option<Lock>> {
         if crate::write::dry() {
             return Ok(None);
@@ -239,10 +202,9 @@ impl Lock {
             {
                 Ok(_) => return Ok(Some(Lock { path, _made: made })),
                 Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
-                    // A lock older than a minute belongs to a process that ended without cleanup.
                     let stale = fs::metadata(&path)
                         .and_then(|m| m.modified())
-                        .is_ok_and(|t| t.elapsed().unwrap_or_default() > Duration::from_secs(60));
+                        .is_ok_and(|t| t.elapsed().unwrap_or_default() > STALE_LOCK);
                     if stale {
                         let _ = fs::remove_file(&path);
                     } else {
@@ -266,29 +228,23 @@ impl Drop for Lock {
     }
 }
 
-fn bookmark_path(root: &Path, session: &str) -> std::path::PathBuf {
+fn cursor_path(root: &Path, session: &str) -> std::path::PathBuf {
     root.join(".owo/sessions").join(format!("{session}.json"))
 }
 
-fn read_bookmark(root: &Path, session: &str) -> Result<Value> {
-    Ok(read_object(&bookmark_path(root, session))?.unwrap_or_else(|| json!({})))
+fn read_cursor(root: &Path, session: &str) -> Result<Value> {
+    Ok(read_object(&cursor_path(root, session))?.unwrap_or_else(|| json!({})))
 }
 
-fn bookmark_writes(root: &Path, session: &str, doc: &Value) -> Result<Writes> {
-    let path = bookmark_path(root, session);
-    Writes::new().json(&path, &path, doc)
-}
-
-/// The file that `push` stores turns in, relative to the root.
-fn store(session: &str) -> String {
+fn turns_file(session: &str) -> String {
     format!(".owo/sessions/{session}.turns.jsonl")
 }
 
-pub fn start(req: &StartRequest, transcript: &Path, format: Format) -> Result<Start> {
+pub fn start(req: &StartRequest, transcript: &Path, format: Format) -> Result<SyncReport> {
     check_session(req.session)?;
     let _lock = Lock::take(req.root, req.session)?;
-    if let Some(t) = read_bookmark(req.root, req.session)?["transcript"].as_str() {
-        if t.ends_with(&store(req.session)) {
+    if let Some(t) = read_cursor(req.root, req.session)?["transcript"].as_str() {
+        if t.ends_with(&turns_file(req.session)) {
             return Err(Fault::PushedSession(req.session.into()).into());
         }
     }
@@ -299,7 +255,6 @@ pub fn start(req: &StartRequest, transcript: &Path, format: Format) -> Result<St
     Ok(out)
 }
 
-/// One turn a host pushes: its id (the host's id for the message), role and text.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Turn {
     pub id: String,
@@ -307,22 +262,13 @@ pub struct Turn {
     pub text: String,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Role {
-    User,
-    Assistant,
-}
-
-impl Role {
-    pub fn name(self) -> &'static str {
-        match self {
-            Role::User => "user",
-            Role::Assistant => "assistant",
-        }
+named! {
+    pub enum Role {
+        User = "user",
+        Assistant = "assistant",
     }
 }
 
-/// A turn id is not empty and has no control characters.
 fn check_turn_id(n: usize, id: &str) -> Result<()> {
     if id.is_empty() || id.chars().any(char::is_control) {
         bail!("turn {n}: the turn id must be a number or a string with no control characters");
@@ -330,7 +276,6 @@ fn check_turn_id(n: usize, id: &str) -> Result<()> {
     Ok(())
 }
 
-/// Parses a JSON array of `{id, role, text}` turns; an id is a string or a number.
 pub fn parse_turns(json: &str) -> Result<Vec<Turn>> {
     let list: Value = serde_json::from_str(json).context("turns are not JSON")?;
     let list = list
@@ -340,10 +285,8 @@ pub fn parse_turns(json: &str) -> Result<Vec<Turn>> {
     for (n, t) in list.iter().enumerate() {
         let id = id_of(&t["id"]).unwrap_or_default();
         check_turn_id(n, &id)?;
-        let role = match t["role"].as_str() {
-            Some("user") => Role::User,
-            Some("assistant") => Role::Assistant,
-            _ => bail!("turn {n}: role must be user or assistant"),
+        let Some(role) = t["role"].as_str().and_then(Role::from_name) else {
+            bail!("turn {n}: role must be user or assistant");
         };
         let text = t["text"]
             .as_str()
@@ -357,14 +300,16 @@ pub fn parse_turns(json: &str) -> Result<Vec<Turn>> {
     Ok(turns)
 }
 
-/// Stores pushed turns in `<root>/.owo/sessions/<id>.turns.jsonl`, skipping ids already
-/// stored and turns with no text, then runs `start` on that file.
-pub fn push(req: &StartRequest, turns: &[Turn]) -> Result<Start> {
+fn drop_cut_off_line(bytes: &mut Vec<u8>) {
+    bytes.truncate(bytes.iter().rposition(|b| *b == b'\n').map_or(0, |i| i + 1));
+}
+
+pub fn push(req: &StartRequest, turns: &[Turn]) -> Result<SyncReport> {
     check_session(req.session)?;
     let _lock = Lock::take(req.root, req.session)?;
-    let file = req.root.join(store(req.session));
-    if let Some(t) = read_bookmark(req.root, req.session)?["transcript"].as_str() {
-        if !t.ends_with(&store(req.session)) {
+    let file = req.root.join(turns_file(req.session));
+    if let Some(t) = read_cursor(req.root, req.session)?["transcript"].as_str() {
+        if !t.ends_with(&turns_file(req.session)) {
             return Err(Fault::TranscriptSession {
                 session: req.session.into(),
                 transcript: t.into(),
@@ -380,9 +325,7 @@ pub fn push(req: &StartRequest, turns: &[Turn]) -> Result<Start> {
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => vec![],
         Err(e) => return Err(e).with_context(|| format!("reading {}", file.display())),
     };
-    // A write cut off before its newline leaves a partial last line, perhaps mid-character;
-    // drop it before decoding.
-    bytes.truncate(bytes.iter().rposition(|b| *b == b'\n').map_or(0, |i| i + 1));
+    drop_cut_off_line(&mut bytes);
     let mut stored = String::from_utf8(bytes)
         .with_context(|| format!("{} is not UTF-8; fix it by hand", file.display()))?;
     let mut ids: HashSet<String> = parse(&stored, Format::Jsonl)?
@@ -398,26 +341,32 @@ pub fn push(req: &StartRequest, turns: &[Turn]) -> Result<Start> {
         }
     }
     let (mut out, writes) = run(req, &file, &stored, Format::Jsonl)?;
-    Writes::new()
+    Writes::default()
         .file(&file, &file, stored)
         .and(writes)
         .commit()?;
     out.added = Some(added);
-    if let (Some(source), Some(prompt)) = (&out.source, &out.prompt) {
-        out.source_text = Some(crate::write::read_to_string(&req.root.join(source))?);
+    if let (Some(slice), Some(prompt)) = (&out.slice, &out.prompt) {
+        out.slice_text = Some(crate::write::read_to_string(&req.root.join(slice))?);
         out.prompt_text = Some(crate::write::read_to_string(&req.root.join(prompt))?);
     }
     Ok(out)
 }
 
-/// Parses `raw`, the text of `transcript`, decides whether a run is due, and returns the writes
-/// of the slice, the prompt and the bookmark for the caller to commit. The caller holds the lock.
+fn new_user_turns(messages: &[TranscriptTurn], done: usize, pending_end: Option<usize>) -> usize {
+    let counted_from = pending_end.map_or(done, |end| end.clamp(done, messages.len()));
+    messages[counted_from..]
+        .iter()
+        .filter(|m| m.role == "user")
+        .count()
+}
+
 fn run(
     req: &StartRequest,
     transcript: &Path,
     raw: &str,
     format: Format,
-) -> Result<(Start, Writes)> {
+) -> Result<(SyncReport, Writes)> {
     let messages = parse(raw, format)?;
     if messages.is_empty() && !raw.trim().is_empty() {
         return Err(Fault::NoMessages {
@@ -426,29 +375,19 @@ fn run(
         }
         .into());
     }
-    let mut doc = read_bookmark(req.root, req.session)?;
+    let mut doc = read_cursor(req.root, req.session)?;
     let done = doc["until"].as_u64().unwrap_or(0) as usize;
     let done = done.min(messages.len());
     let until = messages.len();
-    // While a run is pending, count from its end so the next turns do not start it again.
-    // The slice still starts at the bookmark, so a run that never finished is covered again.
-    let counted_from = doc["pending"]["until"]
-        .as_u64()
-        .map_or(done, |u| (u as usize).clamp(done, until));
-    let new_user = messages[counted_from..]
-        .iter()
-        .filter(|m| m.role == "user")
-        .count();
+    let pending_end = doc["pending"]["until"].as_u64().map(|u| u as usize);
+    let new_user = new_user_turns(&messages, done, pending_end);
     let due = new_user > 0 && (req.now || new_user >= req.every);
-    let mut from = done;
-    let mut seen = 0;
-    while from > 0 && seen < OVERLAP_TURNS {
-        from -= 1;
-        if messages[from].role == "user" {
-            seen += 1;
-        }
-    }
-    let mut out = Start {
+    let from = (0..done)
+        .rev()
+        .filter(|&i| messages[i].role == "user")
+        .nth(OVERLAP_TURNS - 1)
+        .unwrap_or(0);
+    let mut out = SyncReport {
         due,
         identity: req.slug.into(),
         session: req.session.into(),
@@ -456,12 +395,7 @@ fn run(
         every: req.every,
         from,
         until,
-        source: None,
-        prompt: None,
-        pending: None,
-        added: None,
-        source_text: None,
-        prompt_text: None,
+        ..SyncReport::default()
     };
     doc["session"] = json!(req.session);
     doc["transcript"] = json!(transcript.display().to_string());
@@ -472,10 +406,10 @@ fn run(
     if !due {
         out.pending = doc["pending"]["prompt"].as_str().map(str::to_string);
     }
-    let mut writes = Writes::new();
+    let mut writes = Writes::default();
     if due {
         let date = crate::state::now()[..10].to_string();
-        let source = format!(
+        let slice = format!(
             "sources/{}/{date}_{}_{from}-{until}.md",
             req.slug, req.session
         );
@@ -487,8 +421,8 @@ fn run(
                     .unwrap_or_default();
             body.push_str(&format!("\n## {} {}{id}\n\n{}\n", from + i, m.role, m.text));
         }
-        let slice = req.root.join(&source);
-        writes = writes.file(&slice, &slice, body);
+        let file = req.root.join(&slice);
+        writes = writes.file(&file, &file, body);
         let prompt = format!(".owo/sessions/{}.prompt.md", req.session);
         let project = req
             .project
@@ -497,40 +431,34 @@ fn run(
         let root = fs::canonicalize(req.root).unwrap_or_else(|_| req.root.to_path_buf());
         let quoted = format!("'{}'", root.display().to_string().replace('\'', "'\\''"));
         let text = format!(
-            "Use owo ingest (the ingest path of the owo skill) for identity `{slug}`{proj}.\n\nSource: `{source}` (relative to the identities root `{root}`).{earlier}\n\n1. `{owo} context{project}` and `{owo} state`.\n2. Route each durable fact in the source to its home; add `{cite}#L<a>-L<b>` to each entry's frontmatter `sources`.\n3. Run the checkpoint: `{owo} stamp && {owo} index && {owo} lint --changed`.\n4. Report changed paths or \"no changes\".\n5. When the checkpoint passes, finish the run with `owo --root {quoted} sync done --session {session} --until {until}`.\n",
+            "Use owo ingest (the ingest path of the owo skill) for identity `{slug}`{proj}.\n\nRaw material: the slice `{slice}` (relative to the root `{root}`).{earlier}\n\nStart every owo command in this run, the commands of the skill too, with the exact prefix `{owo}`, so each one acts on this root and identity. Use the owo CLI only, not an owo MCP server or connector.\n\n1. `{owo} context{project}` and `{owo} state`.\n2. Route each durable fact in the slice to its home; add `{cite}#L<a>-L<b>` to each entry's frontmatter `sources`.\n3. Run the checkpoint: `{owo} stamp && {owo} index && {owo} lint --changed`.\n4. Report changed paths or \"no changes\".\n5. When the checkpoint passes, finish the run with `{owo} sync done --session {session} --until {until}`.\n",
             slug = req.slug,
             earlier = if done == 0 { String::new() } else { format!(" Messages before {done} were ingested in an earlier run; the first part is overlap for context.") },
             root = root.display(),
             owo = format!("owo --root {quoted} -i {}", req.slug),
             proj = req.project.map(|p| format!(" on project `{p}`")).unwrap_or_default(),
-            cite = source.trim_start_matches("sources/"),
+            cite = slice.trim_start_matches("sources/"),
             session = req.session,
         );
         let file = req.root.join(&prompt);
         writes = writes.file(&file, &file, text);
-        doc["pending"] =
-            json!({ "from": from, "until": until, "source": source, "prompt": prompt });
-        out.source = Some(source);
+        doc["pending"] = json!({ "from": from, "until": until, "slice": slice, "prompt": prompt });
+        out.slice = Some(slice);
         out.prompt = Some(prompt);
     }
-    Ok((
-        out,
-        writes.and(bookmark_writes(req.root, req.session, &doc)?),
-    ))
+    let path = cursor_path(req.root, req.session);
+    Ok((out, writes.and(Writes::default().json(&path, &path, &doc)?)))
 }
 
-/// A session with a pending run: its prompt and the messages the run covers.
 #[derive(Debug, Serialize)]
-pub struct Due {
+pub struct PendingSession {
     pub session: String,
     pub prompt: String,
     pub from: usize,
     pub until: usize,
 }
 
-/// The sessions in `<root>/.owo/sessions/` whose bookmark has a pending run, by session id.
-/// With `slug`, only the runs whose slice is in `sources/<slug>/`.
-pub fn due(root: &Path, slug: Option<&str>) -> Result<Vec<Due>> {
+pub fn due(root: &Path, slug: Option<&str>) -> Result<Vec<PendingSession>> {
     let prefix = slug.map(|s| format!("sources/{s}/"));
     let dir = root.join(".owo/sessions");
     let entries = match fs::read_dir(&dir) {
@@ -547,13 +475,13 @@ pub fn due(root: &Path, slug: Option<&str>) -> Result<Vec<Due>> {
         let Some(doc) = read_object(&path)? else {
             continue;
         };
-        let bookmark = Bookmark::deserialize(&doc)
+        let cursor = SyncCursor::deserialize(&doc)
             .with_context(|| format!("{} does not parse; fix it by hand", path.display()))?;
         let of_identity =
-            |p: &PendingRun| prefix.as_ref().is_none_or(|pre| p.source.starts_with(pre));
-        if let Some(p) = bookmark.pending.filter(of_identity) {
-            out.push(Due {
-                session: bookmark.session,
+            |p: &PendingRun| prefix.as_ref().is_none_or(|pre| p.slice.starts_with(pre));
+        if let Some(p) = cursor.pending.filter(of_identity) {
+            out.push(PendingSession {
+                session: cursor.session,
                 prompt: p.prompt,
                 from: p.from,
                 until: p.until,
@@ -564,18 +492,18 @@ pub fn due(root: &Path, slug: Option<&str>) -> Result<Vec<Due>> {
     Ok(out)
 }
 
-pub fn done(root: &Path, session: &str, until: usize) -> Result<Bookmark> {
+pub fn done(root: &Path, session: &str, until: usize) -> Result<SyncCursor> {
     check_session(session)?;
     let _lock = Lock::take(root, session)?;
-    let mut doc = read_bookmark(root, session)?;
+    let mut doc = read_cursor(root, session)?;
     if doc.get("session").is_none() {
-        return Err(Fault::NoBookmark(session.into()).into());
+        return Err(Fault::NoSyncCursor(session.into()).into());
     }
     let prev = doc["until"].as_u64().unwrap_or(0) as usize;
     if until < prev {
-        return Err(Fault::BehindBookmark {
+        return Err(Fault::BehindSyncCursor {
             until,
-            bookmark: prev,
+            cursor: prev,
         }
         .into());
     }
@@ -589,8 +517,9 @@ pub fn done(root: &Path, session: &str, until: usize) -> Result<Bookmark> {
     {
         doc.as_object_mut().expect("object").remove("pending");
     }
-    let bookmark = Bookmark::deserialize(&doc)
-        .with_context(|| format!("the bookmark of session {session:?} does not parse"))?;
-    bookmark_writes(root, session, &doc)?.commit()?;
-    Ok(bookmark)
+    let cursor = SyncCursor::deserialize(&doc)
+        .with_context(|| format!("the sync cursor of session {session:?} does not parse"))?;
+    let path = cursor_path(root, session);
+    Writes::default().json(&path, &path, &doc)?.commit()?;
+    Ok(cursor)
 }

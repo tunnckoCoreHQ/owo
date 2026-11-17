@@ -1,7 +1,3 @@
-//! All-or-nothing writes. Each file goes through a temporary file next to it and a rename, and
-//! the files of one `Writes` land together or not at all, with the folders it made. In a dry
-//! run (`dry_run`) a commit keeps its files in memory instead, and `read` sees them.
-
 use anyhow::{Context, Result};
 use serde_json::Value;
 use std::cell::RefCell;
@@ -12,16 +8,10 @@ use std::io::{self, ErrorKind, Write as _};
 use std::path::{Path, PathBuf};
 
 thread_local! {
-    /// The targets the commits of the dry run on this thread kept, in commit order; None when
-    /// no dry run runs.
     static KEPT: RefCell<Option<Vec<Target>>> = const { RefCell::new(None) };
 }
 
-/// Runs `f` with every commit kept in memory instead of written, and `read` seeing the kept
-/// files. Returns what `f` returns and the paths the commits would write: each folder they
-/// would make, ending in `/`, before the file in it. Each path comes once, in commit order.
 pub fn dry_run<T>(f: impl FnOnce() -> T) -> (T, Vec<String>) {
-    /// Puts back the state before the dry run, also when `f` panics.
     struct Reset(Option<Vec<Target>>);
     impl Drop for Reset {
         fn drop(&mut self) {
@@ -33,31 +23,27 @@ pub fn dry_run<T>(f: impl FnOnce() -> T) -> (T, Vec<String>) {
     let kept = KEPT.take().unwrap_or_default();
     drop(reset);
     let mut paths: Vec<String> = vec![];
-    for t in kept {
+    for path in kept.iter().flat_map(|t| {
         let dir = match t.bytes {
             Some(_) => t.path.parent(),
             None => Some(t.path.as_path()),
         };
         let folders = dir.map(missing).unwrap_or_default().into_iter().rev();
-        let mut add: Vec<String> = folders.map(|d| format!("{}/", d.display())).collect();
-        if t.bytes.is_some() {
-            add.push(t.path.display().to_string());
-        }
-        for path in add {
-            if !paths.contains(&path) {
-                paths.push(path);
-            }
+        folders
+            .map(|d| format!("{}/", d.display()))
+            .chain(t.bytes.is_some().then(|| t.path.display().to_string()))
+    }) {
+        if !paths.contains(&path) {
+            paths.push(path);
         }
     }
     (out, paths)
 }
 
-/// True while a dry run runs on this thread.
 pub fn dry() -> bool {
     KEPT.with_borrow(Option::is_some)
 }
 
-/// The bytes the dry run last kept for the file `path`.
 fn kept(path: &Path) -> Option<Vec<u8>> {
     KEPT.with_borrow(|kept| {
         kept.iter()
@@ -68,7 +54,6 @@ fn kept(path: &Path) -> Option<Vec<u8>> {
     })
 }
 
-/// The files the dry run kept under `dir`, by their path relative to it, with their last bytes.
 pub fn kept_under(dir: &Path) -> BTreeMap<PathBuf, Vec<u8>> {
     KEPT.with_borrow(|kept| {
         kept.iter()
@@ -79,54 +64,43 @@ pub fn kept_under(dir: &Path) -> BTreeMap<PathBuf, Vec<u8>> {
     })
 }
 
-/// The file at `path`: in a dry run the bytes it kept, else the file on disk.
 pub fn read(path: &Path) -> io::Result<Vec<u8>> {
     kept(path).map_or_else(|| fs::read(path), Ok)
 }
 
-/// The file at `path` as UTF-8 text, as `read` gives it.
 pub fn read_to_string(path: &Path) -> io::Result<String> {
     String::from_utf8(read(path)?).map_err(|e| io::Error::new(ErrorKind::InvalidData, e))
 }
 
-/// True when the file `path` is there: kept by the dry run or on disk.
 pub fn exists(path: &Path) -> bool {
     kept(path).is_some() || path.exists()
 }
 
-/// One target: its path, the path error text names, and its bytes, or none for a folder.
 struct Target {
     path: PathBuf,
     shown: PathBuf,
     bytes: Option<Vec<u8>>,
 }
 
-/// Files and folders to write together. `commit` writes all of them or none.
 #[derive(Default)]
 #[must_use]
 pub struct Writes(Vec<Target>);
 
 impl Writes {
-    pub fn new() -> Self {
-        Self::default()
+    fn push(mut self, path: PathBuf, shown: PathBuf, bytes: Option<Vec<u8>>) -> Self {
+        self.0.push(Target { path, shown, bytes });
+        self
     }
 
-    /// With the file `path` holding `bytes`; error text names it as `shown`.
     pub fn file(
-        mut self,
+        self,
         path: impl Into<PathBuf>,
         shown: impl Into<PathBuf>,
         bytes: impl Into<Vec<u8>>,
     ) -> Self {
-        self.0.push(Target {
-            path: path.into(),
-            shown: shown.into(),
-            bytes: Some(bytes.into()),
-        });
-        self
+        self.push(path.into(), shown.into(), Some(bytes.into()))
     }
 
-    /// With the file `path` holding `doc` as pretty JSON and a trailing newline.
     pub fn json(
         self,
         path: impl Into<PathBuf>,
@@ -137,24 +111,15 @@ impl Writes {
         Ok(self.file(path, shown, text))
     }
 
-    /// With the folder `path`, made when it is missing.
-    pub fn dir(mut self, path: impl Into<PathBuf>, shown: impl Into<PathBuf>) -> Self {
-        self.0.push(Target {
-            path: path.into(),
-            shown: shown.into(),
-            bytes: None,
-        });
-        self
+    pub fn dir(self, path: impl Into<PathBuf>, shown: impl Into<PathBuf>) -> Self {
+        self.push(path.into(), shown.into(), None)
     }
 
-    /// With the targets of `other` after these.
     pub fn and(mut self, other: Writes) -> Self {
         self.0.extend(other.0);
         self
     }
 
-    /// Writes every target, or on an error undoes what it did and returns the error. In a dry
-    /// run it keeps the targets in memory and writes nothing.
     pub fn commit(self) -> Result<()> {
         if dry() {
             KEPT.with_borrow_mut(|kept| kept.as_mut().expect("a dry run").extend(self.0));
@@ -169,17 +134,14 @@ impl Writes {
     }
 }
 
-/// A file before the commit replaced it.
 struct Old {
     bytes: Vec<u8>,
     perms: Permissions,
 }
 
-/// What a commit did so far, to undo it.
 #[derive(Default)]
 struct Undo {
     made: Vec<PathBuf>,
-    /// Temporary files this commit made, not yet renamed.
     temps: Vec<PathBuf>,
     replaced: Vec<(PathBuf, Option<Old>)>,
 }
@@ -201,11 +163,8 @@ impl Undo {
     }
 }
 
-/// How one file lands once every temporary file is written.
 enum Land {
-    /// Renamed over the file, which held `old` before.
     Rename { tmp: PathBuf, old: Option<Old> },
-    /// Written in place: a device or a pipe, such as `/dev/stdout`, which no rename can replace.
     InPlace(Vec<u8>),
 }
 
@@ -229,7 +188,6 @@ fn apply(targets: Vec<Target>, undo: &mut Undo) -> Result<()> {
             Err(e) if e.kind() == ErrorKind::NotFound => None,
             Err(e) => return Err(e).with_context(writing),
             Ok(meta) => {
-                // A file the caller cannot write is not replaced.
                 fs::OpenOptions::new()
                     .write(true)
                     .open(&path)
@@ -261,13 +219,11 @@ fn apply(targets: Vec<Target>, undo: &mut Undo) -> Result<()> {
     Ok(())
 }
 
-/// Makes `dir` and its missing parents; records each folder it made in `made`.
 fn make_dirs(dir: &Path, shown: &Path, made: &mut Vec<PathBuf>) -> Result<()> {
     made.extend(missing(dir).into_iter().rev());
     fs::create_dir_all(dir).with_context(|| format!("creating {}", shown.display()))
 }
 
-/// The folders of `dir` and its parents that do not exist, deepest first.
 pub fn missing(dir: &Path) -> Vec<PathBuf> {
     dir.ancestors()
         .take_while(|d| !d.as_os_str().is_empty() && fs::symlink_metadata(d).is_err())
@@ -275,15 +231,12 @@ pub fn missing(dir: &Path) -> Vec<PathBuf> {
         .collect()
 }
 
-/// `path` with `.tmp` added to its file name.
 fn tmp(path: &Path) -> PathBuf {
     let mut name = path.file_name().map(OsString::from).unwrap_or_default();
     name.push(".tmp");
     path.with_file_name(name)
 }
 
-/// `path`, or the file its symlink points at, as an in-place write would write. A symlink whose
-/// file is missing is an error, so the link is not replaced.
 fn resolve(path: &Path) -> io::Result<PathBuf> {
     match fs::canonicalize(path) {
         Err(e) if e.kind() == ErrorKind::NotFound && fs::symlink_metadata(path).is_err() => {
@@ -293,8 +246,6 @@ fn resolve(path: &Path) -> io::Result<PathBuf> {
     }
 }
 
-/// Makes the new file `path` holding `bytes`, synced, with `perms` when given. Fails when `path`
-/// exists, also as a symlink, and on a later error removes only the file it made.
 fn write_new(path: &Path, bytes: &[u8], perms: Option<&Permissions>) -> io::Result<()> {
     let mut file = File::options().write(true).create_new(true).open(path)?;
     fill(&mut file, bytes, perms).inspect_err(|_| {
@@ -310,7 +261,6 @@ fn fill(file: &mut File, bytes: &[u8], perms: Option<&Permissions>) -> io::Resul
     file.sync_all()
 }
 
-/// Puts `old` back at `path` through a temporary file and a rename.
 fn restore(path: &Path, old: &Old) -> io::Result<()> {
     let tmp = tmp(path);
     write_new(&tmp, &old.bytes, Some(&old.perms))?;
@@ -319,14 +269,12 @@ fn restore(path: &Path, old: &Old) -> io::Result<()> {
     })
 }
 
-/// Writes one file all or nothing; error text names `path`.
 pub fn file(path: &Path, bytes: impl Into<Vec<u8>>) -> Result<()> {
-    Writes::new().file(path, path, bytes).commit()
+    Writes::default().file(path, path, bytes).commit()
 }
 
-/// Writes one JSON file all or nothing; error text names `path`.
 pub fn json(path: &Path, doc: &Value) -> Result<()> {
-    Writes::new().json(path, path, doc)?.commit()
+    Writes::default().json(path, path, doc)?.commit()
 }
 
 #[cfg(all(test, unix))]

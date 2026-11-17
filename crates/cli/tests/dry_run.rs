@@ -1,6 +1,3 @@
-//! The dry run (`--dry-run`): each command that writes files reports the files it would
-//! write and writes none, and the real run then writes those files.
-
 mod common;
 
 use common::{copy_tree, examples, json, owo};
@@ -10,7 +7,6 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use tempfile::TempDir;
 
-/// Every path under `dir` with its bytes (None for a folder).
 fn snapshot(dir: &Path) -> BTreeMap<PathBuf, Option<Vec<u8>>> {
     walkdir::WalkDir::new(dir)
         .into_iter()
@@ -22,9 +18,6 @@ fn snapshot(dir: &Path) -> BTreeMap<PathBuf, Option<Vec<u8>>> {
         .collect()
 }
 
-/// Runs `args` in `<base>/work` with `--dry-run` and checks that nothing under `base` changed,
-/// then runs them for real and checks that every file and folder the real run wrote is in the
-/// dry run's list, and every path in the list is there. Returns the list.
 fn check(base: &Path, args: &[&str]) -> Vec<String> {
     let run = || {
         let mut cmd = owo(&base.join("ids"));
@@ -78,7 +71,6 @@ fn check(base: &Path, args: &[&str]) -> Vec<String> {
 #[test]
 fn dry_run_names_what_each_writing_command_writes() {
     let tmp = TempDir::new().unwrap();
-    // The canonical path, which the paths in the list start with.
     let base = fs::canonicalize(tmp.path()).unwrap();
     copy_tree(&examples().join("nicole"), &base.join("ids/nicole"));
     let work = base.join("work");
@@ -92,27 +84,27 @@ fn dry_run_names_what_each_writing_command_writes() {
 
     let list = check(&base, &["new", "Thea"]);
     assert_eq!(list[0], format!("{}/", base.join("ids/thea").display()));
-    assert!(list.iter().any(|p| p.ends_with("/thea/soul/SOUL.md")));
+    assert!(list.iter().any(|p| p.ends_with("/thea/persona/SOUL.md")));
     assert!(list.iter().any(|p| p.ends_with("/thea/life/_index.md")));
     assert!(list.iter().any(|p| p.ends_with("/thea/work/projects/")));
     for args in [
-        &["write", "soul/SOUL.md", "--content", "# Soul\n\nNew.\n"][..],
+        &["write", "persona/SOUL.md", "--content", "# Soul\n\nNew.\n"][..],
         &["add", "character", "Mara Voss"],
-        &["add", "project", "Big Thing"],
+        &["add", "project-readme", "Big Thing"],
         &["index"],
         &["stamp"],
-        &["review", "done"],
-        &["soul", "note", "SOUL.md", "--change", "Calmer"],
+        &["reflect", "done"],
+        &["persona", "change", "SOUL.md", "--change", "Calmer"],
         &[
-            "soul",
-            "note",
+            "persona",
+            "change",
             "SOUL.md",
             "--change",
             "Kinder",
             "--evidence",
             "first-firing",
         ],
-        &["export", "card", "--out", "card.json"],
+        &["export", "persona-card", "--out", "card.json"],
         &["export", "skill", "--out", "skill"],
         &["export", "soulspec", "--out", "spec"],
         &[

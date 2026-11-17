@@ -1,7 +1,3 @@
-//! `owo stamp`: refreshes the three state files from content hashes.
-//! Timestamps move only when a file's hash changed. Changed entries get today's
-//! `updated:` date in frontmatter; a changed soul file bumps the soul.json minor version.
-
 use crate::identity::{Identity, Kind};
 use crate::state::{self, hash, scope_of, SCOPES};
 use crate::write::Writes;
@@ -35,8 +31,6 @@ fn files_mut(doc: &mut Value) -> &mut Map<String, Value> {
     doc["files"].as_object_mut().expect("files is an object")
 }
 
-/// Sets `updated: <today>` inside frontmatter, keeping the file's line endings.
-/// Returns the new text when it changed.
 fn touch_updated(text: &str, today: &str) -> Option<String> {
     let split = crate::markdown::split(text);
     let fm = split.frontmatter?;
@@ -56,20 +50,24 @@ fn touch_updated(text: &str, today: &str) -> Option<String> {
 }
 
 pub fn run(id: &Identity, check: bool) -> Result<Report> {
+    let (report, writes) = plan(id, check)?;
+    writes.commit()?;
+    Ok(report)
+}
+
+fn plan(id: &Identity, check: bool) -> Result<(Report, Writes)> {
     if let Some(e) = id.entries.iter().find(|e| e.lossy && !check) {
         bail!("{} is not valid UTF-8; fix it before stamping", e.rel);
     }
     let at = state::now();
-    // Frontmatter dates name the local day, like `owo add`; state stamps stay UTC.
     let today = state::local_today();
     let mut docs = SCOPES
         .iter()
         .map(|s| Ok((*s, load(id, s)?)))
         .collect::<Result<Vec<(&str, Value)>>>()?;
     let mut report = Report::default();
-    let mut soul_changed = false;
+    let mut persona_changed = false;
     let mut seen: Vec<(String, String)> = vec![];
-    // Frontmatter edits wait until soul.json is read, so a failed stamp changes no file.
     let mut touched: Vec<(String, String)> = vec![];
 
     for e in state::tracked(id) {
@@ -82,11 +80,7 @@ pub fn run(id: &Identity, check: bool) -> Result<Report> {
             .find(|(s, _)| *s == scope)
             .expect("scope exists")
             .1;
-        let recorded = files_mut(doc)
-            .get(rel)
-            .and_then(|r| r.get("hash"))
-            .and_then(Value::as_str)
-            .map(str::to_string);
+        let recorded = doc["files"][rel]["hash"].as_str().map(str::to_string);
         let current = hash(&e.text);
         if recorded.as_deref() == Some(current.as_str()) {
             continue;
@@ -96,7 +90,7 @@ pub fn run(id: &Identity, check: bool) -> Result<Report> {
         } else {
             report.changed.push(e.rel.clone());
         }
-        soul_changed |= e.kind == Kind::Soul;
+        persona_changed |= e.kind == Kind::Persona;
         if check {
             continue;
         }
@@ -107,8 +101,7 @@ pub fn run(id: &Identity, check: bool) -> Result<Report> {
                 text = new_text;
             }
         }
-        let files = files_mut(doc);
-        files.insert(
+        files_mut(doc).insert(
             rel.to_string(),
             json!({ "updated": at, "hash": hash(&text) }),
         );
@@ -128,43 +121,43 @@ pub fn run(id: &Identity, check: bool) -> Result<Report> {
         }
     }
     if check || report.is_clean() {
-        return Ok(report);
+        return Ok((report, Writes::default()));
     }
-    // Read soul.json before any write, so a broken one fails the stamp with nothing recorded.
-    let soul = if soul_changed { bumped_soul(id)? } else { None };
-    let writes = touched.into_iter().fold(Writes::new(), |w, (rel, text)| {
-        w.file(id.dir.join(&rel), rel, text)
-    });
+    let manifest = if persona_changed {
+        bumped_manifest(id)?
+    } else {
+        None
+    };
+    let writes = touched
+        .into_iter()
+        .fold(Writes::default(), |w, (rel, text)| {
+            w.file(id.dir.join(&rel), rel, text)
+        });
     let writes = docs.iter().try_fold(writes, |w, (scope, doc)| {
         let path = id.dir.join(format!("{scope}/state.json"));
         w.json(&path, &path, doc)
     })?;
-    let path = id.dir.join("soul/soul.json");
-    match soul {
-        Some(soul) => writes.json(&path, &path, &soul)?,
+    let path = id.dir.join("persona/soul.json");
+    let writes = match manifest {
+        Some(manifest) => writes.json(&path, &path, &manifest)?,
         None => writes,
-    }
-    .commit()?;
-    Ok(report)
+    };
+    Ok((report, writes))
 }
 
-/// `soul/soul.json` with its minor version bumped, or None when the file is missing.
-fn bumped_soul(id: &Identity) -> Result<Option<Value>> {
-    let Some(mut soul) = id.read_object("soul/soul.json")? else {
+fn bumped_manifest(id: &Identity) -> Result<Option<Value>> {
+    let Some(mut manifest) = id.read_object("persona/soul.json")? else {
         return Ok(None);
     };
-    let version = soul
+    let mut parts = manifest
         .get("version")
         .and_then(Value::as_str)
         .unwrap_or("0.0.0")
-        .to_string();
-    let parts: Vec<u64> = version.split('.').map(|p| p.parse().unwrap_or(0)).collect();
-    let (major, minor) = (
-        parts.first().copied().unwrap_or(0),
-        parts.get(1).copied().unwrap_or(0),
-    );
-    soul["version"] = json!(format!("{major}.{}.0", minor + 1));
-    Ok(Some(soul))
+        .split('.')
+        .map(|p| p.parse().unwrap_or(0));
+    let (major, minor): (u64, u64) = (parts.next().unwrap_or(0), parts.next().unwrap_or(0));
+    manifest["version"] = json!(format!("{major}.{}.0", minor + 1));
+    Ok(Some(manifest))
 }
 
 #[cfg(test)]

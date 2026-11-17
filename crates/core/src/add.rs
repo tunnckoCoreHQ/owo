@@ -1,5 +1,3 @@
-//! `owo add`: creates one entry from its template at its deterministic path.
-
 use crate::identity::{Identity, Kind};
 use crate::slug::slugify;
 use crate::templates;
@@ -10,45 +8,48 @@ use std::collections::BTreeMap;
 
 use crate::AddRequest as Request;
 
-/// Returns the entry path and true when the file is new.
-/// `project` is the project of a note, checked to exist.
 pub fn add(id: &Identity, req: &Request, project: Option<&str>) -> Result<(String, bool)> {
     let name = req
         .kind
         .type_name()
         .expect("`Identity::add` takes only entry types");
-    if req.parent.is_some() && req.kind != Kind::LocationDetail {
-        return Err(Fault::OnlyFor {
-            field: "parent",
-            noun: "parent",
-            kind: Kind::LocationDetail,
-            given: req.kind,
+    let (parent, wiki) = (req.parent.is_some(), req.wiki.is_some());
+    for (set, field, noun, kind) in [
+        (parent, "parent", "parent", Kind::LocationDetail),
+        (wiki, "wiki", "project wiki path", Kind::ProjectReadme),
+    ] {
+        if set && req.kind != kind {
+            return Err(Fault::OnlyFor {
+                field,
+                noun,
+                kind,
+                given: req.kind,
+            }
+            .into());
         }
-        .into());
     }
-    if req.kb.is_some() && req.kind != Kind::Project {
-        return Err(Fault::OnlyFor {
-            field: "kb",
-            noun: "KB",
-            kind: Kind::Project,
-            given: req.kind,
-        }
-        .into());
-    }
-    // The local day, so `owo add log` names the day the user is living.
     let today = crate::state::local_today();
     let date = req
         .date
         .map(|d| d.to_string())
         .unwrap_or_else(|| today.clone());
-    // A log without a title is titled by its date, so titles stay unique.
-    let title = match req.title.trim() {
-        "" if req.kind == Kind::Log => date.as_str(),
-        t => t,
-    };
+    if req.kind == Kind::DailyLog {
+        let day = format!("life/daily-log/{date}_");
+        if let Some(e) = id
+            .entries
+            .iter()
+            .find(|e| e.kind == Kind::DailyLog && e.rel.starts_with(&day))
+        {
+            return Ok((e.rel.clone(), false));
+        }
+    }
+    let title = req.title.trim();
+    if title.is_empty() {
+        return Err(Fault::NeedsTitle(req.kind).into());
+    }
     for name in std::iter::once(title).chain(req.aliases.iter().map(String::as_str)) {
-        if name.contains(crate::markdown::LINK_BREAKERS) {
-            bail!("{name:?} holds # | [ or ], which break a [[link]] to it");
+        if name.contains(crate::markdown::WIKILINK_BREAKERS) {
+            bail!("{name:?} holds # | [ or ], which break a [[wikilink]] to it");
         }
     }
     let slug = slugify(title);
@@ -84,7 +85,7 @@ pub fn add(id: &Identity, req: &Request, project: Option<&str>) -> Result<(Strin
         None
     };
 
-    if req.kind == Kind::Note {
+    if req.kind == Kind::ProjectNote {
         let project = project.ok_or(Fault::KindNeeds {
             kind: req.kind,
             field: "project",
@@ -101,56 +102,53 @@ pub fn add(id: &Identity, req: &Request, project: Option<&str>) -> Result<(Strin
     if path.exists() {
         return Ok((rel, false));
     }
-    let builtin = templates::ENTRY_TEMPLATES
-        .iter()
-        .find(|(n, _)| *n == name)
-        .map(|(_, t)| *t)
+    let builtin = req
+        .kind
+        .template()
         .expect("every entry type has a template");
     let root = id.dir.parent().unwrap_or(&id.dir);
     let mut text = templates::fill(
         &templates::get(root, &format!("{name}.md"), builtin),
         &values,
     );
-    if !req.aliases.is_empty() {
-        if !text.contains("\naliases: []") {
+    let fill_line = |text: &str, from: &'static str, to: &str, field| {
+        if !text.contains(from) {
+            let line = from.trim_start_matches('\n');
             return Err(Fault::TemplateLacks {
                 template: name.into(),
-                line: "aliases: []",
-                field: "alias",
-            }
-            .into());
+                line,
+                field,
+            });
         }
+        Ok(text.replacen(from, to, 1))
+    };
+    if !req.aliases.is_empty() {
         let list = req
             .aliases
             .iter()
             .map(|a| format!("\n  - \"{}\"", templates::yaml_escape(a)))
             .collect::<String>();
-        text = text.replacen("\naliases: []", &format!("\naliases:{list}"), 1);
+        text = fill_line(
+            &text,
+            "\naliases: []",
+            &format!("\naliases:{list}"),
+            "alias",
+        )?;
     }
-    if let (Some(kb), Kind::Project) = (req.kb.as_deref(), req.kind) {
-        if !text.contains("kb: \"\"") {
-            return Err(Fault::TemplateLacks {
-                template: "project".into(),
-                line: "kb: \"\"",
-                field: "kb",
-            }
-            .into());
-        }
-        let kb = templates::yaml_escape(kb);
-        text = text.replacen("kb: \"\"", &format!("kb: \"{kb}\""), 1);
+    if let (Some(wiki), Kind::ProjectReadme) = (req.wiki.as_deref(), req.kind) {
+        let to = format!("wiki: \"{}\"", templates::yaml_escape(wiki));
+        text = fill_line(&text, "wiki: \"\"", &to, "wiki")?;
     }
     let notes = path.with_file_name("notes");
-    let writes = Writes::new().file(&path, &path, text);
+    let writes = Writes::default().file(&path, &path, text);
     match req.kind {
-        Kind::Project => writes.dir(&notes, &notes),
+        Kind::ProjectReadme => writes.dir(&notes, &notes),
         _ => writes,
     }
     .commit()?;
     Ok((rel, true))
 }
 
-/// Writes the full text of one authored file, creating its folder. Returns true when the file
-/// is new. The path stays inside soul/, life/ or work/ and is never a generated file.
 pub fn write(id: &Identity, rel: &str, text: &str) -> Result<bool> {
     if text.trim().is_empty() {
         return Err(Fault::NoText(rel.into()).into());
@@ -164,11 +162,11 @@ pub fn write(id: &Identity, rel: &str, text: &str) -> Result<bool> {
         })
         .collect();
     let clean = parts.map(|p| p.join("/")).unwrap_or_default();
-    let scoped = ["soul/", "life/", "work/"]
+    let scoped = ["persona/", "life/", "work/"]
         .iter()
         .any(|s| clean.starts_with(s));
     if !scoped || !clean.ends_with(".md") {
-        bail!("{rel:?} must be an identity-relative .md path under soul/, life/ or work/");
+        bail!("{rel:?} must be an identity-relative .md path under persona/, life/ or work/");
     }
     if crate::identity::classify(&clean) == crate::identity::Kind::Generated {
         return Err(Fault::Generated(clean).into());

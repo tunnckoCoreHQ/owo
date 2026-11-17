@@ -1,11 +1,3 @@
-//! The MCP server. Each tool is an operation of `operations`, and its input schema comes from
-//! the fields of the operation's request type. A tool call maps its JSON arguments into the
-//! request, runs the operation and returns its envelope, or for `context`, `show` and `soul`
-//! its text.
-//! The typed call checks the rules, and a library error reaches the client as its plain
-//! text. Messages are JSON-RPC 2.0: one per line with `serve`, or one per POST to `/mcp` with
-//! `serve_http`. `reply` answers one message.
-
 use crate::request::{scalar, Args, Field, Type};
 use crate::{operations, Env, Envelope, Operation, Outcome, Ran, Select};
 use anyhow::Context;
@@ -15,15 +7,12 @@ use std::net::{TcpListener, TcpStream};
 use std::time::{Duration, Instant};
 
 const PROTOCOL: &str = "2025-06-18";
-/// Versions whose messages this server speaks; `initialize` echoes one of these, else `PROTOCOL`.
 const SUPPORTED: &[&str] = &[PROTOCOL, "2025-03-26", "2024-11-05"];
 
-/// The tools whose result is the text, not the envelope.
 fn returns_text(op: &Operation) -> bool {
-    matches!(op.path, ["context"] | ["show"] | ["soul"])
+    matches!(op.path, ["context"] | ["show"] | ["persona"])
 }
 
-/// The JSON schema type of a field: a multi-word positional is one string.
 fn schema_type(f: &Field) -> &'static str {
     match f.ty {
         Type::Switch => "boolean",
@@ -36,36 +25,23 @@ fn schema_type(f: &Field) -> &'static str {
 }
 
 fn schema(op: &Operation) -> Value {
-    let mut props = Map::new();
-    props.insert(
-        "identity".into(),
-        json!({ "type": "string", "description": "Identity slug (default: the server's)" }),
-    );
-    props.insert(
-        "project".into(),
-        json!({ "type": "string", "description": "Project slug" }),
-    );
+    let mut props = json!({
+        "identity": { "type": "string", "description": "Identity slug (default: the server's)" },
+        "project": { "type": "string", "description": "Project slug" },
+    });
     for f in &op.fields {
         let kind = schema_type(f);
         let mut s = json!({ "type": kind, "description": f.help });
-        let values = match &f.ty {
-            Type::Choice(v) => Some(json!(v)),
-            _ => None,
+        let at = if kind == "array" {
+            s["items"] = json!({ "type": if f.ty == Type::Json { "object" } else { "string" } });
+            &mut s["items"]
+        } else {
+            &mut s
         };
-        if kind == "array" {
-            let item = if f.ty == Type::Json {
-                "object"
-            } else {
-                "string"
-            };
-            s["items"] = json!({ "type": item });
-            if let Some(v) = values {
-                s["items"]["enum"] = v;
-            }
-        } else if let Some(v) = values {
-            s["enum"] = v;
+        if let Type::Choice(v) = &f.ty {
+            at["enum"] = json!(v);
         }
-        props.insert(f.name.to_string(), s);
+        props[f.name] = s;
     }
     let required: Vec<&str> = op
         .fields
@@ -79,7 +55,6 @@ fn result(text: String, error: bool) -> Value {
     json!({ "content": [{ "type": "text", "text": text }], "isError": error })
 }
 
-/// Runs one tool call. A panic becomes an error result, so the server answers the next request.
 fn call(op: &Operation, params: &Value, select: &Select, env: &Env) -> Value {
     guarded(|| run_tool(op, params, select, env))
 }
@@ -95,20 +70,21 @@ fn guarded(f: impl FnOnce() -> Value) -> Value {
     })
 }
 
-/// Maps the tool's arguments into the request of its operation, runs it, and returns the
-/// result. The `identity` and `project` arguments replace those of `select`.
-fn run_tool(op: &Operation, params: &Value, select: &Select, env: &Env) -> Value {
-    let empty = Map::new();
-    let map = params["arguments"].as_object().unwrap_or(&empty);
-    // No argument holds a NUL, as a command line cannot; `turns` is a JSON document.
-    let nul = map
-        .iter()
-        .filter(|(k, _)| *k != "turns")
+const JSON_DOCUMENT_ARGUMENT: &str = "turns";
+
+fn has_nul_argument(args: &Map<String, Value>) -> bool {
+    args.iter()
+        .filter(|(k, _)| *k != JSON_DOCUMENT_ARGUMENT)
         .any(|(_, v)| match v {
             Value::Array(items) => items.iter().filter_map(scalar).any(|s| s.contains('\0')),
             v => scalar(v).is_some_and(|s| s.contains('\0')),
-        });
-    if nul {
+        })
+}
+
+fn run_tool(op: &Operation, params: &Value, select: &Select, env: &Env) -> Value {
+    let empty = Map::new();
+    let map = params["arguments"].as_object().unwrap_or(&empty);
+    if has_nul_argument(map) {
         return result("an argument holds a NUL character".into(), true);
     }
     let pick = |key: &str, default: &Option<String>| {
@@ -122,7 +98,6 @@ fn run_tool(op: &Operation, params: &Value, select: &Select, env: &Env) -> Value
     let mut args = map.clone();
     args.remove("identity");
     args.remove("project");
-    // A JSON field reaches the request as its JSON text, as the CLI gives it.
     for f in op.fields.iter().filter(|f| f.ty == Type::Json) {
         if let Some(v) = args.get_mut(f.name) {
             *v = Value::String(v.to_string());
@@ -136,16 +111,9 @@ fn run_tool(op: &Operation, params: &Value, select: &Select, env: &Env) -> Value
     }
 }
 
-/// The tool result of a run: the envelope as pretty JSON, or for a text tool its text, then the
-/// warning lines; for a failed text tool the warning lines and the error line.
 fn reply_of(op: &Operation, ran: Ran) -> Value {
-    let Ran {
-        mut warnings,
-        result: outcome,
-    } = ran;
-    let lines = |warnings: &[String]| -> String {
-        warnings.iter().map(|w| crate::warning_line(w)).collect()
-    };
+    let (mut warnings, outcome) = (ran.warnings, ran.result);
+    let lines = |w: &[String]| w.iter().map(|w| crate::warning_line(w)).collect::<String>();
     let (stdout, stderr, error) = match &outcome {
         _ if !returns_text(op) => {
             let envelope = match &outcome {
@@ -160,11 +128,7 @@ fn reply_of(op: &Operation, ran: Ran) -> Value {
             warnings.extend(envelope.text_warnings());
             (text(o), lines(&warnings), !envelope.ok)
         }
-        Err(e) => (
-            String::new(),
-            format!("{}owo: {}\n", lines(&warnings), e),
-            true,
-        ),
+        Err(e) => ("".into(), format!("{}owo: {e}\n", lines(&warnings)), true),
     };
     let text = match (stdout.trim().is_empty(), stderr.trim().is_empty()) {
         (true, _) => stderr,
@@ -174,12 +138,11 @@ fn reply_of(op: &Operation, ran: Ran) -> Value {
     result(text, error)
 }
 
-/// The text of a text tool.
 fn text(o: &Outcome) -> String {
     match o {
-        Outcome::Context { text, .. } | Outcome::Show { text, .. } | Outcome::Soul { text, .. } => {
-            text.clone()
-        }
+        Outcome::Context { text, .. }
+        | Outcome::Show { text, .. }
+        | Outcome::Persona { text, .. } => text.clone(),
         _ => String::new(),
     }
 }
@@ -194,7 +157,7 @@ fn respond(id: &Value, method: &str, params: &Value, select: &Select, env: &Env)
             "protocolVersion": params["protocolVersion"].as_str().filter(|v| SUPPORTED.contains(v)).unwrap_or(PROTOCOL),
             "capabilities": { "tools": {} },
             "serverInfo": { "name": "owo", "version": env!("CARGO_PKG_VERSION") },
-            "instructions": "owo manages one identity: soul/, life/ and work/. Start with `context`, read more with `resolve`, `search`, `show` and `links`, create entries with `add`, fill or edit their text with `write`, then run `stamp`, `index` and `lint`.",
+            "instructions": "owo manages one identity: persona/, life/ and work/. Start with `context`, read more with `resolve`, `search`, `show` and `links`, create entries with `add`, fill or edit their text with `write`, then run `stamp`, `index` and `lint`.",
         })),
         "ping" => ok(json!({})),
         "tools/list" => ok(json!({
@@ -214,8 +177,6 @@ fn respond(id: &Value, method: &str, params: &Value, select: &Select, env: &Env)
     }
 }
 
-/// The reply to one JSON-RPC message, or None for notifications and responses.
-/// Bytes that are not UTF-8 JSON get a parse error.
 pub fn reply(message: &[u8], select: &Select, env: &Env) -> Option<Value> {
     match serde_json::from_slice::<Value>(message) {
         Ok(msg) if msg.get("id").is_some() && msg.get("method").is_some() => {
@@ -231,8 +192,6 @@ pub fn reply(message: &[u8], select: &Select, env: &Env) -> Option<Value> {
     }
 }
 
-/// Serves MCP on `input` and `output`, one message per line, until `input` ends. `select` picks
-/// the default root, identity and project of each tool call.
 pub fn serve(
     mut input: impl BufRead,
     mut output: impl Write,
@@ -253,15 +212,13 @@ pub fn serve(
 }
 
 const DEFAULT_PORT: u16 = 4224;
-/// Largest request body the HTTP mode reads; a tool call is a few kilobytes.
 const MAX_BODY: usize = 8 << 20;
-/// Largest request line plus headers the HTTP mode reads.
 const MAX_HEAD: usize = 16 << 10;
-/// Time one HTTP request may take to arrive, and its reply to leave.
 const DEADLINE: Duration = Duration::from_secs(30);
+const DRAIN_IDLE: Duration = Duration::from_millis(200);
+const DRAIN_LIMIT: Duration = Duration::from_secs(2);
+const DRAIN_CHUNK: usize = 8192;
 
-/// The listener for the HTTP mode on `addr`. Without `port` it takes 4224, or the next free
-/// port up to 4323. The server URL is `http://<local_addr>/mcp`.
 pub fn bind(addr: &str, port: Option<u16>) -> crate::Result<TcpListener> {
     Ok(match port {
         Some(p) => TcpListener::bind((addr, p)).with_context(|| format!("binding {addr}:{p}"))?,
@@ -271,18 +228,14 @@ pub fn bind(addr: &str, port: Option<u16>) -> crate::Result<TcpListener> {
     })
 }
 
-/// Serves MCP over HTTP on `listener` at `/mcp` (Streamable HTTP with JSON replies), one
-/// request at a time.
 pub fn serve_http(listener: TcpListener, select: &Select, env: &Env) -> std::io::Result<()> {
     for stream in listener.incoming() {
         let Ok(stream) = stream else { continue };
-        // A broken or slow client only ends its own request.
         let _ = http_request(stream, select, env);
     }
     Ok(())
 }
 
-/// Reads from the stream until one deadline for the whole request.
 struct Timed {
     stream: TcpStream,
     until: Instant,
@@ -323,7 +276,6 @@ fn http_request(stream: TcpStream, select: &Select, env: &Env) -> std::io::Resul
         let (k, v) = (k.trim().to_ascii_lowercase(), v.trim());
         match k.as_str() {
             "content-length" => length = v.parse::<usize>().ok(),
-            // owo reads only a Content-Length body, so a chunked one gets 411.
             "transfer-encoding" => chunked = true,
             "content-type" => {
                 json_body = v
@@ -337,14 +289,10 @@ fn http_request(stream: TcpStream, select: &Select, env: &Env) -> std::io::Resul
     }
     // Read the body even for a refused request: closing with unread data resets the connection
     // and the client never sees the status.
-    let mut body = vec![];
     let length = length.filter(|_| !chunked);
-    let mut body_read = false;
-    if let Some(length) = length.filter(|n| head <= MAX_HEAD && *n <= MAX_BODY) {
-        body.resize(length, 0);
-        reader.read_exact(&mut body)?;
-        body_read = true;
-    }
+    let fits = length.filter(|n| head <= MAX_HEAD && *n <= MAX_BODY);
+    let mut body = vec![0; fits.unwrap_or(0)];
+    reader.read_exact(&mut body)?;
     let mut parts = request.split_whitespace();
     let (method, path) = (parts.next().unwrap_or(""), parts.next().unwrap_or(""));
     let path = path.split('?').next().unwrap_or("");
@@ -373,13 +321,18 @@ fn http_request(stream: TcpStream, select: &Select, env: &Env) -> std::io::Resul
     // close and cut the reply. Send the reply's end first, then discard what the client still
     // sends: stop after 200ms with nothing arriving, or after 2 seconds, so an idle client
     // cannot hold this one-at-a-time server.
-    if !body_read {
-        stream.shutdown(std::net::Shutdown::Write)?;
-        stream.set_read_timeout(Some(Duration::from_millis(200)))?;
-        let stop = Instant::now() + Duration::from_secs(2);
-        let mut buf = [0u8; 8192];
-        while Instant::now() < stop && matches!(stream.read(&mut buf), Ok(n) if n > 0) {}
+    if fits.is_none() {
+        drain(stream)?;
     }
+    Ok(())
+}
+
+fn drain(mut stream: TcpStream) -> std::io::Result<()> {
+    stream.shutdown(std::net::Shutdown::Write)?;
+    stream.set_read_timeout(Some(DRAIN_IDLE))?;
+    let stop = Instant::now() + DRAIN_LIMIT;
+    let mut buf = [0u8; DRAIN_CHUNK];
+    while Instant::now() < stop && matches!(stream.read(&mut buf), Ok(n) if n > 0) {}
     Ok(())
 }
 

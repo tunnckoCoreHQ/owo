@@ -1,52 +1,38 @@
-//! Markdown helpers: frontmatter split, sections, wiki-links, word counts.
-
 use regex::Regex;
 use std::sync::OnceLock;
 
-/// A document split into optional YAML frontmatter and body.
 pub struct Split<'a> {
     pub frontmatter: Option<&'a str>,
     pub body: &'a str,
-    /// 1-based line number where the body starts in the file.
     pub body_line: usize,
 }
 
 pub fn split(text: &str) -> Split<'_> {
-    let Some(rest) = text
-        .strip_prefix("---\n")
+    text.strip_prefix("---\n")
         .or_else(|| text.strip_prefix("---\r\n"))
-    else {
-        return Split {
+        .and_then(|rest| {
+            let fm_len: usize = rest
+                .split_inclusive('\n')
+                .take_while(|line| line.trim_end() != "---")
+                .map(str::len)
+                .sum();
+            let (fm, closing) = rest.split_at(fm_len);
+            let delimiter = closing.split_inclusive('\n').next()?;
+            Some(Split {
+                frontmatter: Some(fm),
+                body: &closing[delimiter.len()..],
+                body_line: 3 + fm.lines().count(),
+            })
+        })
+        .unwrap_or(Split {
             frontmatter: None,
             body: text,
             body_line: 1,
-        };
-    };
-    let mut offset = 0;
-    for line in rest.split_inclusive('\n') {
-        if line.trim_end() == "---" {
-            let fm = &rest[..offset];
-            let body = &rest[offset + line.len()..];
-            let body_line = 2 + fm.lines().count() + 1;
-            return Split {
-                frontmatter: Some(fm),
-                body,
-                body_line,
-            };
-        }
-        offset += line.len();
-    }
-    Split {
-        frontmatter: None,
-        body: text,
-        body_line: 1,
-    }
+        })
 }
 
-/// Frontmatter fields, keyed by name.
 pub type Fields = serde_json::Map<String, serde_json::Value>;
 
-/// Parses YAML frontmatter into fields. Empty frontmatter has no fields.
 pub fn parse_frontmatter(fm: &str) -> Result<Fields, String> {
     if fm.trim().is_empty() {
         return Ok(Fields::new());
@@ -59,16 +45,12 @@ pub fn parse_frontmatter(fm: &str) -> Result<Fields, String> {
     }
 }
 
-/// Level and text of an ATX heading line (`# ` to `###### `).
 pub fn heading(line: &str) -> Option<(usize, &str)> {
     let level = line.chars().take_while(|c| *c == '#').count();
     let text = line[level..].strip_prefix(' ')?;
     (1..=6).contains(&level).then(|| (level, text.trim()))
 }
 
-/// Lines with their 0-based index, marking each as outside fenced code (fence lines are not).
-/// A fence opens with 3+ backticks or tildes and closes on a run of the same character at
-/// least as long.
 pub fn unfenced(body: &str) -> impl Iterator<Item = (usize, &str, bool)> {
     let mut fence: Option<(char, usize)> = None;
     body.lines().enumerate().map(move |(i, line)| {
@@ -88,7 +70,6 @@ pub fn unfenced(body: &str) -> impl Iterator<Item = (usize, &str, bool)> {
     })
 }
 
-/// The body with every heading outside fenced code one level deeper (`##` becomes `###`).
 pub fn demote(body: &str) -> String {
     unfenced(body)
         .map(
@@ -101,7 +82,6 @@ pub fn demote(body: &str) -> String {
         .join("\n")
 }
 
-/// First `# ` heading in the body, outside fenced code.
 pub fn first_heading(body: &str) -> Option<String> {
     unfenced(body).find_map(|(_, l, open)| match heading(l).filter(|_| open) {
         Some((1, h)) => Some(h.to_string()),
@@ -109,9 +89,6 @@ pub fn first_heading(body: &str) -> Option<String> {
     })
 }
 
-/// The section headed `<name>` at any level: its heading line and the lines below it with their
-/// 0-based index, up to the next heading of the same or a higher level. Headings inside fenced
-/// code do not count.
 pub fn section<'a>(body: &'a str, name: &str) -> Option<(&'a str, Vec<(usize, &'a str)>)> {
     let mut found: Option<(usize, &str)> = None;
     let mut lines = vec![];
@@ -127,46 +104,35 @@ pub fn section<'a>(body: &'a str, name: &str) -> Option<(&'a str, Vec<(usize, &'
     found.map(|(_, h)| (h, lines))
 }
 
-/// A section as its heading line and the text below it.
 pub fn section_text<'a>(body: &'a str, name: &str) -> Option<(&'a str, String)> {
     let (head, lines) = section(body, name)?;
     let lines: Vec<&str> = lines.iter().map(|(_, l)| *l).collect();
     Some((head, lines.join("\n")))
 }
 
-/// A `[[target#section|label]]` link with its 0-based line in the body.
 #[derive(Debug, Clone)]
-pub struct Link {
+pub struct Wikilink {
     pub target: String,
-    /// Text after `#`, if any.
     pub section: Option<String>,
     pub line: usize,
 }
 
-/// Characters a wiki-link target cannot hold: they end the target or the link.
-pub const LINK_BREAKERS: &[char] = &['#', '|', '[', ']'];
+pub const WIKILINK_BREAKERS: &[char] = &['#', '|', '[', ']'];
 
-fn link_re() -> &'static Regex {
+fn wikilink_re() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
     RE.get_or_init(|| {
         Regex::new(r"\[\[([^\[\]|#]*)(?:#([^\[\]|]*))?(?:\|[^\[\]]*)?\]\]").expect("valid regex")
     })
 }
 
-/// Wiki-links in text, skipping fenced code blocks and inline code spans.
-pub fn links(text: &str) -> Vec<Link> {
+pub fn wikilinks(text: &str) -> Vec<Wikilink> {
     let mut out = vec![];
-    for (i, line, open) in unfenced(text) {
-        if !open {
-            continue;
-        }
-        let cleaned = strip_inline_code(line);
-        for cap in link_re().captures_iter(&cleaned) {
-            let target = cap[1].trim().to_string();
-            let section = cap.get(2).map(|m| m.as_str().trim().to_string());
-            out.push(Link {
-                target,
-                section,
+    for (i, line, _) in unfenced(text).filter(|(_, _, open)| *open) {
+        for cap in wikilink_re().captures_iter(&strip_inline_code(line)) {
+            out.push(Wikilink {
+                target: cap[1].trim().to_string(),
+                section: cap.get(2).map(|m| m.as_str().trim().to_string()),
                 line: i,
             });
         }
@@ -174,7 +140,6 @@ pub fn links(text: &str) -> Vec<Link> {
     out
 }
 
-/// Drops each `code` span; a backtick with no closing partner on the line stays as text.
 fn strip_inline_code(line: &str) -> String {
     let mut out = String::with_capacity(line.len());
     let mut rest = line;
@@ -192,7 +157,6 @@ fn strip_inline_code(line: &str) -> String {
     out
 }
 
-/// Word count of prose, skipping headings and fenced code.
 pub fn word_count(body: &str) -> usize {
     unfenced(body)
         .filter(|(_, l, open)| *open && !l.starts_with('#'))
@@ -215,14 +179,14 @@ mod tests {
     }
 
     #[test]
-    fn finds_links_outside_code() {
+    fn finds_wikilinks_outside_code() {
         let text = "See [[The Café|café]] and [[Joe#Identifiers]].\n`[[Not A Link]]`\n```\n[[Fenced]]\n```\n";
-        let found = links(text);
+        let found = wikilinks(text);
         assert_eq!(found.len(), 2);
         assert_eq!(found[0].target, "The Café");
         assert_eq!(found[1].target, "Joe");
         let text = "A ` typo, then [[Ghost]].\n~~~\n[[Fenced]]\n```\n~~~\n[[After]]\n";
-        let found: Vec<String> = links(text).into_iter().map(|l| l.target).collect();
+        let found: Vec<String> = wikilinks(text).into_iter().map(|l| l.target).collect();
         assert_eq!(found, ["Ghost", "After"]);
     }
 

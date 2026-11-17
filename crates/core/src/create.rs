@@ -1,6 +1,4 @@
-//! `owo new`: creates an identity folder from the embedded templates.
-
-use crate::identity::{Identity, LIFE_CATEGORIES};
+use crate::identity::{life_categories, Identity};
 use crate::write::Writes;
 use crate::{index, state, templates};
 use anyhow::{bail, Context, Result};
@@ -15,9 +13,6 @@ pub struct Created {
     pub files: Vec<String>,
 }
 
-/// Creates `<root>/<slug>`; error text names the folder under `shown`, the root as the request
-/// gave it. A path already there, even a broken symlink, is an error and is left alone. On a
-/// later error, the folder this call created is removed. A dry run makes no folder.
 pub fn new_identity(root: &Path, shown: &Path, name: &str, slug: &str) -> Result<Created> {
     if !crate::slug::is_slug(slug) {
         bail!("invalid slug {slug:?}: use lowercase letters, digits and single hyphens");
@@ -52,7 +47,6 @@ pub fn new_identity(root: &Path, shown: &Path, name: &str, slug: &str) -> Result
     })
 }
 
-/// Writes the files of a new identity into `<root>/<slug>`, shown as `shown`.
 fn fill(root: &Path, shown: &Path, name: &str, slug: &str) -> Result<Vec<String>> {
     let dir = root.join(slug);
     let mut values = BTreeMap::new();
@@ -60,11 +54,10 @@ fn fill(root: &Path, shown: &Path, name: &str, slug: &str) -> Result<Vec<String>
     values.insert("slug", slug.to_string());
     values.insert("today", crate::state::today());
 
-    let folders = LIFE_CATEGORIES
-        .iter()
+    let folders = life_categories()
         .map(|(category, _)| format!("life/{category}"))
         .chain(["work/projects".to_string()]);
-    let writes = folders.fold(Writes::new(), |w, rel| {
+    let writes = folders.fold(Writes::default(), |w, rel| {
         w.dir(dir.join(&rel), shown.join(&rel))
     });
     templates::IDENTITY_FILES
@@ -84,7 +77,7 @@ fn fill(root: &Path, shown: &Path, name: &str, slug: &str) -> Result<Vec<String>
     let states = state::initial(&identity, &state::now());
     states
         .iter()
-        .try_fold(Writes::new(), |w, (rel, value)| {
+        .try_fold(Writes::default(), |w, (rel, value)| {
             w.json(dir.join(rel), shown.join(rel), value)
         })?
         .commit()?;

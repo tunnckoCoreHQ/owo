@@ -1,16 +1,16 @@
 {
   "files": {
-    "README.md": {
+    "PROFILE.md": {
       "updated": "2026-11-04T04:42:21Z",
       "hash": "b3:c9f7334a93f2cd10448df877d80aa2fb2028054899d23570281c117d439e7f88"
     },
     "projects/picture-book/notes/2026-10-30_lighthouse-spread.md": {
-      "updated": "2026-11-04T03:34:43Z",
-      "hash": "b3:e4f49b7fad969a74372ab8cf0f4d7711719f51b2c569ff11fd19cb33c2aff901"
+      "updated": "2026-11-17T12:05:44Z",
+      "hash": "b3:5d1a6315aa4fb73b7ceaaee22aad8a8f80f4e9ac2a184c34103ad71067752406"
     },
-    "projects/picture-book/project.md": {
-      "updated": "2026-11-04T03:34:43Z",
-      "hash": "b3:06b81c3791578934d5d9f3fca7396734cd7c63161bd390eda53a8ab9cea667cd"
+    "projects/picture-book/README.md": {
+      "updated": "2026-11-17T12:02:50Z",
+      "hash": "b3:606a807ed2854edb44be0d2c8d49ba18390c8928ebaae2bf818e0917b42498e7"
     }
   }
 }

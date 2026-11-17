@@ -1,5 +1,5 @@
 ---
-type: note
+type: project-note
 title: Style pass
 aliases: []
 summary: First style pass over the getting-started guide.

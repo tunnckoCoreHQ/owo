@@ -1,13 +1,11 @@
-//! One test per finding of the PR #10 bug hunts. Each test starts in a process folder of its
-//! own, apart from `Env.cwd`, so a path that resolves against the process folder shows.
-
 mod common;
 
 use chrono::NaiveDate;
 use common::{copy_tree, examples, owo, PNG_1X1};
 use owo_core::{
-    mcp, parse_turns, AddRequest, Env, ErrorKind, Identity, Kind, ReviewDoneRequest, Root, Select,
-    SkillRequest, SoulHistoryRequest, SoulspecRequest, StateRequest, SyncStartRequest,
+    mcp, parse_turns, AddRequest, Env, ErrorKind, Identity, Kind, PersonaChangelogRequest,
+    ReflectDoneRequest, Root, Select, SkillRequest, SoulspecRequest, StateRequest,
+    SyncStartRequest,
 };
 use serde_json::{json, Value};
 use std::fs;
@@ -15,14 +13,12 @@ use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
 use tempfile::TempDir;
 
-/// The process folder of every test here: a folder of its own, never deleted.
 static PROCESS: LazyLock<PathBuf> = LazyLock::new(|| {
     let dir = TempDir::new().unwrap().keep();
     std::env::set_current_dir(&dir).unwrap();
     dir
 });
 
-/// None of `names` written into the process folder.
 fn process_untouched(names: &[&str]) {
     for name in names {
         assert!(
@@ -32,7 +28,6 @@ fn process_untouched(names: &[&str]) {
     }
 }
 
-/// A folder holding `ids/nicole` and `work/`, the caller's folder.
 fn setup() -> TempDir {
     LazyLock::force(&PROCESS);
     let tmp = TempDir::new().unwrap();
@@ -63,7 +58,6 @@ fn identity(tmp: &Path) -> Identity {
         .unwrap()
 }
 
-/// The tool result of one MCP call: (text, isError).
 fn call(name: &str, arguments: Value, sel: &Select, env: &Env) -> (String, bool) {
     let msg = json!({ "jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": { "name": name, "arguments": arguments } });
     let r = mcp::reply(msg.to_string().as_bytes(), sel, env).unwrap();
@@ -123,8 +117,11 @@ fn pr10_relative_paths_join_env_cwd() {
     for (name, args) in [
         ("export_skill", json!({ "out": "sk" })),
         ("export_soulspec", json!({ "out": "pkg" })),
-        ("export_card", json!({ "out": "card.json" })),
-        ("export_card", json!({ "out": "card.png", "png": "a.png" })),
+        ("export_persona_card", json!({ "out": "card.json" })),
+        (
+            "export_persona_card",
+            json!({ "out": "card.png", "png": "a.png" }),
+        ),
         (
             "sync_start",
             json!({ "session": "s1", "transcript": "t.jsonl" }),
@@ -149,24 +146,26 @@ fn pr10_relative_paths_join_env_cwd() {
 }
 
 #[test]
-fn pr10_last_soul_change_is_never_an_older_record() {
+fn pr10_last_persona_change_is_never_an_older_record() {
     let tmp = setup();
-    let path = tmp.path().join("ids/nicole/soul/state.json");
+    let path = tmp.path().join("ids/nicole/persona/state.json");
     let mut doc: Value = serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
-    doc["history"] = json!([
+    doc["changelog"] = json!([
         { "at": "2026-01-01T00:00:00Z", "file": "SOUL.md", "change": "old", "evidence": [] },
         { "at": "2026-02-01T00:00:00Z", "file": "SOUL.md", "change": "new", "evidence": "[[x]]" },
     ]);
     fs::write(&path, doc.to_string()).unwrap();
     let id = identity(tmp.path());
-    let history = id.soul_history(&SoulHistoryRequest::default()).unwrap();
+    let history = id
+        .persona_changelog(&PersonaChangelogRequest::default())
+        .unwrap();
     let last = serde_json::to_value(history.last().unwrap()).unwrap();
     assert_eq!(last["change"], "new", "{last}");
     assert_eq!(last["evidence"], "[[x]]", "{last}");
     let state = id.state(&StateRequest::default()).unwrap();
-    let last = serde_json::to_value(&state.last_soul_change).unwrap();
+    let last = serde_json::to_value(&state.last_persona_change).unwrap();
     assert_eq!(last["change"], "new", "{last}");
-    let last = serde_json::to_value(&id.review().last_soul_change).unwrap();
+    let last = serde_json::to_value(&id.reflect().last_persona_change).unwrap();
     assert_eq!(last["change"], "new", "{last}");
 }
 
@@ -175,22 +174,22 @@ fn pr10_date_outside_four_digit_years_is_a_usage_error() {
     let tmp = setup();
     let id = identity(tmp.path());
     let far = NaiveDate::from_ymd_opt(12345, 1, 1).unwrap();
-    let state = tmp.path().join("ids/nicole/soul/state.json");
+    let state = tmp.path().join("ids/nicole/persona/state.json");
     let before = fs::read_to_string(&state).unwrap();
     usage(id.add(&AddRequest {
-        kind: Kind::Log,
+        kind: Kind::DailyLog,
+        title: "Far".into(),
         date: Some(far),
         ..Default::default()
     }));
     assert!(!tmp
         .path()
-        .join("ids/nicole/life/log/+12345-01-01.md")
+        .join("ids/nicole/life/daily-log/+12345-01-01_far.md")
         .exists());
-    usage(id.review_done(&ReviewDoneRequest { through: Some(far) }));
+    usage(id.reflect_done(&ReflectDoneRequest { through: Some(far) }));
     assert_eq!(fs::read_to_string(&state).unwrap(), before);
 }
 
-/// A root set by `.owo.toml` in the parent of the caller's folder.
 fn parent_root() -> (TempDir, Select, Env) {
     let tmp = setup();
     fs::write(
@@ -285,7 +284,6 @@ fn pr10_core_turns_a_non_utf8_path_into_utf8_text() {
     );
 }
 
-/// The stderr of a failed `owo` run in `work`, the caller's folder.
 fn cli_error(tmp: &Path, args: &[&str]) -> String {
     let out = owo(&tmp.join("ids"))
         .current_dir(tmp.join("work"))
@@ -296,7 +294,6 @@ fn cli_error(tmp: &Path, args: &[&str]) -> String {
     String::from_utf8_lossy(&out.stderr).into_owned()
 }
 
-/// A read-only folder `ro` in `work`.
 #[cfg(unix)]
 fn read_only(tmp: &Path) {
     use std::os::unix::fs::PermissionsExt;
@@ -312,7 +309,14 @@ fn pr10_export_write_error_names_the_path_as_given() {
     read_only(tmp.path());
     let err = cli_error(
         tmp.path(),
-        &["-i", "nicole", "export", "card", "--out", "ro/x.json"],
+        &[
+            "-i",
+            "nicole",
+            "export",
+            "persona-card",
+            "--out",
+            "ro/x.json",
+        ],
     );
     assert!(err.starts_with("owo: writing ro/x.json: "), "{err}");
 }
@@ -323,7 +327,14 @@ fn pr10_export_folder_error_names_the_path_as_given() {
     fs::write(tmp.path().join("work/afile"), "").unwrap();
     let err = cli_error(
         tmp.path(),
-        &["-i", "nicole", "export", "card", "--out", "afile/x.json"],
+        &[
+            "-i",
+            "nicole",
+            "export",
+            "persona-card",
+            "--out",
+            "afile/x.json",
+        ],
     );
     assert!(err.starts_with("owo: creating afile: "), "{err}");
 }
@@ -386,16 +397,16 @@ fn pr10_soulspec_write_error_names_the_path_as_given() {
 }
 
 #[test]
-fn pr10_soul_history_text_keeps_string_evidence_of_a_mixed_array() {
+fn pr10_persona_changelog_text_keeps_string_evidence_of_a_mixed_array() {
     let tmp = setup();
-    let path = tmp.path().join("ids/nicole/soul/state.json");
+    let path = tmp.path().join("ids/nicole/persona/state.json");
     let mut doc: Value = serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
-    doc["history"] = json!([
+    doc["changelog"] = json!([
         { "at": "2026-01-01T00:00:00Z", "file": "SOUL.md", "change": "c", "evidence": ["[[a]]", 3, "[[b]]"] },
     ]);
     fs::write(&path, doc.to_string()).unwrap();
     let out = owo(&tmp.path().join("ids"))
-        .args(["-i", "nicole", "soul", "history"])
+        .args(["-i", "nicole", "persona", "changelog"])
         .output()
         .unwrap();
     let text = String::from_utf8_lossy(&out.stdout);

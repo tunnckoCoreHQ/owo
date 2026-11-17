@@ -1,17 +1,9 @@
-//! Every operation by name, with its request type: `operations` is the list the CLI builds its
-//! commands from and the MCP server its tools. `Operation::run` maps checked arguments into the
-//! request, opens the root, makes the typed call, which checks the rules, and returns
-//! the typed `Outcome`. `Outcome::envelope` is the `{ ok, data, warnings, errors }` JSON of a
-//! result, which the CLI prints with `--json` and the MCP server returns.
-
 use crate::request::{Args, DryRun, Field, Request};
 use crate::*;
 use serde::Serialize;
 use serde_json::json;
 use std::io::Read;
 
-/// What one operation call reads beside its request: the root it opens, the caller's input,
-/// and the warnings found on the way.
 struct Call<'a> {
     select: &'a Select,
     env: &'a Env,
@@ -20,7 +12,6 @@ struct Call<'a> {
 }
 
 impl Call<'_> {
-    /// The selected root; its config warnings join the warnings.
     fn root(&mut self) -> Result<Root> {
         let root = Root::open(self.select, self.env)?;
         self.warnings.extend(root.warnings.iter().cloned());
@@ -31,7 +22,6 @@ impl Call<'_> {
         self.root()?.identity()
     }
 
-    /// The whole caller input, read once, when a request leaves out a text it can take from it.
     fn input(&mut self) -> Result<String> {
         Ok(std::io::read_to_string(&mut self.input).map_err(anyhow::Error::from)?)
     }
@@ -39,32 +29,23 @@ impl Call<'_> {
 
 type Run = dyn Fn(&Args, &mut Call) -> Result<Result<Outcome>> + Send + Sync;
 
-/// One operation: its name, its help line, the fields of its request type, and its call.
 pub struct Operation {
-    /// The words of its name: `["review", "done"]`.
     pub path: &'static [&'static str],
     pub about: &'static str,
     pub fields: Vec<Field>,
     run: Box<Run>,
 }
 
-/// What `Operation::run` gives: the warnings found before the result or the failure, and the
-/// result.
 pub struct Ran {
     pub warnings: Vec<String>,
     pub result: Result<Outcome>,
 }
 
 impl Operation {
-    /// The name of the operation as one word: `review_done`.
     pub fn name(&self) -> String {
-        self.path.join("_")
+        self.path.join("_").replace('-', "_")
     }
 
-    /// Runs the operation with `args`, checked with `Args::new`. `select` and `env` pick the
-    /// root, and `input` gives the text that `write` and `sync push` read when the request has
-    /// none, only after the root resolves. An argument of the wrong type is a usage error,
-    /// before any call.
     pub fn run(
         &self,
         args: &Args,
@@ -86,55 +67,48 @@ impl Operation {
     }
 }
 
-/// The operation `path`, with the request type `R` and its call.
 fn op<R: Request + 'static>(
     path: &'static [&'static str],
     about: &'static str,
-    call: fn(R, &mut Call) -> Result<Outcome>,
+    call: impl Fn(R, &mut Call) -> Result<Outcome> + Send + Sync + 'static,
 ) -> Operation {
-    let fields = R::fields();
     Operation {
         path,
         about,
-        fields,
-        run: Box::new(move |args, s| {
-            let req = R::from_args(args)?;
-            Ok(call(req, s))
-        }),
+        fields: R::fields(),
+        run: Box::new(move |args, s| Ok(call(R::from_args(args)?, s))),
     }
 }
 
-/// The operation `path` of a call that writes files: `op` with the `dry-run` field, which runs
-/// the call with its writes kept in memory and gives `Outcome::DryRun`.
 fn write_op<R: Request + 'static>(
     path: &'static [&'static str],
     about: &'static str,
     call: fn(R, &mut Call) -> Result<Outcome>,
 ) -> Operation {
-    Operation {
-        path,
-        about,
-        fields: DryRun::<R>::fields(),
-        run: Box::new(move |args, s| {
-            let DryRun { req, dry_run } = DryRun::<R>::from_args(args)?;
-            if !dry_run {
-                return Ok(call(req, s));
-            }
-            let (result, writes) = crate::write::dry_run(|| call(req, s));
-            Ok(result.map(|outcome| Outcome::DryRun {
-                outcome: Box::new(outcome),
-                writes,
-            }))
-        }),
-    }
+    op::<DryRun<R>>(path, about, move |DryRun { req, dry_run }, s| {
+        if !dry_run {
+            return call(req, s);
+        }
+        let (result, writes) = crate::write::dry_run(|| call(req, s));
+        result.map(|outcome| Outcome::DryRun {
+            outcome: Box::new(outcome),
+            writes,
+        })
+    })
 }
 
-/// The call of `templates` and `templates list`.
 fn templates(_: (), s: &mut Call) -> Result<Outcome> {
     Ok(Outcome::Templates(s.root()?.templates()))
 }
 
-/// Every operation, in the order the CLI lists them.
+fn push_turns(checked: &SessionSync, r: SyncPushRequest, s: &mut Call) -> Result<Outcome> {
+    let text = r.turns.map_or_else(|| s.input(), Ok)?;
+    let turns = parse_turns(&text)?;
+    Ok(Outcome::Synced(
+        checked.push(&r.session, &turns, &r.options)?,
+    ))
+}
+
 pub fn operations() -> Vec<Operation> {
     vec![
         write_op::<NewRequest>(
@@ -226,7 +200,7 @@ pub fn operations() -> Vec<Operation> {
         ),
         op::<ResolveRequest>(
             &["resolve"],
-            "Resolve a name to an entry path the way links do",
+            "Resolve a name to an entry path the way wikilinks do",
             |r, s| {
                 let found = s.identity()?.resolve(&r)?;
                 Ok(Outcome::Resolve {
@@ -256,11 +230,11 @@ pub fn operations() -> Vec<Operation> {
         ),
         op::<ContextRequest>(
             &["context"],
-            "The tiered load set: core files, requested tiers, and the generated Now block last",
+            "The tiered load set: core files, requested tiers, and the generated current state last",
             |r, s| {
                 let id = s.identity()?;
                 let context = id.context(&r)?;
-                let text = if r.paths {
+                let text = if r.format == ContextFormat::Paths {
                     context.paths_text()
                 } else {
                     id.context_text(&context)
@@ -270,64 +244,62 @@ pub fn operations() -> Vec<Operation> {
         ),
         op::<StateRequest>(
             &["state"],
-            "Derived current state: activity, recent days and events, open threads, review",
+            "Derived current state: activity, recent days and events, open threads, reflection",
             |r, s| Ok(Outcome::State(s.identity()?.state(&r)?)),
         ),
         op::<SearchRequest>(
             &["search"],
             "BM25 search over titles, aliases, summaries and bodies",
             |mut r, s| {
-                // The project filter is the selected project, not the configured one.
                 r.project = s.select.project.clone();
                 Ok(Outcome::Search(s.identity()?.search(&r)?))
             },
         ),
         op::<()>(
-            &["review"],
-            "Print the review packet, or record a finished review with `done`",
-            |_, s| Ok(Outcome::Review(s.identity()?.review())),
+            &["reflect"],
+            "Print the reflection digest, or record a finished reflection with `done`",
+            |_, s| Ok(Outcome::Reflect(s.identity()?.reflect())),
         ),
-        write_op::<ReviewDoneRequest>(
-            &["review", "done"],
-            "Record a finished review (dates and the MEMORY.md hash)",
-            |r, s| Ok(Outcome::ReviewDone(s.identity()?.review_done(&r)?)),
+        write_op::<ReflectDoneRequest>(
+            &["reflect", "done"],
+            "Record a finished reflection (dates and the MEMORY.md hash)",
+            |r, s| Ok(Outcome::ReflectDone(s.identity()?.reflect_done(&r)?)),
         ),
-        op::<SoulRequest>(
-            &["soul"],
-            "Print soul/IDENTITY.md and soul/SOUL.md, or only the soul files asked for; `note` and `history` keep the soul history",
+        op::<PersonaRequest>(
+            &["persona"],
+            "Print persona/IDENTITY.md and persona/SOUL.md, or only the persona files asked for; `change` and `changelog` keep the persona changelog",
             |r, s| {
-                let files = s.identity()?.soul(&r)?;
+                let files = s.identity()?.persona(&r)?;
                 let text = files
                     .iter()
                     .map(|(path, text)| format!("<!-- owo: {path} -->\n{}\n", text.trim_end()))
                     .collect::<Vec<_>>()
                     .join("\n");
-                Ok(Outcome::Soul { files, text })
+                Ok(Outcome::Persona { files, text })
             },
         ),
-        write_op::<SoulNoteRequest>(
-            &["soul", "note"],
-            "Append a soul change with its evidence",
-            |r, s| Ok(Outcome::SoulNote(s.identity()?.soul_note(&r)?)),
+        write_op::<PersonaChangeRequest>(
+            &["persona", "change"],
+            "Record a persona change with its evidence",
+            |r, s| Ok(Outcome::PersonaChange(s.identity()?.persona_change(&r)?)),
         ),
-        op::<SoulHistoryRequest>(
-            &["soul", "history"],
-            "Print the soul history, optionally for one file",
-            |r, s| Ok(Outcome::SoulHistory(s.identity()?.soul_history(&r)?)),
+        op::<PersonaChangelogRequest>(
+            &["persona", "changelog"],
+            "Print the persona changelog, optionally for one file",
+            |r, s| Ok(Outcome::PersonaChangelog(s.identity()?.persona_changelog(&r)?)),
         ),
         op::<ChangesRequest>(
             &["changes"],
             "What changed, grouped by day (Git history, else state stamps)",
             |r, s| Ok(Outcome::Changes(s.identity()?.changes(&r)?)),
         ),
-        write_op::<CardRequest>(
-            &["export", "card"],
-            "Character Card JSON (V3 with V2-compatible fields, or V2)",
+        write_op::<PersonaCardRequest>(
+            &["export", "persona-card"],
+            "Persona Card JSON in the Character Card V3 format, with V2-compatible fields, or V2",
             |mut r, s| {
-                // The project filter is the selected project, not the configured one.
                 r.project = s.select.project.clone();
-                let card = s.identity()?.export_card(&r)?;
-                Ok(Outcome::Card { card, out: r.out })
+                let card = s.identity()?.export_persona_card(&r)?;
+                Ok(Outcome::PersonaCard { card, out: r.out })
             },
         ),
         write_op::<SkillRequest>(
@@ -353,27 +325,18 @@ pub fn operations() -> Vec<Operation> {
             "Store turns sent by the host, then run sync start on them (for hosts without a local transcript)",
             |r, s| {
                 let root = s.root()?;
-                let sync = root.sync()?;
-                // The input is read after the session checks of `sync`.
-                let turns = match r.turns {
-                    Some(t) => t,
-                    None => s.input()?,
-                };
-                // The turns parse before the call, so a bad turns text fails before the
-                // checks of the session.
-                let turns = parse_turns(&turns)?;
-                Ok(Outcome::Synced(sync.push(&r.session, &turns, &r.options)?))
+                push_turns(&root.sync()?, r, s)
             },
         ),
         write_op::<SyncDoneRequest>(
             &["sync", "done"],
-            "Move the bookmark after a successful ingest run",
+            "Move the sync cursor after a successful ingest run",
             |r, s| {
-                let bookmark = s.root()?.sync_done(&r)?;
+                let cursor = s.root()?.sync_done(&r)?;
                 Ok(Outcome::SyncDone {
                     session: r.session,
                     until: r.until,
-                    bookmark,
+                    cursor,
                 })
             },
         ),
@@ -395,14 +358,13 @@ pub fn operations() -> Vec<Operation> {
     ]
 }
 
-/// The typed result of one operation, with what its output needs beside the library result.
 pub enum Outcome {
     Slug(String),
     Config(Resolved),
     Created(Created),
     List {
         root: PathBuf,
-        rows: Vec<Row>,
+        rows: Vec<ListedIdentity>,
     },
     Lint {
         identity: String,
@@ -421,12 +383,10 @@ pub enum Outcome {
         check: bool,
         report: StampReport,
     },
-    /// The written generated files, or with `check` the stale ones.
     Index {
         check: bool,
         paths: Vec<String>,
     },
-    /// The entry, or the candidates when `name` does not resolve to one.
     Resolve {
         name: String,
         found: Result<Hit, Vec<Hit>>,
@@ -437,65 +397,55 @@ pub enum Outcome {
     },
     Orphans(Vec<Hit>),
     Links(Links),
-    /// The load set and its text: the file contents, or the file list.
     Context {
         context: Context,
         text: String,
     },
-    State(State),
+    State(CurrentState),
     Search(Vec<SearchHit>),
-    /// A `sync start` or `sync push` run.
-    Synced(SyncRun),
+    Synced(SyncReport),
     SyncDone {
         session: String,
         until: usize,
-        bookmark: Bookmark,
+        cursor: SyncCursor,
     },
-    SyncDue(Vec<SyncDue>),
+    SyncDue(Vec<PendingSession>),
     Migrate(MigrateReport),
-    Review(Packet),
-    ReviewDone(ReviewRecord),
-    /// The soul files as (path, text), and their text: each file after an
-    /// `<!-- owo: <path> -->` line.
-    Soul {
+    Reflect(ReflectionDigest),
+    ReflectDone(ReflectionRecord),
+    Persona {
         files: Vec<(String, String)>,
         text: String,
     },
-    SoulNote(SoulNote),
-    SoulHistory(Vec<SoulChange>),
+    PersonaChange(PersonaChangeReport),
+    PersonaChangelog(Vec<PersonaChange>),
     Changes(Changes),
-    /// A built card, and the file it was written to.
-    Card {
-        card: Card,
+    PersonaCard {
+        card: PersonaCard,
         out: Option<PathBuf>,
     },
     Skill(String),
     Soulspec {
         dir: PathBuf,
-        report: Soulspec,
+        report: SoulspecReport,
     },
     Templates(Vec<Template>),
     Template {
         template: Template,
         text: String,
     },
-    /// A dry run: the outcome of the call, which wrote nothing, and the files and folders it
-    /// would write, a folder ending in `/`.
     DryRun {
         outcome: Box<Outcome>,
         writes: Vec<String>,
     },
 }
 
-/// The JSON shape of every result: `{ ok, data, warnings, errors }`, and `would_write` after
-/// them for a dry run.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Default, Serialize)]
 pub struct Envelope {
     pub ok: bool,
     pub data: Value,
     pub warnings: Vec<Value>,
     pub errors: Vec<Value>,
-    /// The paths a dry run would write.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub would_write: Option<Vec<String>>,
 }
@@ -505,9 +455,7 @@ impl Envelope {
         Self {
             ok,
             data,
-            warnings: vec![],
-            errors: vec![],
-            would_write: None,
+            ..Self::default()
         }
     }
 
@@ -515,7 +463,6 @@ impl Envelope {
         Self::new(true, data)
     }
 
-    /// A failure with one error text.
     pub fn fail(message: &str) -> Self {
         Self::new(false, Value::Null).with_errors([message])
     }
@@ -525,7 +472,6 @@ impl Envelope {
         self
     }
 
-    /// The warnings that are text, for a caller that prints them as lines.
     pub fn text_warnings(&self) -> impl Iterator<Item = String> + '_ {
         self.warnings
             .iter()
@@ -544,8 +490,6 @@ fn value(v: impl Serialize) -> Value {
 }
 
 impl Outcome {
-    /// The envelope of the result. `ok` is false when the operation found a problem, such as
-    /// lint errors or a stale check.
     pub fn envelope(&self) -> Envelope {
         match self {
             Outcome::Slug(slug) => Envelope::ok(json!({ "slug": slug })),
@@ -580,7 +524,7 @@ impl Outcome {
                 path,
                 created,
             } => {
-                let ok = *created || *kind == Kind::Log;
+                let ok = *created || *kind == Kind::DailyLog;
                 Envelope::new(ok, json!({ "path": path, "created": created }))
                     .with_errors((!ok).then(|| format!("exists: {path}")))
             }
@@ -610,24 +554,24 @@ impl Outcome {
                 Envelope::new(ok, json!({ "hits": hits })).with_errors((!ok).then_some("no hits"))
             }
             Outcome::Synced(s) => Envelope::ok(value(s)),
-            Outcome::SyncDone { bookmark, .. } => Envelope::ok(value(bookmark)),
+            Outcome::SyncDone { cursor, .. } => Envelope::ok(value(cursor)),
             Outcome::SyncDue(list) => Envelope::ok(json!({ "due": list })),
             Outcome::Migrate(r) => Envelope::ok(value(r)),
-            Outcome::Review(p) => Envelope::ok(value(p)),
-            Outcome::ReviewDone(r) => Envelope::ok(value(r)),
-            Outcome::Soul { files, .. } => {
+            Outcome::Reflect(p) => Envelope::ok(value(p)),
+            Outcome::ReflectDone(r) => Envelope::ok(value(r)),
+            Outcome::Persona { files, .. } => {
                 let files: Vec<Value> = files
                     .iter()
                     .map(|(path, text)| json!({ "path": path, "text": text }))
                     .collect();
                 Envelope::ok(json!({ "files": files }))
             }
-            Outcome::SoulNote(note) => {
-                Envelope::ok(value(&note.record)).with_warnings(note.warning.clone())
+            Outcome::PersonaChange(change) => {
+                Envelope::ok(value(&change.record)).with_warnings(change.warning.clone())
             }
-            Outcome::SoulHistory(list) => Envelope::ok(json!({ "history": list })),
+            Outcome::PersonaChangelog(list) => Envelope::ok(json!({ "changelog": list })),
             Outcome::Changes(c) => Envelope::ok(value(c)),
-            Outcome::Card { card, out } => {
+            Outcome::PersonaCard { card, out } => {
                 let data = match out {
                     Some(f) => json!({ "path": f }),
                     None => card.card.clone(),

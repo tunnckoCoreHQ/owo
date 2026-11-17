@@ -1,6 +1,3 @@
-//! End-to-end tests against the committed identities in `examples/`.
-//! Read-only commands run in place; commands that write run on a copy.
-
 mod common;
 
 use assert_cmd::Command;
@@ -36,10 +33,10 @@ fn examples_are_lint_clean_and_current() {
 #[test]
 fn resolve_show_links() {
     owo_as(&examples(), "nicole")
-        .args(["resolve", "life/log/2026-10-30.md"])
+        .args(["resolve", "life/daily-log/2026-10-30_lighthouse.md"])
         .assert()
         .success()
-        .stdout("life/log/2026-10-30.md\n");
+        .stdout("life/daily-log/2026-10-30_lighthouse.md\n");
     let root = examples();
     owo_as(&root, "reviewer")
         .args(["resolve", "Mina Okafor"])
@@ -91,7 +88,7 @@ fn resolve_without_a_name_is_a_usage_error() {
 }
 
 #[test]
-fn context_with_project_points_at_missing_kb() {
+fn context_with_project_points_at_missing_wiki() {
     let v = json(owo_as(&examples(), "reviewer").args([
         "--project",
         "ledger-api",
@@ -107,21 +104,21 @@ fn context_with_project_points_at_missing_kb() {
     assert_eq!(
         &paths[..4],
         [
-            "soul/IDENTITY.md",
-            "soul/SOUL.md",
-            "soul/MEMORY.md",
-            "soul/VOICE.md"
+            "persona/IDENTITY.md",
+            "persona/SOUL.md",
+            "persona/MEMORY.md",
+            "persona/VOICE.md"
         ]
     );
-    assert!(paths.contains(&"work/README.md"));
+    assert!(paths.contains(&"work/PROFILE.md"));
     assert!(paths.contains(&"work/projects/ledger-api/notes/2026-10-26_rollback-postmortem.md"));
-    assert!(v["data"]["kb"]["path"]
+    assert!(v["data"]["wiki"]["path"]
         .as_str()
         .unwrap()
-        .ends_with("examples/kb/ledger-api/lat.md"));
-    assert_eq!(v["data"]["kb"]["exists"], false);
-    assert!(v["warnings"].to_string().contains("KB not found"));
-    let now = v["data"]["now"].as_str().unwrap();
+        .ends_with("examples/wiki/ledger-api/lat.md"));
+    assert_eq!(v["data"]["wiki"]["exists"], false);
+    assert!(v["warnings"].to_string().contains("project wiki not found"));
+    let now = v["data"]["current_state"].as_str().unwrap();
     assert!(now.contains("[[Weekly hour]] (2026-11-03)"), "{now}");
     assert!(now.contains("Open threads: [[Flaky Cache Test]]"), "{now}");
 }
@@ -138,7 +135,11 @@ fn context_writes_nothing_and_last_project_comes_from_stamps() {
     assert_eq!(fs::read_to_string(&state).unwrap(), before);
     let s = json(owo_as(tmp.path(), "reviewer").args(["--project", "build-cache", "state"]));
     assert_eq!(s["data"]["last_project"][0], "ledger-api", "{s}");
-    assert_eq!(s["data"]["project"]["last_updated"], "2026-11-04T03:33:55Z");
+    let stamps: Value = serde_json::from_str(&before).unwrap();
+    assert_eq!(
+        s["data"]["project"]["last_updated"],
+        stamps["files"]["projects/build-cache/README.md"]["updated"]
+    );
 }
 
 #[test]
@@ -159,16 +160,23 @@ fn search_ranks_title_matches_first() {
 
 #[test]
 fn changes_days_lists_stamped_files() {
-    let v = json(owo_as(&examples(), "reviewer").args(["changes", "--days", "36500"]));
-    let n: usize = v["data"]["days"]
-        .as_object()
-        .unwrap()
-        .values()
-        .map(|d| d.as_array().unwrap().len())
-        .sum();
-    assert!(n > 20, "{v}");
-    let v = json(owo_as(&examples(), "reviewer").args(["changes", "--days", "0"]));
-    assert!(v["data"]["days"].as_object().unwrap().is_empty(), "{v}");
+    let count = |v: &Value| -> usize {
+        v["data"]["days"]
+            .as_object()
+            .unwrap()
+            .values()
+            .map(|d| d.as_array().unwrap().len())
+            .sum()
+    };
+    let tmp = copy_example("reviewer");
+    for root in [tmp.path(), examples().as_path()] {
+        for since in [["--days", "36500"], ["--since", "1926-12-11"]] {
+            let v = json(owo_as(root, "reviewer").arg("changes").args(since));
+            assert!(count(&v) > 20, "{since:?}: {v}");
+        }
+        let v = json(owo_as(root, "reviewer").args(["changes", "--since", "2999-01-01"]));
+        assert_eq!(count(&v), 0, "{v}");
+    }
 }
 
 fn check_card(card: &Value, name: &str) {
@@ -211,9 +219,9 @@ fn check_card(card: &Value, name: &str) {
 }
 
 #[test]
-fn export_card_v3_shape() {
+fn export_persona_card_v3_shape() {
     let out = owo_as(&examples(), "nicole")
-        .args(["export", "card"])
+        .args(["export", "persona-card"])
         .output()
         .unwrap();
     let card: Value = serde_json::from_slice(&out.stdout).unwrap();
@@ -243,7 +251,7 @@ fn export_card_v3_shape() {
     );
 
     let out = owo_as(&examples(), "reviewer")
-        .args(["--project", "ledger-api", "export", "card"])
+        .args(["--project", "ledger-api", "export", "persona-card"])
         .output()
         .unwrap();
     let card: Value = serde_json::from_slice(&out.stdout).unwrap();
@@ -264,7 +272,7 @@ fn export_card_v3_shape() {
     );
 
     let out = owo_as(&examples(), "nicole")
-        .args(["export", "card", "--spec", "v2"])
+        .args(["export", "persona-card", "--spec", "v2"])
         .output()
         .unwrap();
     let card: Value = serde_json::from_slice(&out.stdout).unwrap();
@@ -301,27 +309,29 @@ fn export_soulspec_package() {
 }
 
 #[test]
-fn review_packet_then_done() {
+fn reflect_digest_then_done() {
     let tmp = copy_example("reviewer");
-    let p = json(owo_as(tmp.path(), "reviewer").arg("review"));
-    assert_eq!(p["data"]["unreviewed_days"].as_array().unwrap().len(), 0);
+    let p = json(owo_as(tmp.path(), "reviewer").arg("reflect"));
+    assert_eq!(p["data"]["unreflected_days"].as_array().unwrap().len(), 0);
     assert!(p["data"]["memory"]
         .as_str()
         .unwrap()
         .contains("## Patterns"));
     owo_as(tmp.path(), "reviewer")
-        .args(["add", "log", "Pairing", "--date", "2026-11-04"])
+        .args(["add", "daily-log", "Pairing", "--date", "2026-11-04"])
         .assert()
         .success();
-    let log = tmp.path().join("reviewer/life/log/2026-11-04.md");
+    let log = tmp
+        .path()
+        .join("reviewer/life/daily-log/2026-11-04_pairing.md");
     let text = fs::read_to_string(&log).unwrap();
     fs::write(&log, format!("{text}- Paired on the parser.\n")).unwrap();
-    let p = json(owo_as(tmp.path(), "reviewer").arg("review"));
-    let days = p["data"]["unreviewed_days"].as_array().unwrap();
+    let p = json(owo_as(tmp.path(), "reviewer").arg("reflect"));
+    let days = p["data"]["unreflected_days"].as_array().unwrap();
     assert_eq!(days.len(), 1);
     assert_eq!(days[0]["date"], "2026-11-04");
     fs::write(
-        tmp.path().join("reviewer/soul/MEMORY.md"),
+        tmp.path().join("reviewer/persona/MEMORY.md"),
         "# Memory\n\n## Patterns\n\n- Pairing helps.\n",
     )
     .unwrap();
@@ -329,27 +339,27 @@ fn review_packet_then_done() {
         .args(["add", "event", "Release Day", "--date", "2026-11-06"])
         .assert()
         .success();
-    let lint = json(owo_as(tmp.path(), "reviewer").args(["lint", "--rule", "memory-review"]));
+    let lint = json(owo_as(tmp.path(), "reviewer").args(["lint", "--rule", "memory-reflection"]));
     assert_eq!(lint["warnings"].as_array().unwrap().len(), 1);
     owo_as(tmp.path(), "reviewer")
-        .args(["review", "done"])
+        .args(["reflect", "done"])
         .assert()
         .success();
-    let lint = json(owo_as(tmp.path(), "reviewer").args(["lint", "--rule", "memory-review"]));
+    let lint = json(owo_as(tmp.path(), "reviewer").args(["lint", "--rule", "memory-reflection"]));
     assert_eq!(lint["warnings"].as_array().unwrap().len(), 0);
-    let p = json(owo_as(tmp.path(), "reviewer").arg("review"));
+    let p = json(owo_as(tmp.path(), "reviewer").arg("reflect"));
     assert_eq!(
-        p["data"]["reviewed_through"], "2026-11-06",
+        p["data"]["reflected_through"], "2026-11-06",
         "newest story date"
     );
 }
 
 #[test]
-fn soul_note_and_history() {
+fn persona_change_and_changelog() {
     let tmp = copy_example("nicole");
     let v = json(owo_as(tmp.path(), "nicole").args([
-        "soul",
-        "note",
+        "persona",
+        "change",
         "SOUL.md",
         "--change",
         "Waiting is part of the craft.",
@@ -363,8 +373,8 @@ fn soul_note_and_history() {
     );
     owo_as(tmp.path(), "nicole")
         .args([
-            "soul",
-            "note",
+            "persona",
+            "change",
             "SOUL.md",
             "--change",
             "x",
@@ -374,11 +384,11 @@ fn soul_note_and_history() {
         .assert()
         .code(1);
     owo_as(tmp.path(), "nicole")
-        .args(["soul", "note", "NOPE.md", "--change", "x"])
+        .args(["persona", "change", "NOPE.md", "--change", "x"])
         .assert()
         .code(1);
-    let h = json(owo_as(tmp.path(), "nicole").args(["soul", "history", "SOUL.md"]));
-    assert_eq!(h["data"]["history"].as_array().unwrap().len(), 2);
+    let h = json(owo_as(tmp.path(), "nicole").args(["persona", "changelog", "SOUL.md"]));
+    assert_eq!(h["data"]["changelog"].as_array().unwrap().len(), 2);
 }
 
 #[test]
@@ -409,11 +419,11 @@ fn changes_and_lint_changed() {
 }
 
 #[test]
-fn soul_note_counts_distinct_evidence() {
+fn persona_change_counts_distinct_evidence() {
     let tmp = copy_example("nicole");
     let v = json(owo_as(tmp.path(), "nicole").args([
-        "soul",
-        "note",
+        "persona",
+        "change",
         "SOUL.md",
         "--change",
         "Waiting is part of the craft.",
@@ -473,16 +483,16 @@ fn changes_and_lint_changed_read_git() {
 }
 
 #[test]
-fn review_lists_unstamped_files() {
+fn reflect_lists_unstamped_files() {
     let tmp = copy_example("reviewer");
     owo_as(tmp.path(), "reviewer")
-        .args(["add", "lesson", "Fresh Lesson"])
+        .args(["add", "insight", "Fresh Insight"])
         .assert()
         .success();
-    let p = json(owo_as(tmp.path(), "reviewer").arg("review"));
+    let p = json(owo_as(tmp.path(), "reviewer").arg("reflect"));
     assert!(p["data"]
         .to_string()
-        .contains("life/lessons/fresh-lesson.md"));
+        .contains("life/insights/fresh-insight.md"));
     owo_as(tmp.path(), "reviewer")
         .args(["state", "--days", "99999"])
         .assert()
@@ -494,7 +504,7 @@ fn card_greetings_and_lore_content() {
     let tmp = copy_example("nicole");
     let dir = tmp.path().join("nicole");
     fs::write(
-        dir.join("soul/examples/greetings.md"),
+        dir.join("persona/examples/greetings.md"),
         "# Greetings\n\nOne greeting per section.\nKeep them short.\n\n## Morning\n\nHello there.\n",
     )
     .unwrap();
@@ -505,7 +515,7 @@ fn card_greetings_and_lore_content() {
         format!("{text}\n## Key facts\n\n- Fires on Fridays.\n"),
     )
     .unwrap();
-    let card = json(owo_as(tmp.path(), "nicole").args(["export", "card"]));
+    let card = json(owo_as(tmp.path(), "nicole").args(["export", "persona-card"]));
     let d = &card["data"]["data"];
     assert_eq!(d["first_mes"], "Hello there.");
     assert_eq!(d["alternate_greetings"], serde_json::json!([]));
@@ -522,18 +532,18 @@ fn card_greetings_and_lore_content() {
 }
 
 #[test]
-fn kb_links_lint_and_show() {
+fn wiki_links_lint_and_show() {
     let tmp = copy_example("reviewer");
-    let lint = |t: &TempDir| json(owo(t.path()).args(["-i", "reviewer", "lint", "--rule", "kb"]));
+    let lint = |t: &TempDir| json(owo(t.path()).args(["-i", "reviewer", "lint", "--rule", "wiki"]));
     assert_eq!(
         lint(&tmp)["warnings"].as_array().unwrap().len(),
         0,
-        "missing KB is skipped"
+        "a missing project wiki is skipped"
     );
-    let kb = tmp.path().join("kb/ledger-api");
-    fs::create_dir_all(&kb).unwrap();
+    let wiki = tmp.path().join("wiki/ledger-api");
+    fs::create_dir_all(&wiki).unwrap();
     fs::write(
-        kb.join("lat.md"),
+        wiki.join("lat.md"),
         "# Ledger\n\n## Retries\n\nRetries carry an idempotency key.\n\n## Schema\n\nx\n",
     )
     .unwrap();
@@ -544,14 +554,14 @@ fn kb_links_lint_and_show() {
     let text = fs::read_to_string(&note).unwrap();
     fs::write(
         &note,
-        format!("{text}See [[kb:ledger-api:lat.md#Nope]] and [[kb:nope:x.md]].\n"),
+        format!("{text}See [[wiki:ledger-api:lat.md#Nope]] and [[wiki:nope:x.md]].\n"),
     )
     .unwrap();
     let v = lint(&tmp);
     assert_eq!(v["warnings"].as_array().unwrap().len(), 1, "{v}");
     assert_eq!(v["errors"].as_array().unwrap().len(), 1, "{v}");
     let out = owo(tmp.path())
-        .args(["-i", "reviewer", "show", "kb:ledger-api:lat.md#Retries"])
+        .args(["-i", "reviewer", "show", "wiki:ledger-api:lat.md#Retries"])
         .output()
         .unwrap();
     let shown = String::from_utf8_lossy(&out.stdout);
@@ -576,7 +586,7 @@ fn export_skill_wrapper() {
 }
 
 #[test]
-fn flags_list_search_state_add_kb() {
+fn flags_list_search_state_add_wiki() {
     let root = examples();
     let v = json(owo(&root).arg("list"));
     let rows = v["data"]["identities"].as_array().unwrap();
@@ -590,7 +600,7 @@ fn flags_list_search_state_add_kb() {
         "search",
         "review",
         "--type",
-        "note",
+        "project-note",
         "--since",
         "2026-10-29",
     ]));
@@ -644,10 +654,10 @@ fn flags_list_search_state_add_kb() {
         "-i",
         "nicole",
         "add",
-        "project",
+        "project-readme",
         "Mural",
-        "--kb",
-        "../kb/mural",
+        "--wiki",
+        "../wiki/mural",
     ]));
     let path = tmp
         .path()
@@ -655,7 +665,7 @@ fn flags_list_search_state_add_kb() {
         .join(v["data"]["path"].as_str().unwrap());
     assert!(fs::read_to_string(path)
         .unwrap()
-        .contains("kb: \"../kb/mural\""));
+        .contains("wiki: \"../wiki/mural\""));
 }
 
 fn chunks(png: &[u8]) -> Vec<(String, Vec<u8>)> {
@@ -680,7 +690,7 @@ fn card_png_and_scenario() {
     fs::write(&avatar, common::PNG_1X1).unwrap();
     let out = tmp.path().join("card.png");
     owo(&root)
-        .args(["-i", "nicole", "export", "card", "--png"])
+        .args(["-i", "nicole", "export", "persona-card", "--png"])
         .arg(&avatar)
         .arg("--out")
         .arg(&out)
@@ -701,9 +711,16 @@ fn card_png_and_scenario() {
         })
         .collect();
     assert_eq!(names, ["IHDR", "IDAT", "tEXt:chara", "tEXt:ccv3", "IEND"]);
-    // embedding again replaces the chunks
     owo(&root)
-        .args(["-i", "nicole", "export", "card", "--spec", "v2", "--png"])
+        .args([
+            "-i",
+            "nicole",
+            "export",
+            "persona-card",
+            "--spec",
+            "v2",
+            "--png",
+        ])
         .arg(&out)
         .arg("--out")
         .arg(&out)
@@ -723,7 +740,7 @@ fn card_png_and_scenario() {
                 "-i",
                 "nicole",
                 "export",
-                "card",
+                "persona-card",
                 "--scenario",
                 "First Firing",
             ])
@@ -736,7 +753,7 @@ fn card_png_and_scenario() {
         v["data"]["scenario"],
         "The first kiln load that came out whole."
     );
-    let env = json(owo(&root).args(["-i", "nicole", "export", "card"]));
+    let env = json(owo(&root).args(["-i", "nicole", "export", "persona-card"]));
     assert_eq!(env["ok"], true);
     assert_eq!(env["data"]["spec"], "chara_card_v3");
 }
@@ -760,19 +777,19 @@ fn section_links_are_checked() {
 }
 
 #[test]
-fn kb_path_expands_home() {
+fn wiki_path_expands_home() {
     let tmp = copy_example("nicole");
     let home = tmp.path().join("home");
-    fs::create_dir_all(home.join("kb/mural")).unwrap();
+    fs::create_dir_all(home.join("wiki/mural")).unwrap();
     owo(tmp.path())
         .args([
             "-i",
             "nicole",
             "add",
-            "project",
+            "project-readme",
             "Mural",
-            "--kb",
-            "~/kb/mural",
+            "--wiki",
+            "~/wiki/mural",
         ])
         .assert()
         .success();
@@ -783,7 +800,7 @@ fn kb_path_expands_home() {
         "mural",
         "context",
     ]));
-    assert_eq!(v["data"]["kb"]["exists"], true, "{v}");
+    assert_eq!(v["data"]["wiki"]["exists"], true, "{v}");
 }
 
 #[test]
@@ -802,26 +819,26 @@ fn context_look_and_with() {
         .iter()
         .map(|i| (i["tier"].as_str().unwrap(), i["path"].as_str().unwrap()))
         .collect();
-    assert!(items.contains(&("look", "soul/LOOK.md")), "{v}");
+    assert!(items.contains(&("look", "persona/LOOK.md")), "{v}");
     assert!(
         items.contains(&("with", "life/events/first-firing.md")),
         "{v}"
     );
-    assert!(!items.iter().any(|(_, p)| *p == "soul/VOICE.md"));
+    assert!(!items.iter().any(|(_, p)| *p == "persona/VOICE.md"));
     assert!(v["warnings"]
         .to_string()
         .contains("--with \\\"Nope\\\" does not resolve"));
 }
 
 #[test]
-fn review_done_through_a_date() {
+fn reflect_done_through_a_date() {
     let tmp = copy_example("reviewer");
     let v =
-        json(owo_as(tmp.path(), "reviewer").args(["review", "done", "--through", "2026-10-28"]));
-    assert_eq!(v["data"]["reviewed_through"], "2026-10-28");
-    let p = json(owo_as(tmp.path(), "reviewer").arg("review"));
-    assert_eq!(p["data"]["reviewed_through"], "2026-10-28");
-    let days: Vec<&str> = p["data"]["unreviewed_days"]
+        json(owo_as(tmp.path(), "reviewer").args(["reflect", "done", "--through", "2026-10-28"]));
+    assert_eq!(v["data"]["reflected_through"], "2026-10-28");
+    let p = json(owo_as(tmp.path(), "reviewer").arg("reflect"));
+    assert_eq!(p["data"]["reflected_through"], "2026-10-28");
+    let days: Vec<&str> = p["data"]["unreflected_days"]
         .as_array()
         .unwrap()
         .iter()
@@ -832,7 +849,7 @@ fn review_done_through_a_date() {
         "{days:?}"
     );
     owo_as(tmp.path(), "reviewer")
-        .args(["review", "done", "--through", "nope"])
+        .args(["reflect", "done", "--through", "nope"])
         .assert()
         .code(2);
 }

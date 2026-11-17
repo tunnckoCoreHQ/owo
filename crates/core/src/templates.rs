@@ -1,130 +1,56 @@
-//! Built-in templates, embedded in the binary. `<root>/.templates/<file>` overrides one.
-
+use crate::Named;
 use regex::{Captures, Regex};
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
-/// Templates used by `owo new`, keyed by their identity-relative output path.
+macro_rules! template {
+    ($f:expr) => {
+        include_str!(concat!("../../../templates/", $f))
+    };
+}
+pub(crate) use template;
+
 pub const IDENTITY_FILES: &[(&str, &str)] = &[
+    ("identity.json", template!("identity.json")),
+    ("persona/soul.json", template!("persona/soul.json")),
+    ("persona/IDENTITY.md", template!("persona/IDENTITY.md")),
+    ("persona/SOUL.md", template!("persona/SOUL.md")),
+    ("persona/VOICE.md", template!("persona/VOICE.md")),
+    ("persona/LOOK.md", template!("persona/LOOK.md")),
+    ("persona/MEMORY.md", template!("persona/MEMORY.md")),
     (
-        "identity.json",
-        include_str!("../../../templates/identity.json"),
+        "persona/examples/good.md",
+        template!("persona/examples-good.md"),
     ),
     (
-        "soul/soul.json",
-        include_str!("../../../templates/soul/soul.json"),
+        "persona/examples/bad.md",
+        template!("persona/examples-bad.md"),
     ),
     (
-        "soul/IDENTITY.md",
-        include_str!("../../../templates/soul/IDENTITY.md"),
+        "persona/examples/greetings.md",
+        template!("persona/examples-greetings.md"),
     ),
-    (
-        "soul/SOUL.md",
-        include_str!("../../../templates/soul/SOUL.md"),
-    ),
-    (
-        "soul/VOICE.md",
-        include_str!("../../../templates/soul/VOICE.md"),
-    ),
-    (
-        "soul/LOOK.md",
-        include_str!("../../../templates/soul/LOOK.md"),
-    ),
-    (
-        "soul/MEMORY.md",
-        include_str!("../../../templates/soul/MEMORY.md"),
-    ),
-    (
-        "soul/examples/good.md",
-        include_str!("../../../templates/soul/examples-good.md"),
-    ),
-    (
-        "soul/examples/bad.md",
-        include_str!("../../../templates/soul/examples-bad.md"),
-    ),
-    (
-        "soul/examples/greetings.md",
-        include_str!("../../../templates/soul/examples-greetings.md"),
-    ),
-    (
-        "work/README.md",
-        include_str!("../../../templates/work-README.md"),
-    ),
+    ("work/PROFILE.md", template!("work-PROFILE.md")),
 ];
 
-/// Entry templates, keyed by entry type.
-pub const ENTRY_TEMPLATES: &[(&str, &str)] = &[
-    (
-        "character",
-        include_str!("../../../templates/entries/character.md"),
-    ),
-    (
-        "location",
-        include_str!("../../../templates/entries/location.md"),
-    ),
-    (
-        "location-detail",
-        include_str!("../../../templates/entries/location-detail.md"),
-    ),
-    (
-        "culture",
-        include_str!("../../../templates/entries/culture.md"),
-    ),
-    (
-        "faction",
-        include_str!("../../../templates/entries/faction.md"),
-    ),
-    ("era", include_str!("../../../templates/entries/era.md")),
-    ("event", include_str!("../../../templates/entries/event.md")),
-    (
-        "thread",
-        include_str!("../../../templates/entries/thread.md"),
-    ),
-    (
-        "conflict",
-        include_str!("../../../templates/entries/conflict.md"),
-    ),
-    (
-        "lesson",
-        include_str!("../../../templates/entries/lesson.md"),
-    ),
-    (
-        "writing",
-        include_str!("../../../templates/entries/writing.md"),
-    ),
-    ("log", include_str!("../../../templates/entries/log.md")),
-    (
-        "journal",
-        include_str!("../../../templates/entries/journal.md"),
-    ),
-    (
-        "project",
-        include_str!("../../../templates/entries/project.md"),
-    ),
-    ("note", include_str!("../../../templates/entries/note.md")),
-];
-
-/// Every template as (name shown by `owo templates`, file name looked up in `.templates/`, built-in text).
 pub fn all() -> Vec<(&'static str, String, &'static str)> {
     IDENTITY_FILES
         .iter()
         .map(|(n, t)| (*n, n.to_string(), *t))
-        .chain(
-            ENTRY_TEMPLATES
-                .iter()
-                .map(|(n, t)| (*n, format!("{n}.md"), *t)),
-        )
+        .chain(crate::identity::entry_types().map(|k| {
+            let n = k.name();
+            let t = k.template().expect("an entry type has a template");
+            (n, format!("{n}.md"), t)
+        }))
         .collect()
 }
 
-/// The override for a template: `<root>/.templates/<file>`, where `<file>` is the name from `all`.
 pub fn override_path(root: &Path, file: &str) -> Option<PathBuf> {
     Some(root.join(".templates").join(file)).filter(|p| p.is_file())
 }
 
-/// Returns the template text for a name, preferring its override in `<root>/.templates/`.
 pub fn get(root: &Path, name: &str, builtin: &str) -> String {
     override_path(root, name)
         .and_then(|p| fs::read_to_string(p).ok())
@@ -136,9 +62,6 @@ fn placeholder_re() -> &'static Regex {
     RE.get_or_init(|| Regex::new(r"\{\{(\w+)\}\}").expect("valid regex"))
 }
 
-/// Replaces `{{key}}` placeholders in one pass, so a value that holds `{{key}}` text stays as
-/// written. Keys ending in `_yaml` get double-quote YAML escaping, keys ending in `_json` JSON
-/// string escaping.
 pub fn fill(template: &str, values: &BTreeMap<&str, String>) -> String {
     placeholder_re()
         .replace_all(template, |cap: &Captures| {
@@ -158,7 +81,6 @@ pub fn fill(template: &str, values: &BTreeMap<&str, String>) -> String {
         .into_owned()
 }
 
-/// Escapes a value for a double-quoted YAML string.
 pub fn yaml_escape(value: &str) -> String {
     value
         .replace('\\', "\\\\")
@@ -187,7 +109,8 @@ mod tests {
 
     #[test]
     fn every_entry_template_has_frontmatter() {
-        for (name, text) in ENTRY_TEMPLATES {
+        for kind in crate::identity::entry_types() {
+            let (name, text) = (kind.name(), kind.template().expect("a template"));
             assert!(text.starts_with("---\n"), "{name}");
             assert!(text.contains(&format!("type: {name}\n")), "{name}");
         }

@@ -1,18 +1,14 @@
-//! State files: `soul/state.json`, `life/state.json`, `work/state.json`.
-//! Each tracks authored Markdown files by content hash with an `updated` stamp.
-
 use crate::identity::{Identity, Kind};
 use chrono::{DateTime, NaiveDate, SecondsFormat, Utc};
 use serde_json::{json, Map, Value};
 
-pub const SCOPES: [&str; 3] = ["soul", "life", "work"];
+pub const SCOPES: [&str; 3] = ["persona", "life", "work"];
 
 pub fn hash(text: &str) -> String {
     format!("b3:{}", blake3::hash(text.as_bytes()).to_hex())
 }
 
-/// The `YYYY-MM-DD` part of a stamp, or the whole text when it is shorter.
-pub(crate) fn day(stamp: &str) -> &str {
+pub fn day(stamp: &str) -> &str {
     stamp.get(..10).unwrap_or(stamp)
 }
 
@@ -20,7 +16,6 @@ pub fn now() -> String {
     Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true)
 }
 
-/// The local day, as `YYYY-MM-DD`: the day frontmatter dates name.
 pub fn local_today() -> String {
     chrono::Local::now().format("%Y-%m-%d").to_string()
 }
@@ -32,12 +27,10 @@ pub fn local_day_ago(days: i64) -> String {
         .to_string()
 }
 
-/// The UTC day of `now`, as `YYYY-MM-DD`.
 pub fn today() -> String {
     day(&now()).to_string()
 }
 
-/// A zero-padded `YYYY-MM-DD` day. Also the clap parser for date flags.
 pub fn parse_day(value: &str) -> Result<NaiveDate, String> {
     let shaped = value.len() == 10
         && value.bytes().enumerate().all(|(i, b)| match i {
@@ -50,7 +43,6 @@ pub fn parse_day(value: &str) -> Result<NaiveDate, String> {
     }
 }
 
-/// Splits `life/events/x.md` into (`life`, `events/x.md`).
 pub fn scope_of(rel: &str) -> Option<(&'static str, &str)> {
     SCOPES.iter().find_map(|s| {
         rel.strip_prefix(s)
@@ -59,7 +51,6 @@ pub fn scope_of(rel: &str) -> Option<(&'static str, &str)> {
     })
 }
 
-/// Authored files tracked in state: everything except generated indexes.
 pub fn tracked(identity: &Identity) -> impl Iterator<Item = &crate::identity::Entry> {
     identity
         .entries
@@ -67,41 +58,32 @@ pub fn tracked(identity: &Identity) -> impl Iterator<Item = &crate::identity::En
         .filter(|e| e.kind != Kind::Generated && e.kind != Kind::Unknown)
 }
 
-/// Fresh state documents for a just-created identity, all files stamped `at`.
 pub fn initial(identity: &Identity, at: &str) -> Vec<(String, Value)> {
-    let mut files: Map<String, Value> = SCOPES
+    let memory_hash = identity.entry("persona/MEMORY.md").map(|e| hash(&e.text));
+    SCOPES
         .iter()
-        .map(|s| (s.to_string(), Value::Object(Map::new())))
-        .collect();
-    for e in tracked(identity) {
-        if let Some((scope, rel)) = scope_of(&e.rel) {
-            if let Some(Value::Object(m)) = files.get_mut(scope) {
-                m.insert(
-                    rel.to_string(),
-                    json!({ "updated": at, "hash": hash(&e.text) }),
-                );
-            }
-        }
-    }
-    let memory_hash = identity.entry("soul/MEMORY.md").map(|e| hash(&e.text));
-    let take = |files: &mut Map<String, Value>, s: &str| {
-        files.remove(s).unwrap_or(Value::Object(Map::new()))
-    };
-    let soul = json!({
-        "files": take(&mut files, "soul"),
-        "history": [],
-        "review": { "last_reviewed": null, "reviewed_through": null, "memory_hash": memory_hash }
-    });
-    let life = json!({ "files": take(&mut files, "life") });
-    let work = json!({ "files": take(&mut files, "work") });
-    vec![
-        ("soul/state.json".into(), soul),
-        ("life/state.json".into(), life),
-        ("work/state.json".into(), work),
-    ]
+        .map(|scope| {
+            let files: Map<String, Value> = tracked(identity)
+                .filter_map(|e| match scope_of(&e.rel) {
+                    Some((s, rel)) if s == *scope => {
+                        Some((rel.to_string(), json!({ "updated": at, "hash": hash(&e.text) })))
+                    }
+                    _ => None,
+                })
+                .collect();
+            let doc = match *scope {
+                "persona" => json!({
+                    "files": files,
+                    "changelog": [],
+                    "reflection": { "last_reflected": null, "reflected_through": null, "memory_hash": memory_hash }
+                }),
+                _ => json!({ "files": files }),
+            };
+            (format!("{scope}/state.json"), doc)
+        })
+        .collect()
 }
 
-/// The loaded `<scope>/state.json`, or Null when it is missing or does not parse.
 pub fn doc<'a>(id: &'a Identity, scope: &str) -> &'a Value {
     &id.state[SCOPES
         .iter()
@@ -109,13 +91,11 @@ pub fn doc<'a>(id: &'a Identity, scope: &str) -> &'a Value {
         .expect("a known scope")]
 }
 
-/// The `updated` stamp of an identity-relative path.
 pub fn updated<'a>(id: &'a Identity, rel: &str) -> Option<&'a str> {
     let (scope, rest) = scope_of(rel)?;
     doc(id, scope)["files"][rest]["updated"].as_str()
 }
 
-/// Every `updated` stamp as (scope, scope-relative path, stamp), in `SCOPES` order.
 pub fn stamps(id: &Identity) -> impl Iterator<Item = (&'static str, &str, &str)> {
     SCOPES.iter().flat_map(move |scope| {
         doc(id, scope)["files"]
@@ -126,34 +106,28 @@ pub fn stamps(id: &Identity) -> impl Iterator<Item = (&'static str, &str, &str)>
     })
 }
 
-/// The soul change records in `soul/state.json` → `history`, oldest first.
-pub fn history(id: &Identity) -> &[Value] {
-    doc(id, "soul")["history"]
+pub fn changelog(id: &Identity) -> &[Value] {
+    doc(id, "persona")["changelog"]
         .as_array()
         .map_or(&[], Vec::as_slice)
 }
 
-/// The day at the start of a date or stamp, when it parses.
 pub fn date_of(text: &str) -> Option<NaiveDate> {
     parse_day(text.get(..10)?).ok()
 }
 
-/// Review status from `soul/state.json` → `review` and `identity.json` → `review_every_days`.
-pub struct Review {
-    pub last_reviewed: Option<String>,
-    pub reviewed_through: Option<NaiveDate>,
-    /// Days since `last_reviewed`; None when never reviewed or not an RFC 3339 timestamp.
+pub struct Reflection {
+    pub last_reflected: Option<String>,
+    pub reflected_through: Option<NaiveDate>,
     pub days_since: Option<i64>,
     pub every_days: i64,
     pub due: bool,
-    /// MEMORY.md exists and its hash differs from the one the last review recorded.
     pub memory_changed: bool,
 }
 
-impl Review {
-    /// True when a story date parses and falls after `reviewed_through` (or nothing is reviewed).
-    pub fn unreviewed(&self, date: Option<&str>) -> bool {
-        match (date.and_then(date_of), self.reviewed_through) {
+impl Reflection {
+    pub fn unreflected(&self, date: Option<&str>) -> bool {
+        match (date.and_then(date_of), self.reflected_through) {
             (Some(d), Some(r)) => d > r,
             (Some(_), None) => true,
             _ => false,
@@ -161,21 +135,21 @@ impl Review {
     }
 }
 
-pub fn review(id: &Identity) -> Review {
-    let field = |key: &str| doc(id, "soul")["review"][key].as_str();
-    let last_reviewed = field("last_reviewed").map(str::to_string);
-    let every_days = id.manifest["review_every_days"].as_i64().unwrap_or(7);
-    let days_since = last_reviewed
+pub fn reflection(id: &Identity) -> Reflection {
+    let field = |key: &str| doc(id, "persona")["reflection"][key].as_str();
+    let last_reflected = field("last_reflected").map(str::to_string);
+    let every_days = id.manifest["reflect_every_days"].as_i64().unwrap_or(7);
+    let days_since = last_reflected
         .as_deref()
         .and_then(|t| DateTime::parse_from_rfc3339(t).ok())
         .map(|t| (Utc::now() - t.with_timezone(&Utc)).num_days());
-    let memory_hash = id.entry("soul/MEMORY.md").map(|e| hash(&e.text));
-    Review {
-        reviewed_through: field("reviewed_through").and_then(date_of),
+    let memory_hash = id.entry("persona/MEMORY.md").map(|e| hash(&e.text));
+    Reflection {
+        reflected_through: field("reflected_through").and_then(date_of),
         days_since,
         every_days,
         due: days_since.is_none_or(|d| d >= every_days),
         memory_changed: memory_hash.is_some() && memory_hash.as_deref() != field("memory_hash"),
-        last_reviewed,
+        last_reflected,
     }
 }

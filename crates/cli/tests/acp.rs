@@ -1,5 +1,3 @@
-//! End-to-end tests for `owo acp`: a fake agent (`tests/fixtures/acp-agent.sh`) behind the proxy.
-
 mod common;
 
 use common::acp::*;
@@ -7,12 +5,10 @@ use common::{copy_example, examples, owo};
 use serde_json::json;
 use tempfile::TempDir;
 
-/// The picker of a root that holds only nicole.
 fn nicole_only(current: &str) -> serde_json::Value {
     json!([picker(current, &["nicole"])])
 }
 
-/// The path of the owo binary, which `owo acp` gives as the MCP server command.
 fn owo_bin() -> String {
     assert_cmd::cargo::cargo_bin("owo").display().to_string()
 }
@@ -81,7 +77,6 @@ fn passes_lines_through_and_stores_turns_once() {
     ];
     for (i, (line, reply)) in sent.iter().zip(&replies).enumerate() {
         if i == 1 || i == 7 {
-            // A session response gets the identity picker, and the `owo` command follows.
             p.open(line, reply, "s1", nicole_only("nicole"));
         } else {
             p.send(line, reply);
@@ -92,14 +87,12 @@ fn passes_lines_through_and_stores_turns_once() {
     assert_eq!(got.len(), sent.len());
     for (i, (got, sent)) in got.iter().zip(&sent).enumerate() {
         if i == 5 {
-            // The first prompt of a new session gets the identity block first.
             let mut got = parse(got);
             let block = got["params"]["prompt"].as_array_mut().unwrap().remove(0);
             assert_eq!(block["type"], "text");
             assert!(block["text"].as_str().unwrap().contains("\"nicole\""));
             assert_eq!(got, parse(sent));
         } else if i == 1 || i == 7 {
-            // A session request gets the owo MCP server.
             let mut want = parse(sent);
             want["params"]["mcpServers"] = json!([owo_server()]);
             assert_eq!(parse(got), want);
@@ -145,7 +138,6 @@ fn adds_the_mcp_server_to_each_session_request() {
         prompt(4, "s2", &["hi"]),
     ];
     let replies = [
-        // The proxy does not use the `systemPrompt` capability, also when the agent has it.
         vec![init_reply(json!({ "systemPrompt": {} }))],
         vec![response(1, json!({ "sessionId": "s2" }))],
         vec![response(2, json!({}))],
@@ -170,7 +162,6 @@ fn adds_the_mcp_server_to_each_session_request() {
         want["params"]["mcpServers"] = servers;
         assert_eq!(parse(&got[i]), want, "only the server list changes");
     }
-    // The first prompt of the new session tells the agent to load the identity.
     let mut first = parse(&got[4]);
     let block = first["params"]["prompt"].as_array_mut().unwrap().remove(0);
     let text = block["text"].as_str().unwrap();
@@ -271,12 +262,10 @@ fn inject_puts_the_identity_context_in_the_first_prompt() {
     );
 }
 
-/// A select option of the fake agent.
 fn mode(current: &str) -> serde_json::Value {
     json!({ "id": "mode", "name": "Mode", "type": "select", "currentValue": current, "options": [{ "value": "ask", "name": "Ask" }, { "value": "code", "name": "Code" }] })
 }
 
-/// The first prompt block of an agent line, taken out of the prompt.
 fn block(line: &str) -> (String, serde_json::Value) {
     let mut msg = parse(line);
     let block = msg["params"]["prompt"].as_array_mut().unwrap().remove(0);
@@ -298,7 +287,6 @@ fn the_picker_switches_the_identity_of_a_session() {
         "s",
         json!([mode("ask"), picker("nicole", &ids)]),
     );
-    // The agent's command list gets `owo`.
     let web = json!({ "name": "web", "description": "Search the web" });
     let agent_commands = session_update(
         "s",
@@ -311,7 +299,6 @@ fn the_picker_switches_the_identity_of_a_session() {
     );
     assert_eq!(parse(&got[0]), commands("s", &[web]));
     assert_eq!(got[1..], [chunk("s", Some("m1"), "yo"), end(2)]);
-    // Another option passes to the agent, and its answer and its update get the picker.
     let set_mode = request(
         3,
         "session/set_config_option",
@@ -337,7 +324,6 @@ fn the_picker_switches_the_identity_of_a_session() {
     let mut want = agent_update;
     want["params"]["update"]["configOptions"] = full;
     assert_eq!(parse(&got[1]), want);
-    // The identity option never reaches the agent.
     let got = p.ask(
         &request(
             4,
@@ -368,7 +354,6 @@ fn the_picker_switches_the_identity_of_a_session() {
         &prompt(6, "s", &["next"]),
         &[chunk("s", Some("m2"), "ok"), end(6)],
     );
-    // A loaded session gets the picker after the agent's options, and its replay is stored.
     p.open(
         &request(
             7,
@@ -537,7 +522,6 @@ fn a_turn_stays_with_the_identity_it_started_with() {
         "s",
         json!([picker("nicole", &["nicole", "reviewer"])]),
     );
-    // The prompt is still open when the identity changes.
     p.send(
         &prompt(2, "s", &["question for nicole"]),
         &[chunk("s", Some("m1"), "answer as nicole")],
@@ -586,7 +570,6 @@ fn an_agent_with_only_modes_gets_no_picker() {
         "a client would hide `modes` when it gets `configOptions`"
     );
     assert_eq!(parse(&got[1]), commands("s", &[]));
-    // The command still switches, with no config update. A tab ends the command name too.
     let got = p.ask(&prompt(2, "s", &["/owo\treviewer"]), 2);
     assert!(got[0].contains("now records into"), "{}", got[0]);
     assert_eq!(parse(&got[1]), parse(&end(2)));
@@ -615,7 +598,6 @@ fn text_a_client_adds_to_a_prompt_is_not_stored() {
         &prompt(3, "s", &["<b>bold</b> stays", notes]),
         &[chunk("s", Some("m2"), "ok"), end(3)],
     );
-    // The command is found inside the element too.
     let wrapped = "<t3_code_instructions>x</t3_code_instructions>\n<user_request>\n/owo reviewer\n</user_request>";
     let got = p.ask(&prompt(4, "s", &[wrapped, notes]), 3);
     assert!(got[0].contains("now records into"), "{}", got[0]);

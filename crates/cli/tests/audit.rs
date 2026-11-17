@@ -1,5 +1,3 @@
-//! One test per open finding from the full review. Each fails until its bug is fixed.
-
 mod common;
 
 use common::acp::{
@@ -104,12 +102,12 @@ fn card_greetings_skip_headings_in_code_fences() {
     let tmp = thea();
     let dir = tmp.path().join("thea");
     fs::write(
-        dir.join("soul/examples/greetings.md"),
+        dir.join("persona/examples/greetings.md"),
         "# Greetings\n\n## Hello\n\nHi there.\n\n```md\n## Not a greeting\n```\n",
     )
     .unwrap();
     let out = owo(tmp.path())
-        .args(["-i", "thea", "export", "card"])
+        .args(["-i", "thea", "export", "persona-card"])
         .output()
         .unwrap();
     let card: Value = serde_json::from_slice(&out.stdout).unwrap();
@@ -170,7 +168,7 @@ fn add(root: &Path, args: &[&str]) {
 
 fn card(root: &Path) -> Value {
     let out = owo(root)
-        .args(["-i", "thea", "export", "card"])
+        .args(["-i", "thea", "export", "persona-card"])
         .output()
         .unwrap();
     serde_json::from_slice(&out.stdout).unwrap()
@@ -180,11 +178,11 @@ fn card(root: &Path) -> Value {
 fn a_blank_log_does_not_hide_recent_events() {
     let tmp = thea();
     add(tmp.path(), &["event", "Storm", "--date", "2020-05-01"]);
-    add(tmp.path(), &["log", "--date", "2020-05-03"]);
-    let log = tmp.path().join("thea/life/log/2020-05-03.md");
+    add(tmp.path(), &["daily-log", "Day", "--date", "2020-05-03"]);
+    let log = tmp.path().join("thea/life/daily-log/2020-05-03_day.md");
     let text = fs::read_to_string(&log).unwrap();
     fs::write(&log, format!("{text}\n- Rowed out.\n")).unwrap();
-    add(tmp.path(), &["log", "--date", "2020-06-01"]);
+    add(tmp.path(), &["daily-log", "Day", "--date", "2020-06-01"]);
     let out = owo(tmp.path())
         .args(["-i", "thea", "state"])
         .output()
@@ -232,7 +230,7 @@ fn context_with_loads_each_file_once() {
         .output()
         .unwrap();
     let paths = String::from_utf8(out.stdout).unwrap();
-    assert_eq!(paths.matches("soul/IDENTITY.md").count(), 1, "{paths}");
+    assert_eq!(paths.matches("persona/IDENTITY.md").count(), 1, "{paths}");
     assert_eq!(
         paths.matches("life/characters/jay-doe.md").count(),
         1,
@@ -261,14 +259,17 @@ fn lorebook_lists_locations_before_events() {
 }
 
 #[test]
-fn context_puts_the_now_block_last() {
+fn context_puts_the_current_state_last() {
     let tmp = thea();
     let args = ["context", "--voice", "--look"];
     let text = stdout(tmp.path(), &args);
     let last = text.lines().rfind(|l| l.starts_with("<!-- owo:")).unwrap();
-    assert_eq!(last, "<!-- owo: now -->", "{text}");
+    assert_eq!(last, "<!-- owo: current state -->", "{text}");
     let paths = stdout(tmp.path(), &[&args[..], &["--format", "paths"]].concat());
-    assert!(paths.ends_with("now      (generated block)\n"), "{paths}");
+    assert!(
+        paths.ends_with("state    (generated current state)\n"),
+        "{paths}"
+    );
 }
 
 fn git(dir: &Path, args: &[&str], date: Option<&str>) {
@@ -332,13 +333,13 @@ fn stamp_with_a_broken_soul_json_touches_no_entry() {
         .to_string();
     let text = text.replace(&updated, "updated: 2000-01-01");
     fs::write(&bob, format!("{text}\nx\n")).unwrap();
-    let soul = dir.join("soul/SOUL.md");
+    let soul = dir.join("persona/SOUL.md");
     fs::write(
         &soul,
         format!("{}\nx\n", fs::read_to_string(&soul).unwrap()),
     )
     .unwrap();
-    fs::write(dir.join("soul/soul.json"), "{bad").unwrap();
+    fs::write(dir.join("persona/soul.json"), "{bad").unwrap();
     owo(tmp.path())
         .args(["-i", "thea", "stamp"])
         .assert()
@@ -351,12 +352,12 @@ fn stamp_with_a_broken_soul_json_touches_no_entry() {
 fn recurring_phrases_stay_inside_one_line() {
     let tmp = thea();
     for day in ["2026-01-01", "2026-01-02", "2026-01-03"] {
-        add(tmp.path(), &["log", "--date", day]);
-        let log = tmp.path().join(format!("thea/life/log/{day}.md"));
+        add(tmp.path(), &["daily-log", "Day", "--date", day]);
+        let log = tmp.path().join(format!("thea/life/daily-log/{day}_day.md"));
         let text = fs::read_to_string(&log).unwrap();
         fs::write(&log, format!("{text}\n- Fed cat\n- Walked home\n")).unwrap();
     }
-    let packet = stdout(tmp.path(), &["review"]);
+    let packet = stdout(tmp.path(), &["reflect"]);
     assert!(!packet.contains("cat walked"), "{packet}");
 }
 
@@ -398,8 +399,8 @@ fn an_ambiguous_link_is_not_two_pieces_of_evidence() {
         .args([
             "-i",
             "thea",
-            "soul",
-            "note",
+            "persona",
+            "change",
             "SOUL.md",
             "--change",
             "x",
@@ -408,17 +409,17 @@ fn an_ambiguous_link_is_not_two_pieces_of_evidence() {
         ])
         .assert()
         .success();
-    add(tmp.path(), &["lesson", "Other"]);
-    let lesson = tmp.path().join("thea/life/lessons/other.md");
+    add(tmp.path(), &["insight", "Other"]);
+    let lesson = tmp.path().join("thea/life/insights/other.md");
     let text = fs::read_to_string(&lesson).unwrap();
     fs::write(
         &lesson,
         text.replace("aliases: []", "aliases:\n  - \"Mara\""),
     )
     .unwrap();
-    let v = json(owo(tmp.path()).args(["-i", "thea", "lint", "--rule", "soul-evidence"]));
+    let v = json(owo(tmp.path()).args(["-i", "thea", "lint", "--rule", "persona-evidence"]));
     let warnings = messages(&v, "warnings");
-    assert!(warnings.contains("history[0]"), "{warnings}");
+    assert!(warnings.contains("changelog[0]"), "{warnings}");
 }
 
 #[test]
@@ -444,23 +445,21 @@ fn lint_changed_keeps_a_path_with_a_quote() {
     git(tmp.path(), &["init", "-q"], None);
     git(tmp.path(), &["add", "-A"], None);
     git(tmp.path(), &["commit", "-q", "-m", "init"], None);
-    let file = tmp.path().join("thea/soul/examples/a\"b.md");
+    let file = tmp.path().join("thea/persona/examples/a\"b.md");
     fs::write(&file, "See [[Nobody]].\n").unwrap();
     // Stamped and its state committed, so only Git can name the file as changed.
     owo(tmp.path())
         .args(["-i", "thea", "stamp"])
         .assert()
         .success();
-    git(tmp.path(), &["add", "thea/soul/state.json"], None);
+    git(tmp.path(), &["add", "thea/persona/state.json"], None);
     git(tmp.path(), &["commit", "-q", "-m", "stamp"], None);
     let v = json(owo(tmp.path()).args(["-i", "thea", "lint", "--rule", "links", "--changed"]));
     let errors = messages(&v, "errors");
     assert!(errors.contains("Nobody"), "{errors}");
     let out = stdout(tmp.path(), &["changes"]);
-    assert!(out.contains("soul/examples/a\"b.md"), "{out}");
+    assert!(out.contains("persona/examples/a\"b.md"), "{out}");
 }
-
-// Findings from the review of the library core, the in-process MCP calls and `owo acp`.
 
 fn call(id: u64, tool: &str, arguments: Value) -> Value {
     json!({ "jsonrpc": "2.0", "id": id, "method": "tools/call", "params": { "name": tool, "arguments": arguments } })
@@ -483,7 +482,6 @@ fn mcp_tool_does_not_read_the_servers_stdin() {
         "sync_start",
         json!({ "session": "s1", "transcript": "/dev/stdin", "now": true }),
     );
-    // The second request arrives while the first tool call runs.
     let mut stdin = child.stdin.take().unwrap();
     stdin.write_all(format!("{start}\n").as_bytes()).unwrap();
     std::thread::sleep(std::time::Duration::from_millis(300));
@@ -506,7 +504,7 @@ fn mcp_tool_output_stays_out_of_the_reply_stream() {
         &[
             call(
                 1,
-                "export_card",
+                "export_persona_card",
                 json!({ "png": avatar, "out": "/dev/stdout" }),
             ),
             call(2, "slug", json!({ "text": "Next One" })),
@@ -557,8 +555,6 @@ fn mcp_refuses_a_nul_in_an_argument() {
     assert!(!tmp.path().join("thea/life/characters/nul.md").exists());
 }
 
-/// The exit code of `owo <args>` on an empty root while the test keeps stdin open; None when
-/// owo is still running after two seconds.
 fn code_with_open_stdin(args: &[&str]) -> Option<i32> {
     let tmp = TempDir::new().unwrap();
     let mut child = std::process::Command::new(assert_cmd::cargo::cargo_bin("owo"))
@@ -610,7 +606,6 @@ fn help_into_a_closed_pipe_exits_zero() {
     assert_eq!(status.code(), Some(0));
 }
 
-/// A proxy on `root` with a new session `s1`.
 fn acp_session(root: &Path, flags: &[&str]) -> Proxy {
     let mut p = start(root, flags, 0);
     p.send(&init(), &[init_reply(json!({}))]);

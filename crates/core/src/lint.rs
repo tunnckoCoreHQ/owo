@@ -1,6 +1,4 @@
-//! `owo lint`: validates one identity against the design rules.
-
-use crate::identity::{Entry, Identity, Kind, LIFE_CATEGORIES, SOUL_FILES};
+use crate::identity::{life_categories, Entry, Identity, Kind, PERSONA_FILES};
 use crate::markdown;
 use crate::output::{Diagnostic, Level};
 use crate::slug::is_slug;
@@ -10,7 +8,6 @@ use serde_json::Value as Json;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fs;
 
-/// Soft word budgets for soul files.
 pub const BUDGETS: &[(&str, usize)] = &[
     ("IDENTITY.md", 800),
     ("SOUL.md", 800),
@@ -22,55 +19,47 @@ pub const BUDGETS: &[(&str, usize)] = &[
 const DUPE_WORDS: usize = 12;
 const STATUSES: &[&str] = &["canon", "disputed", "superseded"];
 
-/// A rule appends its findings; the runner names them after the rule.
 type Check = fn(&Identity, &mut Vec<Diagnostic>);
 
-/// Every rule, in run order.
 const CHECKS: &[(&str, Check)] = &[
     ("tree", tree),
     ("schema", schema),
-    ("soul-plain", soul_plain),
+    ("persona-plain", persona_plain),
     ("links", links),
     ("unique", unique),
     ("identifiers", identifiers),
     ("journal", journal),
     ("supersede", supersede),
     ("generated", generated),
-    ("memory-review", memory_review),
+    ("memory-reflection", memory_reflection),
     ("state", state_rule),
     ("budget", budget),
     ("dupes", dupes),
     ("orphans", orphans),
-    ("soul-evidence", soul_evidence),
-    ("review-due", review_due),
-    ("kb", kb_links),
+    ("persona-evidence", persona_evidence),
+    ("reflection-due", reflection_due),
+    ("wiki", wiki_links),
 ];
 
-/// One lint rule.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Rule(usize);
 
 impl Rule {
-    /// Every rule, in run order.
     pub fn all() -> impl Iterator<Item = Rule> {
         (0..CHECKS.len()).map(Rule)
     }
+}
 
-    pub fn name(self) -> &'static str {
-        CHECKS[self.0].0
-    }
-
-    pub fn from_name(name: &str) -> Option<Rule> {
-        Rule::all().find(|r| r.name() == name)
+impl crate::Named for Rule {
+    fn rows() -> impl Iterator<Item = (Rule, &'static str)> {
+        CHECKS.iter().enumerate().map(|(i, c)| (Rule(i), c.0))
     }
 }
 
-/// Runs the `rules`, or every rule when `rules` is empty.
 pub fn run(id: &Identity, rules: &[Rule]) -> Vec<Diagnostic> {
     let mut out = vec![];
-    for rule in Rule::all() {
-        if rules.is_empty() || rules.contains(&rule) {
-            let (name, check) = CHECKS[rule.0];
+    for (i, (name, check)) in CHECKS.iter().enumerate() {
+        if rules.is_empty() || rules.contains(&Rule(i)) {
             let start = out.len();
             check(id, &mut out);
             for d in &mut out[start..] {
@@ -100,20 +89,19 @@ fn tree(id: &Identity, out: &mut Vec<Diagnostic>) {
     let dir = id.dir.clone();
     let mut required: Vec<String> = vec![
         "identity.json".into(),
-        "soul/soul.json".into(),
-        "soul/state.json".into(),
+        "persona/soul.json".into(),
+        "persona/state.json".into(),
         "life/state.json".into(),
         "work/state.json".into(),
-        "work/README.md".into(),
+        "work/PROFILE.md".into(),
     ];
-    required.extend(SOUL_FILES.iter().map(|f| format!("soul/{f}")));
+    required.extend(PERSONA_FILES.iter().map(|f| format!("persona/{f}")));
     for rel in &required {
         if !dir.join(rel).is_file() {
             out.push(err(rel, "required file is missing"));
         }
     }
-    let mut dirs: Vec<String> = LIFE_CATEGORIES
-        .iter()
+    let mut dirs: Vec<String> = life_categories()
         .map(|(cat, _)| format!("life/{cat}"))
         .collect();
     dirs.push("work/projects".into());
@@ -138,14 +126,14 @@ fn tree(id: &Identity, out: &mut Vec<Diagnostic>) {
         }
         _ => {}
     }
-    if dir.join("soul/soul.json").is_file() {
-        match id.read_json("soul/soul.json") {
-            None => out.push(err("soul/soul.json", "invalid JSON")),
+    if dir.join("persona/soul.json").is_file() {
+        match id.read_json("persona/soul.json") {
+            None => out.push(err("persona/soul.json", "invalid JSON")),
             Some(s) => {
                 for key in ["specVersion", "name", "displayName", "version"] {
                     if s.get(key).and_then(Json::as_str).is_none_or(str::is_empty) {
                         out.push(err(
-                            "soul/soul.json",
+                            "persona/soul.json",
                             format!("SoulSpec field {key:?} is missing"),
                         ));
                     }
@@ -224,10 +212,10 @@ fn check_entry_schema(e: &Entry, out: &mut Vec<Diagnostic>) {
         out.push(err(rel, "title is missing"));
     }
     for name in e.title.iter().chain(&e.aliases) {
-        if name.contains(crate::markdown::LINK_BREAKERS) {
+        if name.contains(crate::markdown::WIKILINK_BREAKERS) {
             out.push(err(
                 rel,
-                format!("{name:?} holds # | [ or ], which break a [[link]] to it"),
+                format!("{name:?} holds # | [ or ], which break a [[wikilink]] to it"),
             ));
         }
     }
@@ -253,7 +241,7 @@ fn check_entry_schema(e: &Entry, out: &mut Vec<Diagnostic>) {
             Some(_) => out.push(err(rel, format!("{key} must be a list of strings"))),
         }
     }
-    let needs_summary = !matches!(e.kind, Kind::Log | Kind::Journal | Kind::Writing);
+    let needs_summary = !matches!(e.kind, Kind::DailyLog | Kind::Journal | Kind::Writing);
     if needs_summary && e.field_str("summary").is_none_or(|s| s.trim().is_empty()) {
         out.push(warn(rel, "summary is empty; indexes and search use it"));
     }
@@ -263,34 +251,20 @@ fn check_entry_schema(e: &Entry, out: &mut Vec<Diagnostic>) {
         .next()
         .unwrap_or_default()
         .trim_end_matches(".md");
-    match e.kind.dated() {
-        Some(with_slug) => {
-            let date = e.field_str("date");
-            match date.as_deref().and_then(parse_date) {
-                None => out.push(err(rel, "date is missing or not YYYY-MM-DD")),
-                Some(d) => {
-                    let d = d.format("%Y-%m-%d").to_string();
-                    let ok = if with_slug {
-                        file.strip_prefix(&format!("{d}_")).is_some_and(is_slug)
-                    } else {
-                        file == d
-                    };
-                    if !ok {
-                        let want = if with_slug {
-                            format!("{d}_<slug>.md")
-                        } else {
-                            format!("{d}.md")
-                        };
-                        out.push(err(rel, format!("file name must be {want}")));
-                    }
+    if e.kind.dated() {
+        match e.field_str("date").as_deref().and_then(parse_date) {
+            None => out.push(err(rel, "date is missing or not YYYY-MM-DD")),
+            Some(d) => {
+                let d = d.format("%Y-%m-%d").to_string();
+                if !file.strip_prefix(&format!("{d}_")).is_some_and(is_slug) {
+                    out.push(err(rel, format!("file name must be {d}_<slug>.md")));
                 }
             }
         }
-        None => {
-            let stem = e.stem_key();
-            if !is_slug(&stem) && !(e.kind == Kind::Location && file == "overview") {
-                out.push(err(rel, format!("file name {stem:?} must be a slug")));
-            }
+    } else {
+        let stem = e.stem_key();
+        if !is_slug(&stem) && !(e.kind == Kind::Location && file == "overview") {
+            out.push(err(rel, format!("file name {stem:?} must be a slug")));
         }
     }
     let state_field =
@@ -310,10 +284,10 @@ fn check_entry_schema(e: &Entry, out: &mut Vec<Diagnostic>) {
             {
                 out.push(err(rel, "event date is missing or not YYYY-MM-DD"));
             }
-            if let Some(v) = e.field_str("end_date") {
-                if parse_date(&v).is_none() {
-                    out.push(err(rel, "end_date is not YYYY-MM-DD"));
-                }
+            if e.field_str("end_date")
+                .is_some_and(|v| parse_date(&v).is_none())
+            {
+                out.push(err(rel, "end_date is not YYYY-MM-DD"));
             }
         }
         Kind::Thread => state_field("state", &["open", "closed"], out),
@@ -323,7 +297,7 @@ fn check_entry_schema(e: &Entry, out: &mut Vec<Diagnostic>) {
                 out.push(err(rel, "parent is missing"));
             }
         }
-        Kind::Note => {
+        Kind::ProjectNote => {
             let folder = rel.split('/').nth(2).unwrap_or_default();
             if e.field_str("project").as_deref() != Some(folder) {
                 out.push(err(rel, format!("project must be {folder:?}")));
@@ -333,52 +307,48 @@ fn check_entry_schema(e: &Entry, out: &mut Vec<Diagnostic>) {
     }
 }
 
-fn soul_plain(id: &Identity, out: &mut Vec<Diagnostic>) {
-    for e in id
-        .entries
-        .iter()
-        .filter(|e| e.kind == Kind::Soul && e.text.starts_with("---"))
-    {
-        out.push(err(
-            &e.rel,
-            "soul files are plain Markdown; stamps live in soul/state.json",
-        ));
-    }
+fn persona_plain(id: &Identity, out: &mut Vec<Diagnostic>) {
+    out.extend(
+        id.entries
+            .iter()
+            .filter(|e| e.kind == Kind::Persona && e.text.starts_with("---"))
+            .map(|e| {
+                err(
+                    &e.rel,
+                    "persona files are plain Markdown; stamps live in persona/state.json",
+                )
+            }),
+    );
 }
 
 fn links(id: &Identity, out: &mut Vec<Diagnostic>) {
     for e in id.entries.iter().filter(|e| !e.is_generated()) {
-        for (line, link) in crate::find::file_links(e) {
-            let hits = id.resolve_link(&link.target);
-            match hits.len() {
-                0 => {
-                    out.push(err(&e.rel, format!("[[{}]] does not resolve", link.target)).at(line))
-                }
+        for (line, link) in crate::find::file_wikilinks(e) {
+            let hits = id.resolve_wikilink(&link.target);
+            let d = match hits.len() {
+                0 => err(&e.rel, format!("[[{}]] does not resolve", link.target)),
                 1 => {
                     let target = &id.entries[hits[0]];
-                    if let Some(s) = link.section.as_deref().filter(|s| !s.is_empty()) {
-                        if markdown::section(target.body(), s).is_none() {
-                            out.push(
-                                warn(
-                                    &e.rel,
-                                    format!(
-                                        "[[{}#{s}]]: {} has no section {s:?}",
-                                        link.target, target.rel
-                                    ),
-                                )
-                                .at(line),
-                            );
-                        }
+                    let Some(s) = link.section.as_deref().filter(|s| !s.is_empty()) else {
+                        continue;
+                    };
+                    if markdown::section(target.body(), s).is_some() {
+                        continue;
                     }
-                }
-                _ => out.push(
                     warn(
                         &e.rel,
-                        format!("[[{}]] matches {} entries", link.target, hits.len()),
+                        format!(
+                            "[[{}#{s}]]: {} has no section {s:?}",
+                            link.target, target.rel
+                        ),
                     )
-                    .at(line),
+                }
+                _ => warn(
+                    &e.rel,
+                    format!("[[{}]] matches {} entries", link.target, hits.len()),
                 ),
-            }
+            };
+            out.push(d.at(line));
         }
     }
 }
@@ -417,7 +387,6 @@ fn unique(id: &Identity, out: &mut Vec<Diagnostic>) {
     }
 }
 
-/// Identifier values and their home file.
 fn identifier_values(id: &Identity) -> Vec<(String, String)> {
     let mut out = vec![];
     for e in id.entries.iter().filter(|e| !e.is_generated()) {
@@ -450,7 +419,6 @@ fn identifier_values(id: &Identity) -> Vec<(String, String)> {
 fn identifiers(id: &Identity, out: &mut Vec<Diagnostic>) {
     let values = identifier_values(id);
     for e in &id.entries {
-        // In the home file, only the `## Identifiers` lines may hold the values.
         let split = markdown::split(&e.text);
         let home_lines: Vec<usize> = markdown::section(split.body, "Identifiers")
             .map(|(_, lines)| lines.iter().map(|(i, _)| i + split.body_line).collect())
@@ -480,20 +448,19 @@ fn journal(id: &Identity, out: &mut Vec<Diagnostic>) {
         .iter()
         .filter(|e| e.kind != Kind::Journal && !e.is_generated())
     {
-        for (line, link) in crate::find::raw_links(e) {
-            let hits = id.resolve_link(&link.target);
+        for (line, link) in crate::find::raw_wikilinks(e) {
+            let hits = id.resolve_wikilink(&link.target);
             if hits.iter().any(|&i| id.entries[i].kind == Kind::Journal) {
-                out.push(err(&e.rel, format!("[[{}]] links into life/journal/; journal links stay between journal entries", link.target)).at(line));
+                out.push(err(&e.rel, format!("[[{}]] links into life/journal/; journal wikilinks stay between journal entries", link.target)).at(line));
             }
         }
     }
 }
 
-/// Entries the links in `value` resolve to; an ambiguous link resolves to none.
-fn link_hits(id: &Identity, value: &str) -> Vec<usize> {
-    markdown::links(value)
+fn wikilink_hits(id: &Identity, value: &str) -> Vec<usize> {
+    markdown::wikilinks(value)
         .iter()
-        .filter_map(|l| match id.resolve_link(&l.target)[..] {
+        .filter_map(|l| match id.resolve_wikilink(&l.target)[..] {
             [one] => Some(one),
             _ => None,
         })
@@ -506,16 +473,16 @@ fn supersede(id: &Identity, out: &mut Vec<Diagnostic>) {
         .iter()
         .filter(|e| e.kind == Kind::Conflict && e.field_str("state").as_deref() == Some("open"))
         .flat_map(|e| {
-            crate::find::raw_links(e)
+            crate::find::raw_wikilinks(e)
                 .into_iter()
-                .flat_map(|(_, l)| id.resolve_link(&l.target))
+                .flat_map(|(_, l)| id.resolve_wikilink(&l.target))
         })
         .collect();
     for (idx, e) in id.entries.iter().enumerate() {
         match e.field_str("status").as_deref() {
             Some("superseded") => {
                 let target = e.field_str("superseded_by").unwrap_or_default();
-                if link_hits(id, &target).is_empty() {
+                if wikilink_hits(id, &target).is_empty() {
                     out.push(err(
                         &e.rel,
                         "superseded entries need superseded_by: \"[[Replacement]]\" that resolves",
@@ -539,22 +506,20 @@ fn generated(id: &Identity, out: &mut Vec<Diagnostic>) {
     }
 }
 
-fn memory_review(id: &Identity, out: &mut Vec<Diagnostic>) {
-    if state::doc(id, "soul").is_null() || !state::review(id).memory_changed {
+fn memory_reflection(id: &Identity, out: &mut Vec<Diagnostic>) {
+    if state::doc(id, "persona").is_null() || !state::reflection(id).memory_changed {
         return;
     }
     out.push(warn(
-        "soul/MEMORY.md",
-        "MEMORY.md changed outside a review; review compiles MEMORY (`owo review`)",
+        "persona/MEMORY.md",
+        "MEMORY.md changed outside a reflection; a reflection compiles MEMORY (`owo reflect`)",
     ));
 }
 
-/// The drift `owo stamp --check` reports, one warning per file.
 fn state_rule(id: &Identity, out: &mut Vec<Diagnostic>) {
     let report = match crate::stamp::run(id, true) {
         Ok(r) => r,
         Err(e) => {
-            // Only a state file that does not parse stops the check.
             let path = state::SCOPES
                 .iter()
                 .map(|s| format!("{s}/state.json"))
@@ -581,7 +546,7 @@ fn state_rule(id: &Identity, out: &mut Vec<Diagnostic>) {
 
 fn budget(id: &Identity, out: &mut Vec<Diagnostic>) {
     for (file, default) in BUDGETS {
-        let Some(e) = id.entry(&format!("soul/{file}")) else {
+        let Some(e) = id.entry(&format!("persona/{file}")) else {
             continue;
         };
         let limit = id.budget_override(file).unwrap_or(*default);
@@ -618,7 +583,6 @@ fn dupes(id: &Identity, out: &mut Vec<Diagnostic>) {
             owners.entry(s).or_default().push(i);
         }
     }
-    // Per file pair: how many windows they share, and the first shared one to quote.
     let mut pairs: BTreeMap<(usize, usize), (usize, &str)> = BTreeMap::new();
     for (s, files) in owners.iter().filter(|(_, f)| f.len() > 1) {
         for (a, x) in files.iter().enumerate() {
@@ -644,12 +608,12 @@ fn orphans(id: &Identity, out: &mut Vec<Diagnostic>) {
     out.extend(
         crate::find::orphans(id)
             .into_iter()
-            .map(|i| warn(&id.entries[i].rel, "zero inbound links")),
+            .map(|i| warn(&id.entries[i].rel, "zero inbound wikilinks")),
     );
 }
 
-fn soul_evidence(id: &Identity, out: &mut Vec<Diagnostic>) {
-    for (n, record) in state::history(id).iter().enumerate() {
+fn persona_evidence(id: &Identity, out: &mut Vec<Diagnostic>) {
+    for (n, record) in state::changelog(id).iter().enumerate() {
         let evidence: std::collections::BTreeSet<usize> = record
             .get("evidence")
             .and_then(Json::as_array)
@@ -657,7 +621,7 @@ fn soul_evidence(id: &Identity, out: &mut Vec<Diagnostic>) {
                 items
                     .iter()
                     .filter_map(Json::as_str)
-                    .flat_map(|v| link_hits(id, v))
+                    .flat_map(|v| wikilink_hits(id, v))
                     .collect()
             })
             .unwrap_or_default();
@@ -667,69 +631,62 @@ fn soul_evidence(id: &Identity, out: &mut Vec<Diagnostic>) {
         });
         if evidence.len() < 2 && !defining {
             out.push(warn(
-                "soul/state.json",
-                format!("history[{n}] needs two evidence links or one defining event"),
+                "persona/state.json",
+                format!("changelog[{n}] needs two evidence wikilinks or one defining event"),
             ));
         }
     }
 }
 
-fn review_due(id: &Identity, out: &mut Vec<Diagnostic>) {
-    let r = state::review(id);
-    let msg = match (&r.last_reviewed, r.days_since) {
-        (None, _) => {
-            Some("never reviewed; run `owo review` when there is something to compile".to_string())
+fn reflection_due(id: &Identity, out: &mut Vec<Diagnostic>) {
+    let r = state::reflection(id);
+    let msg = match (&r.last_reflected, r.days_since) {
+        (None, _) => Some(
+            "never reflected; run `owo reflect` when there is something to compile".to_string(),
+        ),
+        (Some(_), None) => {
+            Some("reflection.last_reflected is not an RFC 3339 timestamp".to_string())
         }
-        (Some(_), None) => Some("review.last_reviewed is not an RFC 3339 timestamp".to_string()),
         (Some(_), Some(days)) => r.due.then(|| {
             format!(
-                "review is due: {days} days since the last review (every {})",
+                "reflection is due: {days} days since the last reflection (every {})",
                 r.every_days
             )
         }),
     };
     if let Some(m) = msg {
-        out.push(Diagnostic::new(Level::Info, "soul/state.json", m));
+        out.push(Diagnostic::new(Level::Info, "persona/state.json", m));
     }
 }
 
-/// `[[kb:<p>:<path>#<Section>]]` links: the project must exist; when its KB folder exists,
-/// the file and section must too. A KB that is not checked out is skipped.
-fn kb_links(id: &Identity, out: &mut Vec<Diagnostic>) {
+fn wiki_links(id: &Identity, out: &mut Vec<Diagnostic>) {
     for e in id.entries.iter().filter(|e| !e.is_generated()) {
-        for (line, link) in crate::find::raw_links(e) {
-            let full = match &link.section {
-                Some(s) => format!("{}#{s}", link.target),
-                None => link.target.clone(),
+        for (line, link) in crate::find::raw_wikilinks(e) {
+            let full = link
+                .section
+                .as_ref()
+                .map_or(link.target.clone(), |s| format!("{}#{s}", link.target));
+            let d = match crate::wiki::link(id, &full) {
+                Some(Err(msg)) => err(&e.rel, msg),
+                Some(Ok(k)) if k.root_exists && !k.file_exists => warn(
+                    &e.rel,
+                    format!(
+                        "[[{}]]: {} not found",
+                        link.target,
+                        k.file.unwrap_or_default()
+                    ),
+                ),
+                Some(Ok(k)) if k.root_exists && !k.section_exists => warn(
+                    &e.rel,
+                    format!(
+                        "[[{}]]: no section {:?}",
+                        link.target,
+                        k.section.unwrap_or_default()
+                    ),
+                ),
+                _ => continue,
             };
-            match crate::kb::link(id, &full) {
-                None => {}
-                Some(Err(msg)) => out.push(err(&e.rel, msg).at(line)),
-                Some(Ok(k)) if !k.root_exists => {}
-                Some(Ok(k)) if !k.file_exists => out.push(
-                    warn(
-                        &e.rel,
-                        format!(
-                            "[[{}]]: {} not found",
-                            link.target,
-                            k.file.unwrap_or_default()
-                        ),
-                    )
-                    .at(line),
-                ),
-                Some(Ok(k)) if !k.section_exists => out.push(
-                    warn(
-                        &e.rel,
-                        format!(
-                            "[[{}]]: no section {:?}",
-                            link.target,
-                            k.section.unwrap_or_default()
-                        ),
-                    )
-                    .at(line),
-                ),
-                Some(Ok(_)) => {}
-            }
+            out.push(d.at(line));
         }
     }
 }

@@ -4,57 +4,61 @@ Every path of the owo skill that writes follows these rules. owo does the determ
 
 ## The home of each fact
 
-Each fact has one home. Write it there once, and link to it from everywhere else.
+Each fact has one home. Write it there once, and link to it from everywhere else with a Wikilink.
 
 | Fact | Home | Elsewhere |
 | :- | :- | :- |
-| A small thing today | `life/log/<day>.md`, one bullet (`owo add log`) | |
-| A happening worth recalling: a scene, a first, a turning point | `life/events/<slug>.md` (`owo add event --date`) | one bullet in the log of the day: `- [[Event]]` |
-| A happening that changed the identity | the event, with `defining: true` | MEMORY "Defining moments", at the next review |
-| A person, animal, being, or other identity | `life/characters/<slug>.md` | links |
-| The exact personal identifiers of someone | `## Identifiers` in that character's file | |
-| The identity's own accounts | `accounts` in `identity.json` | IDENTITY.md names the kind |
-| A place or room | `life/locations/<place>/overview.md`, with its rooms beside it | links |
-| A promise, plan or running bit that is still open | `life/threads/<slug>.md` | the Now block lists open threads |
-| How the identity talks or writes | `soul/VOICE.md` | |
-| A value, boundary or belief that lasts | `soul/SOUL.md`, through review | `owo soul note` with evidence |
-| How the identity looks | `soul/LOOK.md` | |
-| Biography, roles, the frame of its world | `soul/IDENTITY.md` | |
-| An interpretation of experience | `life/lessons/<slug>.md`, with `evidence` | MEMORY links it, at review |
-| Private feelings about a day | `life/journal/<date>_<slug>.md` | lessons and soul get the abstraction |
-| Two sources that disagree | `life/conflicts/<slug>.md` | `status: disputed` on the entries it affects |
-| A correction | the entry that owns the fact, edited in place | the log of the day: `- correction: [[Entry]]` |
-| An exact quote worth keeping | `## Lines` of the event | `[[Event#Lines]]` |
-| Work on a project | `work/projects/<p>/notes/<date>_<slug>.md` (`owo add note --project <p>`) | |
-| Roles, working preferences, past work | `work/README.md` | |
-| Facts about a project itself | the project's knowledge base | notes link `[[kb:<p>:<path>#<Section>]]` |
-| Long-term memory | `soul/MEMORY.md`, compiled by review | |
+| A small thing today | `life/daily-log/<day>_<slug>.md`, one bullet in the Daily Log (`owo add daily-log <title>`) | |
+| A happening worth recalling: a scene, a first, a turning point | an Event, `life/events/<slug>.md` (`owo add event <title> --date <day>`) | one bullet in the Daily Log of the day: `- [[Event]]` |
+| A happening that changed the Identity | the Event, with `defining: true` | MEMORY "Defining moments", at the next Reflection |
+| A person, animal, being, or other Identity | a Character, `life/characters/<slug>.md` | Wikilinks |
+| The Identifiers of someone | `## Identifiers` in the Entry of that Character | |
+| The Identity's own accounts | `accounts` in `identity.json` | IDENTITY.md says what sort of account each is |
+| A place or room | a Location, `life/locations/<place>/overview.md`, with its location details beside it | Wikilinks |
+| A promise, plan or running bit that is still open | a Thread, `life/threads/<slug>.md` | the Current State lists open Threads |
+| How the Identity talks or writes | `persona/VOICE.md` | |
+| A value, boundary or belief that lasts | `persona/SOUL.md`, through a Reflection | a Persona Change with Evidence (`owo persona change`) |
+| How the Identity looks | `persona/LOOK.md` | |
+| Biography, roles, the frame of its world | `persona/IDENTITY.md` | |
+| A life lesson that the experience really taught | an Insight, `life/insights/<slug>.md`, with `evidence` | MEMORY links it, at a Reflection |
+| Private feelings about a day | a Journal, `life/journal/<date>_<slug>.md` | Insights and the Soul get the abstraction |
+| Two accounts that both still stand, with nothing to decide between them | a Conflict, `life/conflicts/<slug>.md` | `status: disputed` on the Entries it affects |
+| A correction | the Entry that owns the fact, edited in place | the Daily Log of the day: `- correction: [[Entry]]` |
+| An exact quote worth keeping | `## Lines` of the Event | `[[Event#Lines]]` |
+| Work on a Project | a Project Note, `work/projects/<p>/notes/<date>_<slug>.md` (`owo add project-note --project <p>`) | |
+| Roles, working preferences, past work | the Work Profile, `work/PROFILE.md` | |
+| Facts about a Project itself | its Project Wiki | Project Notes link `[[wiki:<p>:<path>#<Section>]]` |
+| Long-term memory | `persona/MEMORY.md`, compiled by a Reflection | |
 
 ## One account of each happening
 
-- A happening lives in its event file when it has one, else in the log of the day.
-- A log bullet that points to an event is one line, with the link.
-- An exact quote lives in the `## Lines` of one event.
-- owo makes the indexes, the timeline and the Now block: `owo index`, `owo context`. Do not write them.
-- MEMORY holds patterns, hints and links. Create writes the first one, and after that only review writes it.
-- `owo lint --rule dupes` finds copied passages. Keep the passage in its home, and make the copy a link.
+- A happening lives in its Event when it has one, else in the Daily Log of the day.
+- A Daily Log bullet that points to an Event is one line, with the Wikilink.
+- An exact quote lives in the `## Lines` of one Event.
+- owo builds the Generated Files (each Index and the Timeline) and the Current State: `owo index`, `owo context`. Leave them to owo.
+- MEMORY holds patterns, hints and Wikilinks. Create writes the first one, and after that only a Reflection writes it.
+- `owo lint --rule dupes` finds copied passages. Keep the passage in its home, and make the copy a Wikilink.
+
+## Citing Raw Material
+
+Cite Raw Material only in the `sources` list in the frontmatter of the Entry: `<slug>/<file>.md#L<a>-L<b>`. The body of an Entry, a Conflict too, never holds a path of Raw Material, such as the path of a Slice.
 
 ## Perspective
 
-- SOUL.md, MEMORY.md and every life and work entry are in the first person, in the identity's own voice: characters, places, events, lessons, journal, logs and project notes.
+- SOUL.md, MEMORY.md and every Life and Work Entry are in the first person, in the Identity's own voice: Characters, Locations, Events, Insights, Journals, Daily Logs and Project Notes.
 - IDENTITY.md is in the third person.
-- Every character is a character file, the person the identity works with too.
+- Every Character has its own Entry, the person the Identity works with too.
 
 ## Dates
 
-A date is the day a thing happened in the identity's life: `date:` on logs, events and notes. `created` is the day the file was made; `owo stamp` keeps `updated` current.
+A date is a story date, the day a thing happened in Story Time: `date:` on Daily Logs, Events and Project Notes. `created` is the day the file was made; `owo stamp` keeps `updated` current.
 
 ## Identifiers
 
-Exact personal identifiers (birth dates, handles, emails, phone numbers, addresses, full names of private people) are written once, under `## Identifiers` in that character's file. Everywhere else, name them by role and link: "[[Sam]]'s birthday". `owo lint --rule identifiers` reports copies.
+Identifiers (birth dates, handles, emails, phone numbers, addresses, full names of private people) are written once, under `## Identifiers` in the Entry of that Character. Everywhere else, name them by role and link: "[[Sam]]'s birthday". `owo lint --rule identifiers` reports copies.
 
 ## Conflicts
 
-Make `life/conflicts/<slug>.md` (`owo add conflict`) with both accounts, their sources and `state: open`. List the entries it affects in `affects`, and set `status: disputed` on them. When it is settled, write the resolution, set `state: resolved`, and set the entries back to `status: canon`. Material that was replaced but still matters keeps `status: superseded` and `superseded_by`.
+Make `life/conflicts/<slug>.md` (`owo add conflict <title>`) with both accounts in the body, their Raw Material in `sources`, and `state: open`. List the Entries it affects in `affects`, and set `status: disputed` on them. When it is settled, write the resolution, set `state: resolved`, and set the Entries back to `status: canon`. Material that was replaced but still matters keeps `status: superseded` and `superseded_by`.
 
-Which source wins, highest first: what the person says directly or corrects, the primary transcript, behaviour that repeats across sources, an earlier summary.
+Which Raw Material wins, highest first: what the person says directly or corrects, the primary Transcript, behaviour that repeats across Raw Material, an earlier recap.

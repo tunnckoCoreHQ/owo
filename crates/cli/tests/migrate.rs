@@ -1,5 +1,3 @@
-//! End-to-end test for `owo migrate v1`.
-
 mod common;
 
 use assert_cmd::Command;
@@ -24,14 +22,14 @@ fn migrate_v1_fixture() {
     );
     assert_eq!(v["ok"], true, "{v}");
     for f in [
-        "soul/VOICE.md",
+        "persona/VOICE.md",
         "life/characters/ada.md",
         "life/characters/gull.md",
         "life/events/the-storm.md",
-        "life/log/2026-01-01.md",
-        "life/log/2026-01-02.md",
+        "life/daily-log/2026-01-01_storm-day.md",
+        "life/daily-log/2026-01-02_2026-01-02.md",
         "life/journal/2026-01-01_tired.md",
-        "life/lessons/trim-the-wick.md",
+        "life/insights/trim-the-wick.md",
         "life/conflicts/ferry-day.md",
         "life/locations/the-lighthouse/overview.md",
         "life/locations/the-lighthouse/lamp-room.md",
@@ -45,6 +43,10 @@ fn migrate_v1_fixture() {
         .path()
         .join("sources/lumen/2026-01-01_session.md")
         .is_file());
+    assert_eq!(
+        fs::read_to_string(out.join("persona/VOICE.md")).unwrap(),
+        fs::read_to_string(src.join("references/soul/STYLE.md")).unwrap()
+    );
     let skipped = v["data"]["skipped"].to_string();
     assert!(skipped.contains("changelog.md") && skipped.contains("notes.txt"));
     let room = fs::read_to_string(out.join("life/locations/the-lighthouse/lamp-room.md")).unwrap();
@@ -64,11 +66,13 @@ fn migrate_v1_fixture() {
         .unwrap()
         .contains("status: canon"));
     assert!(
-        skipped.contains("2026-01-02_extra.md (target life/log/2026-01-02.md exists"),
+        skipped.contains(
+            "2026-01-02_extra.md (life/daily-log/2026-01-02_2026-01-02.md holds this day"
+        ),
         "{skipped}"
     );
     assert_eq!(
-        fs::read_to_string(out.join("life/log/2026-01-02.md"))
+        fs::read_to_string(out.join("life/daily-log/2026-01-02_2026-01-02.md"))
             .unwrap()
             .trim_end()
             .lines()

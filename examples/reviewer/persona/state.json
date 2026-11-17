@@ -1,0 +1,52 @@
+{
+  "files": {
+    "IDENTITY.md": {
+      "updated": "2026-11-04T03:33:55Z",
+      "hash": "b3:1c1d9e53ae4da56f9bf3999dec1ccb8fa18b07214eafa79955fdec22b605a797"
+    },
+    "LOOK.md": {
+      "updated": "2026-11-04T03:33:55Z",
+      "hash": "b3:3e47e73088f2a261cd5061f0caab73123c97ff53e346b7fb3660a5c5ad38abf1"
+    },
+    "MEMORY.md": {
+      "updated": "2026-11-17T12:05:44Z",
+      "hash": "b3:2b85fe75301e6ec04b180a2f1a523398c6cddf9d88ee36bfe1b0778a98c0a1a6"
+    },
+    "SOUL.md": {
+      "updated": "2026-11-04T03:33:55Z",
+      "hash": "b3:a62cba1e2c52b66d53f4f5115a747bfb6e7b25fd0c0a3f292a8ef13307d13301"
+    },
+    "VOICE.md": {
+      "updated": "2026-11-04T03:33:55Z",
+      "hash": "b3:9156d556132445da7ed11584a67890fac49c1d9067fce4ff5d27ee878deea686"
+    },
+    "examples/bad.md": {
+      "updated": "2026-11-04T03:39:53Z",
+      "hash": "b3:a3c20aafb05b83fd582324afe92621d8e90711aacca08b6374efe859d5dab8f3"
+    },
+    "examples/good.md": {
+      "updated": "2026-11-04T03:39:53Z",
+      "hash": "b3:65d97fe103a205cfed9fe30682c9e421c112a3157b1878286b291c7a092a43f1"
+    },
+    "examples/greetings.md": {
+      "updated": "2026-11-04T03:39:53Z",
+      "hash": "b3:32d93e8e5ea95fc72dd4eceb1de8fc75bd18ba68328b5dd9d09a12791556b4bc"
+    }
+  },
+  "changelog": [
+    {
+      "at": "2026-11-04T03:39:53Z",
+      "file": "SOUL.md",
+      "change": "Small diffs became a stated belief.",
+      "evidence": [
+        "[[Big diff]]",
+        "[[Cache key review]]"
+      ]
+    }
+  ],
+  "reflection": {
+    "last_reflected": "2026-11-17T12:06:00Z",
+    "reflected_through": "2026-11-03",
+    "memory_hash": "b3:2b85fe75301e6ec04b180a2f1a523398c6cddf9d88ee36bfe1b0778a98c0a1a6"
+  }
+}

@@ -1,25 +1,18 @@
-//! The command line, built from the core's operations: each operation is a command and each
-//! field of its request type a flag or a positional argument, with its help text, default,
-//! allowed values and rules. The global flags, the command groups and `mcp` and `acp`, which
-//! connect the process to the core, are the CLI's own.
-
 use clap::builder::PossibleValuesParser;
 use clap::{value_parser, Arg, ArgAction, ArgMatches, Command};
 use owo_core::{Args, Field, Operation, Select, Type};
 use serde_json::{Map, Value};
 use std::path::PathBuf;
 
-/// The help line of each command that only groups other commands.
 const GROUPS: &[(&str, &str)] = &[
     ("export", "Export the identity to another format"),
     (
         "sync",
-        "Session sync: slice a host transcript into sources/ for ingest",
+        "Session sync: slice a host transcript into raw material in sources/ for ingest",
     ),
     ("migrate", "Migrate an identity from an older layout"),
 ];
 
-/// The flags every command takes.
 pub struct Global {
     pub select: Select,
     pub json: bool,
@@ -40,7 +33,6 @@ impl Global {
     }
 }
 
-/// The whole command line: the global flags, a command per operation, `mcp` and `acp`.
 pub fn command(ops: &[Operation]) -> Command {
     let mut root = Command::new("owo")
         .version(env!("CARGO_PKG_VERSION"))
@@ -52,6 +44,10 @@ pub fn command(ops: &[Operation]) -> Command {
         let cmd = Command::new(op.path[op.path.len() - 1])
             .about(op.about)
             .args(op.fields.iter().map(|f| arg(op, f)));
+        let cmd = match op.path {
+            ["links"] => cmd.visible_alias("wikilinks"),
+            _ => cmd,
+        };
         root = match op.path {
             [_] => root.subcommand(cmd),
             [group, _] if root.find_subcommand(group).is_some() => {
@@ -80,18 +76,18 @@ fn globals() -> [Arg; 5] {
             .value_name("ROOT")
             .global(true)
             .value_parser(value_parser!(PathBuf))
-            .help("Identities root (else OWO_ROOT, .owo.toml, user config, XDG default)"),
+            .help("Root (else OWO_ROOT, .owo.toml, XDG default)"),
         Arg::new("identity")
             .short('i')
             .long("identity")
             .value_name("IDENTITY")
             .global(true)
-            .help("Identity slug (else OWO_IDENTITY, .owo.toml, user config, the only identity)"),
+            .help("Identity slug (else OWO_IDENTITY, .owo.toml, owo.toml in the root, the only identity)"),
         Arg::new("project")
             .long("project")
             .value_name("PROJECT")
             .global(true)
-            .help("Project slug (else OWO_PROJECT, .owo.toml); search and export card filter only on this flag"),
+            .help("Project slug (else OWO_PROJECT, .owo.toml); search and export persona-card filter only on this flag"),
         Arg::new("json")
             .long("json")
             .global(true)
@@ -154,23 +150,19 @@ fn acp() -> Command {
         )
 }
 
-/// The help of a field in the CLI's words, where they differ from the core's: flags, stdin and
-/// exit codes.
 fn help(op: &Operation, f: &Field) -> &'static str {
     match (op.path, f.name) {
         (["stamp"], "check") => "Report drift and exit 1 instead of writing",
         (["index"], "check") => "Report stale generated files and exit 1 instead of writing",
         (["write"], "content") => "The file text; read from stdin when left out",
         (["templates", "show"], "name") => "Template name from `owo templates list`",
-        (["links"], "name") => "Entry name, alias, path or [[link]] (not needed with --orphans)",
-        (["export", "card"], "png") => "Embed the card in this PNG avatar (needs --out)",
+        (["links"], "name") => "Entry name, alias, path or [[wikilink]] (not needed with --orphans)",
+        (["export", "persona-card"], "png") => "Embed the card in this PNG avatar (needs --out)",
         (["sync", "push"], "turns") => "JSON array of {\"id\", \"role\", \"text\"}; id is the turn id, the host's id for that message, and a stored turn id is skipped (default: stdin)",
         _ => f.help,
     }
 }
 
-/// The flag of a field name: each capital letter becomes `-` and its small letter, so the
-/// field `dryRun` is the flag `--dry-run`.
 fn flag(name: &str) -> String {
     let mut flag = String::new();
     for c in name.chars() {
@@ -182,7 +174,6 @@ fn flag(name: &str) -> String {
     flag
 }
 
-/// The flag or positional argument of one field of `op`.
 fn arg(op: &Operation, f: &Field) -> Arg {
     let mut a = Arg::new(f.name).help(help(op, f));
     if !f.positional {
@@ -226,8 +217,6 @@ fn arg(op: &Operation, f: &Field) -> Arg {
     a
 }
 
-/// The arguments of `op` from the matches of its command, by field name: a switch as a boolean,
-/// a field with several values as an array of strings, else a string.
 pub fn args(op: &Operation, m: &ArgMatches) -> Map<String, Value> {
     let mut map = Map::new();
     for f in &op.fields {
@@ -251,7 +240,6 @@ pub fn args(op: &Operation, m: &ArgMatches) -> Map<String, Value> {
     map
 }
 
-/// `args` with the raw value of each path field given, so a path keeps bytes that are not UTF-8.
 pub fn with_paths(op: &Operation, m: &ArgMatches, mut args: Args) -> Args {
     for f in op.fields.iter().filter(|f| f.ty == Type::Path) {
         if let Some(p) = m.get_one::<PathBuf>(f.name) {
