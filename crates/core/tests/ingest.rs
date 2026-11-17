@@ -1,11 +1,11 @@
-use owo_core::{acp, Env, ErrorKind, Fault, Role, Root, Select, SyncOptions, Turn};
+use owo_core::{acp, Env, ErrorKind, Fault, Identities, Role, Select, SyncOptions, Turn};
 use serde_json::json;
 use std::io::{BufRead, BufReader, Write};
 use std::path::Path;
 use std::time::{Duration, Instant};
 use tempfile::TempDir;
 
-fn root(config: &str) -> TempDir {
+fn ids_dir(config: &str) -> TempDir {
     let tmp = TempDir::new().unwrap();
     let from = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/nicole");
     for entry in walkdir::WalkDir::new(&from) {
@@ -20,21 +20,23 @@ fn root(config: &str) -> TempDir {
             std::fs::copy(entry.path(), &target).unwrap();
         }
     }
-    std::fs::write(tmp.path().join(".owo.toml"), config).unwrap();
+    std::fs::create_dir_all(tmp.path().join(".owo")).unwrap();
+    std::fs::write(tmp.path().join(".owo/config.toml"), config).unwrap();
     tmp
 }
 
 fn select(dir: &Path) -> Select {
     Select {
-        root: Some(dir.to_path_buf()),
+        identities_dir: Some(dir.to_path_buf()),
         identity: Some("nicole".into()),
-        project: None,
+        ..Select::default()
     }
 }
 
 fn env(dir: &Path) -> Env {
     Env {
         cwd: dir.to_path_buf(),
+        owo_dir: Some(".owo".into()),
         ..Env::default()
     }
 }
@@ -71,13 +73,14 @@ struct Client {
     warnings: Shared,
 }
 
-fn start(root: &Path) -> Client {
-    start_with(root, options(&["some-agent"]))
+fn start(ids_dir: &Path) -> Client {
+    start_with(ids_dir, options(&["some-agent"]))
 }
 
-fn start_with(root: &Path, options: acp::Options) -> Client {
+fn start_with(ids_dir: &Path, options: acp::Options) -> Client {
     let warnings = Shared::default();
-    let proxy = acp::Proxy::new(&select(root), &env(root), options, warnings.clone()).unwrap();
+    let proxy =
+        acp::Proxy::new(&select(ids_dir), &env(ids_dir), options, warnings.clone()).unwrap();
     let (client_in, to_proxy) = std::io::pipe().unwrap();
     let (from_proxy, client_out) = std::io::pipe().unwrap();
     let (agent_in_read, agent_in) = std::io::pipe().unwrap();
@@ -166,14 +169,14 @@ fn wait_lines(path: &Path, lines: usize) -> String {
 
 #[test]
 fn the_ingest_prompt_names_owo_ingest_and_ends_with_sync_done() {
-    let tmp = root("");
-    let root = Root::open(&select(tmp.path()), &env(tmp.path())).unwrap();
+    let tmp = ids_dir("");
+    let ids_dir = Identities::open(&select(tmp.path()), &env(tmp.path())).unwrap();
     let turns = [Turn {
         id: "1".into(),
         role: Role::User,
         text: "hello".into(),
     }];
-    let run = root
+    let run = ids_dir
         .sync()
         .unwrap()
         .push(
@@ -200,7 +203,7 @@ fn the_ingest_prompt_names_owo_ingest_and_ends_with_sync_done() {
 
 #[test]
 fn auto_ingest_runs_the_prompt_in_the_background() {
-    let tmp = root(
+    let tmp = ids_dir(
         "sync_every = 1\nauto_ingest = true\ningest_command = [\"sh\", \"-c\", \"printf '%s\\\\n' \\\"$0\\\" > got.txt; pwd -P >> got.txt\"]\n",
     );
     let mut c = start(tmp.path());
@@ -212,7 +215,7 @@ fn auto_ingest_runs_the_prompt_in_the_background() {
     );
     let got = wait_lines(&tmp.path().join("got.txt"), 2);
     let prompt =
-        std::fs::read_to_string(tmp.path().join(".owo/sessions/s1.nicole.prompt.md")).unwrap();
+        std::fs::read_to_string(tmp.path().join("nicole/sessions/s1.nicole.prompt.md")).unwrap();
     assert!(
         got.starts_with(&prompt),
         "the run's prompt is the last argument: {got}"
@@ -221,13 +224,13 @@ fn auto_ingest_runs_the_prompt_in_the_background() {
     assert_eq!(
         got.lines().last().map(Path::new),
         Some(cwd.as_path()),
-        "the ingest runs in the root"
+        "the ingest runs in the ids_dir"
     );
 }
 
 #[test]
 fn auto_ingest_is_off_by_default() {
-    let tmp = root("sync_every = 1\ningest_command = [\"sh\", \"-c\", \"echo x > got.txt\"]\n");
+    let tmp = ids_dir("sync_every = 1\ningest_command = [\"sh\", \"-c\", \"echo x > got.txt\"]\n");
     let mut c = start(tmp.path());
     c.prompt(2);
     c.end();
@@ -237,7 +240,7 @@ fn auto_ingest_is_off_by_default() {
 
 #[test]
 fn one_ingest_runs_at_a_time_and_a_skipped_run_starts_later() {
-    let tmp = root(
+    let tmp = ids_dir(
         "sync_every = 1\nauto_ingest = true\ningest_command = [\"sh\", \"-c\", \"echo start >> runs.txt; sleep 1; echo end >> runs.txt\"]\n",
     );
     let runs = tmp.path().join("runs.txt");
@@ -261,7 +264,7 @@ fn one_ingest_runs_at_a_time_and_a_skipped_run_starts_later() {
 
 #[test]
 fn a_pending_run_starts_on_a_later_push_that_is_not_due() {
-    let tmp = root(
+    let tmp = ids_dir(
         "sync_every = 2\nauto_ingest = true\ningest_command = [\"sh\", \"-c\", \"echo run >> runs.txt\"]\n",
     );
     let runs = tmp.path().join("runs.txt");
@@ -277,12 +280,12 @@ fn a_pending_run_starts_on_a_later_push_that_is_not_due() {
 
 #[test]
 fn a_dry_run_starts_no_ingest_of_a_pending_run() {
-    let tmp = root("sync_every = 1\n");
+    let tmp = ids_dir("sync_every = 1\n");
     let mut c = start(tmp.path());
     c.prompt(2);
     c.end();
     std::fs::write(
-        tmp.path().join(".owo.toml"),
+        tmp.path().join(".owo/config.toml"),
         "sync_every = 2\nauto_ingest = true\ningest_command = [\"sh\", \"-c\", \"echo x > got.txt\"]\n",
     )
     .unwrap();
@@ -301,7 +304,7 @@ fn a_dry_run_starts_no_ingest_of_a_pending_run() {
 
 #[test]
 fn a_failed_ingest_is_one_warning_line() {
-    let tmp = root(
+    let tmp = ids_dir(
         "sync_every = 1\nauto_ingest = true\ningest_command = [\"sh\", \"-c\", \"echo x > got.txt; exit 3\"]\n",
     );
     let mut c = start(tmp.path());
@@ -315,7 +318,7 @@ fn a_failed_ingest_is_one_warning_line() {
 
 #[test]
 fn an_ingest_that_leaves_its_run_pending_is_a_warning() {
-    let tmp = root(
+    let tmp = ids_dir(
         "sync_every = 1\nauto_ingest = true\ningest_command = [\"sh\", \"-c\", \"echo x > got.txt\"]\n",
     );
     let mut c = start(tmp.path());
@@ -324,13 +327,13 @@ fn an_ingest_that_leaves_its_run_pending_is_a_warning() {
     std::thread::sleep(Duration::from_millis(300));
     assert_eq!(
         c.end(),
-        "owo: warning: the ingest of session s1.nicole exited and its run is still pending: .owo/sessions/s1.nicole.prompt.md\n"
+        "owo: warning: the ingest of session s1.nicole exited and its run is still pending: nicole/sessions/s1.nicole.prompt.md\n"
     );
 }
 
 #[test]
 fn an_unknown_adapter_needs_ingest_command() {
-    let tmp = root("auto_ingest = true\n");
+    let tmp = ids_dir("auto_ingest = true\n");
     let new = |agent: &[&str]| {
         acp::Proxy::new(
             &select(tmp.path()),

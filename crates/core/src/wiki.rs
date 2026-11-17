@@ -3,7 +3,7 @@ use crate::markdown;
 use serde::Serialize;
 use std::path::{Component, Path, PathBuf};
 
-pub fn root(id: &Identity, project: &str) -> Option<PathBuf> {
+pub fn dir(id: &Identity, project: &str) -> Option<PathBuf> {
     let raw = id
         .project(project)
         .and_then(|e| e.field_str("wiki"))
@@ -34,7 +34,7 @@ pub struct WikiPath {
 }
 
 pub fn path(id: &Identity, p: &str) -> (Option<WikiPath>, Option<String>) {
-    let Some(path) = root(id, p) else {
+    let Some(path) = dir(id, p) else {
         return (
             None,
             Some(format!(
@@ -102,7 +102,7 @@ pub fn link(id: &Identity, target: &str) -> Option<Result<Link, String>> {
         section,
         section_exists: false,
     };
-    let Some(wiki) = root(id, project) else {
+    let Some(wiki) = dir(id, project) else {
         return Some(Ok(out));
     };
     let base = if !wiki.is_dir() && wiki.extension().is_some_and(|x| x == "md") {

@@ -41,7 +41,7 @@ Each fact has one home. Write it there once, and link to it from everywhere else
 
 ## Citing Raw Material
 
-Cite Raw Material only in the `sources` list in the frontmatter of the Entry: `<slug>/<file>.md#L<a>-L<b>`. The body of an Entry, a Conflict too, never holds a path of Raw Material, such as the path of a Slice.
+Cite Raw Material only in the `sources` list in the frontmatter of the Entry, as its path from the `sources/` folder of the Identity: `<file>.md#L<a>-L<b>`. The body of an Entry, a Conflict too, never holds a path of Raw Material, such as the path of a Slice.
 
 ## Perspective
 

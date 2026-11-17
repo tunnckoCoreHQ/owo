@@ -75,10 +75,10 @@ pub struct ListedIdentity {
     pub projects: Vec<String>,
 }
 
-pub fn list(root: &std::path::Path) -> Vec<ListedIdentity> {
-    crate::config::list_identities(root)
+pub fn list(identities_dir: &std::path::Path) -> Vec<ListedIdentity> {
+    crate::config::list_identities(identities_dir)
         .into_iter()
-        .map(|slug| match Identity::load(root, &slug) {
+        .map(|slug| match Identity::load(identities_dir, &slug) {
             Ok(id) => ListedIdentity {
                 name: id.name().to_string(),
                 last_activity: scope_activity(&id).into_iter().map(|(_, t)| t).max(),

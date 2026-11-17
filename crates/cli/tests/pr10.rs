@@ -3,9 +3,9 @@ mod common;
 use chrono::NaiveDate;
 use common::{copy_tree, examples, owo, PNG_1X1};
 use owo_core::{
-    mcp, parse_turns, AddRequest, Env, ErrorKind, Identity, Kind, PersonaChangelogRequest,
-    ReflectDoneRequest, Root, Select, SkillRequest, SoulspecRequest, StateRequest,
-    SyncStartRequest,
+    mcp, parse_turns, AddRequest, Env, ErrorKind, Identities, Identity, Kind,
+    PersonaChangelogRequest, ReflectDoneRequest, Select, SkillRequest, SoulspecRequest,
+    StateRequest, SyncStartRequest,
 };
 use serde_json::{json, Value};
 use std::fs;
@@ -39,20 +39,21 @@ fn setup() -> TempDir {
 fn env(cwd: &Path) -> Env {
     Env {
         cwd: cwd.to_path_buf(),
+        owo_dir: Some(".owo".into()),
         ..Env::default()
     }
 }
 
 fn select(tmp: &Path) -> Select {
     Select {
-        root: Some(tmp.join("ids")),
+        identities_dir: Some(tmp.join("ids")),
         identity: Some("nicole".into()),
-        project: None,
+        ..Select::default()
     }
 }
 
 fn identity(tmp: &Path) -> Identity {
-    Root::open(&select(tmp), &env(&tmp.join("work")))
+    Identities::open(&select(tmp), &env(&tmp.join("work")))
         .unwrap()
         .identity()
         .unwrap()
@@ -91,9 +92,9 @@ fn pr10_empty_required_path_is_a_usage_error() {
     let id = identity(tmp.path());
     usage(id.export_skill(&SkillRequest::default()));
     usage(id.export_soulspec(&SoulspecRequest::default()));
-    let root = Root::open(&sel, &env).unwrap();
+    let ids_dir = Identities::open(&sel, &env).unwrap();
     transcript(&work.join("t.jsonl"));
-    usage(root.sync().unwrap().start(&SyncStartRequest {
+    usage(ids_dir.sync().unwrap().start(&SyncStartRequest {
         session: "s1".into(),
         transcript: PathBuf::new(),
         ..Default::default()
@@ -190,38 +191,6 @@ fn pr10_date_outside_four_digit_years_is_a_usage_error() {
     assert_eq!(fs::read_to_string(&state).unwrap(), before);
 }
 
-fn parent_root() -> (TempDir, Select, Env) {
-    let tmp = setup();
-    fs::write(
-        tmp.path().join(".owo.toml"),
-        "root = \"ids\"\nidentity = \"nicole\"\n",
-    )
-    .unwrap();
-    let env = env(&tmp.path().join("work"));
-    (tmp, Select::default(), env)
-}
-
-#[test]
-fn pr10_json_tools_keep_the_parent_root_warning() {
-    let (_tmp, sel, env) = parent_root();
-    for (name, args) in [
-        ("list", json!({})),
-        ("state", json!({})),
-        ("config", json!({})),
-    ] {
-        let (text, _) = call(name, args, &sel, &env);
-        assert!(text.contains("the root comes from"), "{name}: {text}");
-    }
-}
-
-#[test]
-fn pr10_failed_text_tool_keeps_the_parent_root_warning() {
-    let (_tmp, sel, env) = parent_root();
-    let (text, error) = call("context", json!({ "project": "nope" }), &sel, &env);
-    assert!(error, "{text}");
-    assert!(text.contains("the root comes from"), "{text}");
-}
-
 #[test]
 fn pr10_multi_value_array_names_the_field_type() {
     let tmp = setup();
@@ -253,7 +222,7 @@ fn pr10_core_turns_a_non_utf8_path_into_utf8_text() {
         .current_dir(&work)
         .args(["migrate", "v1"])
         .arg(bad(b"v1\xff"))
-        .args(["--out", "root/lumen"])
+        .args(["--out", "ids_dir/lumen"])
         .output()
         .unwrap();
     assert!(
@@ -261,7 +230,7 @@ fn pr10_core_turns_a_non_utf8_path_into_utf8_text() {
         "{}",
         String::from_utf8_lossy(&out.stderr)
     );
-    assert!(work.join("root/lumen/identity.json").is_file());
+    assert!(work.join("ids_dir/lumen/identity.json").is_file());
     transcript(&work.join("t\u{FFFD}.jsonl"));
     let out = owo(&tmp.path().join("ids"))
         .current_dir(&work)
@@ -367,12 +336,12 @@ fn pr10_push_with_a_relative_env_cwd_reads_the_stored_turns() {
     let name = tmp.path().file_name().unwrap();
     let env = env(&Path::new(name).join("work"));
     let sel = Select {
-        root: Some("../ids".into()),
+        identities_dir: Some("../ids".into()),
         identity: Some("nicole".into()),
-        project: None,
+        ..Select::default()
     };
     let turns = parse_turns(r#"[{"id":"a","role":"user","text":"hi"}]"#).unwrap();
-    let run = Root::open(&sel, &env)
+    let run = Identities::open(&sel, &env)
         .unwrap()
         .sync()
         .unwrap()

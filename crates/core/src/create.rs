@@ -13,17 +13,24 @@ pub struct Created {
     pub files: Vec<String>,
 }
 
-pub fn new_identity(root: &Path, shown: &Path, name: &str, slug: &str) -> Result<Created> {
+pub fn new_identity(
+    identities_dir: &Path,
+    shown: &Path,
+    templates_dir: Option<&Path>,
+    name: &str,
+    slug: &str,
+) -> Result<Created> {
     if !crate::slug::is_slug(slug) {
         bail!("invalid slug {slug:?}: use lowercase letters, digits and single hyphens");
     }
-    let dir = root.join(slug);
+    let dir = identities_dir.join(slug);
     let shown_dir = shown.join(slug);
     let dry = crate::write::dry();
     let taken = if dry {
         fs::symlink_metadata(&dir).is_ok()
     } else {
-        fs::create_dir_all(root).with_context(|| format!("creating {}", shown.display()))?;
+        fs::create_dir_all(identities_dir)
+            .with_context(|| format!("creating {}", shown.display()))?;
         match fs::create_dir(&dir) {
             Err(e) if e.kind() == ErrorKind::AlreadyExists => true,
             other => {
@@ -35,7 +42,7 @@ pub fn new_identity(root: &Path, shown: &Path, name: &str, slug: &str) -> Result
     if taken {
         bail!("already exists: {}", shown_dir.display())
     }
-    let files = fill(root, &shown_dir, name, slug).inspect_err(|_| {
+    let files = fill(identities_dir, &shown_dir, templates_dir, name, slug).inspect_err(|_| {
         if !dry {
             let _ = fs::remove_dir_all(&dir);
         }
@@ -47,8 +54,14 @@ pub fn new_identity(root: &Path, shown: &Path, name: &str, slug: &str) -> Result
     })
 }
 
-fn fill(root: &Path, shown: &Path, name: &str, slug: &str) -> Result<Vec<String>> {
-    let dir = root.join(slug);
+fn fill(
+    identities_dir: &Path,
+    shown: &Path,
+    templates_dir: Option<&Path>,
+    name: &str,
+    slug: &str,
+) -> Result<Vec<String>> {
+    let dir = identities_dir.join(slug);
     let mut values = BTreeMap::new();
     values.insert("name", name.to_string());
     values.insert("slug", slug.to_string());
@@ -63,7 +76,7 @@ fn fill(root: &Path, shown: &Path, name: &str, slug: &str) -> Result<Vec<String>
     templates::IDENTITY_FILES
         .iter()
         .fold(writes, |w, (rel, builtin)| {
-            let text = templates::fill(&templates::get(root, rel, builtin), &values);
+            let text = templates::fill(&templates::get(templates_dir, rel, builtin), &values);
             w.file(dir.join(rel), shown.join(rel), text)
         })
         .commit()?;
@@ -72,7 +85,7 @@ fn fill(root: &Path, shown: &Path, name: &str, slug: &str) -> Result<Vec<String>
         .map(|(rel, _)| rel.to_string())
         .collect();
 
-    let identity = Identity::load(root, slug)?;
+    let identity = Identity::load(identities_dir, slug)?;
     files.extend(index::write_as(&identity, shown)?);
     let states = state::initial(&identity, &state::now());
     states

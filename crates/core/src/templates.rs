@@ -14,6 +14,7 @@ pub(crate) use template;
 
 pub const IDENTITY_FILES: &[(&str, &str)] = &[
     ("identity.json", template!("identity.json")),
+    (".gitignore", template!("gitignore")),
     ("persona/soul.json", template!("persona/soul.json")),
     ("persona/IDENTITY.md", template!("persona/IDENTITY.md")),
     ("persona/SOUL.md", template!("persona/SOUL.md")),
@@ -47,12 +48,12 @@ pub fn all() -> Vec<(&'static str, String, &'static str)> {
         .collect()
 }
 
-pub fn override_path(root: &Path, file: &str) -> Option<PathBuf> {
-    Some(root.join(".templates").join(file)).filter(|p| p.is_file())
+pub fn override_path(templates_dir: Option<&Path>, file: &str) -> Option<PathBuf> {
+    Some(templates_dir?.join(file)).filter(|p| p.is_file())
 }
 
-pub fn get(root: &Path, name: &str, builtin: &str) -> String {
-    override_path(root, name)
+pub fn get(templates_dir: Option<&Path>, name: &str, builtin: &str) -> String {
+    override_path(templates_dir, name)
         .and_then(|p| fs::read_to_string(p).ok())
         .unwrap_or_else(|| builtin.to_string())
 }

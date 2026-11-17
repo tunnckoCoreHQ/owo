@@ -8,18 +8,15 @@ struct Call<'a> {
     select: &'a Select,
     env: &'a Env,
     input: &'a mut dyn Read,
-    warnings: Vec<String>,
 }
 
 impl Call<'_> {
-    fn root(&mut self) -> Result<Root> {
-        let root = Root::open(self.select, self.env)?;
-        self.warnings.extend(root.warnings.iter().cloned());
-        Ok(root)
+    fn identities(&self) -> Result<Identities> {
+        Identities::open(self.select, self.env)
     }
 
-    fn identity(&mut self) -> Result<Identity> {
-        self.root()?.identity()
+    fn identity(&self) -> Result<Identity> {
+        self.identities()?.identity()
     }
 
     fn input(&mut self) -> Result<String> {
@@ -36,34 +33,20 @@ pub struct Operation {
     run: Box<Run>,
 }
 
-pub struct Ran {
-    pub warnings: Vec<String>,
-    pub result: Result<Outcome>,
-}
-
 impl Operation {
     pub fn name(&self) -> String {
         self.path.join("_").replace('-', "_")
     }
 
+    /// Runs the operation. The outer error is a wrong argument, and the inner one is a failed run.
     pub fn run(
         &self,
         args: &Args,
         select: &Select,
         env: &Env,
         input: &mut dyn Read,
-    ) -> Result<Ran> {
-        let mut s = Call {
-            select,
-            env,
-            input,
-            warnings: vec![],
-        };
-        let result = (self.run)(args, &mut s)?;
-        Ok(Ran {
-            warnings: s.warnings,
-            result,
-        })
+    ) -> Result<Result<Outcome>> {
+        (self.run)(args, &mut Call { select, env, input })
     }
 }
 
@@ -98,7 +81,7 @@ fn write_op<R: Request + 'static>(
 }
 
 fn templates(_: (), s: &mut Call) -> Result<Outcome> {
-    Ok(Outcome::Templates(s.root()?.templates()))
+    Ok(Outcome::Templates(s.identities()?.templates()))
 }
 
 fn push_turns(checked: &SessionSync, r: SyncPushRequest, s: &mut Call) -> Result<Outcome> {
@@ -114,13 +97,13 @@ pub fn operations() -> Vec<Operation> {
         write_op::<NewRequest>(
             &["new"],
             "Create a new identity from the built-in templates",
-            |r, s| Ok(Outcome::Created(s.root()?.create(&r)?)),
+            |r, s| Ok(Outcome::Created(s.identities()?.create(&r)?)),
         ),
-        op::<()>(&["list"], "List identities in the root", |_, s| {
-            let root = s.root()?;
+        op::<()>(&["list"], "List the identities in the identities dir", |_, s| {
+            let ids = s.identities()?;
             Ok(Outcome::List {
-                root: root.path().to_path_buf(),
-                rows: root.list(),
+                identities_dir: ids.dir().to_path_buf(),
+                rows: ids.list(),
             })
         }),
         write_op::<WriteRequest>(
@@ -182,7 +165,7 @@ pub fn operations() -> Vec<Operation> {
         }),
         op::<()>(
             &["templates"],
-            "List templates, or show one (built in, or overridden in <root>/.templates/)",
+            "List templates, or show one (built in, or overridden in the templates dir)",
             templates,
         ),
         op::<()>(
@@ -194,7 +177,7 @@ pub fn operations() -> Vec<Operation> {
             &["templates", "show"],
             "Print a template as `owo new` and `owo add` would use it",
             |r, s| {
-                let (template, text) = s.root()?.template(&r)?;
+                let (template, text) = s.identities()?.template(&r)?;
                 Ok(Outcome::Template { template, text })
             },
         ),
@@ -318,21 +301,21 @@ pub fn operations() -> Vec<Operation> {
         write_op::<SyncStartRequest>(
             &["sync", "start"],
             "Read the transcript and, when a run is due, write the slice and the ingest prompt",
-            |r, s| Ok(Outcome::Synced(s.root()?.sync()?.start(&r)?)),
+            |r, s| Ok(Outcome::Synced(s.identities()?.sync()?.start(&r)?)),
         ),
         write_op::<SyncPushRequest>(
             &["sync", "push"],
             "Store turns sent by the host, then run sync start on them (for hosts without a local transcript)",
             |r, s| {
-                let root = s.root()?;
-                push_turns(&root.sync()?, r, s)
+                let ids = s.identities()?;
+                push_turns(&ids.sync()?, r, s)
             },
         ),
         write_op::<SyncDoneRequest>(
             &["sync", "done"],
             "Move the sync cursor after a successful ingest run",
             |r, s| {
-                let cursor = s.root()?.sync_done(&r)?;
+                let cursor = s.identities()?.sync_done(&r)?;
                 Ok(Outcome::SyncDone {
                     session: r.session,
                     until: r.until,
@@ -342,18 +325,23 @@ pub fn operations() -> Vec<Operation> {
         ),
         op::<()>(
             &["sync", "due"],
-            "List the sessions in the root that have a pending run",
-            |_, s| Ok(Outcome::SyncDue(s.root()?.sync_due()?)),
+            "List the sessions that have a pending run, of every identity or of the one given with -i",
+            |_, s| Ok(Outcome::SyncDue(s.identities()?.sync_due()?)),
         ),
         write_op::<MigrateRequest>(
             &["migrate", "v1"],
-            "v1 identity folder (with references/) into <out> = <root>/<slug>",
-            |r, s| Ok(Outcome::Migrate(migrate_v1(&r, &s.env.cwd)?)),
+            "v1 identity folder (with references/) into <out> = <identities-dir>/<slug>",
+            |r, s| Ok(Outcome::Migrate(s.identities()?.migrate_v1(&r)?)),
+        ),
+        op::<GuideRequest>(
+            &["guide"],
+            "Print the owo skill, or one file of it: the embody, create, ingest or reflect path, the rules or the glossary",
+            |r, _| Ok(Outcome::Guide(guide::text(r.path))),
         ),
         op::<()>(
             &["config"],
-            "Show how root, identity and project resolve",
-            |_, s| Ok(Outcome::Config(s.root()?.config)),
+            "Show how the owo dir, the config, the identities dir, the identity and the project resolve",
+            |_, s| Ok(Outcome::Config(s.identities()?.config)),
         ),
     ]
 }
@@ -361,9 +349,10 @@ pub fn operations() -> Vec<Operation> {
 pub enum Outcome {
     Slug(String),
     Config(Resolved),
+    Guide(&'static str),
     Created(Created),
     List {
-        root: PathBuf,
+        identities_dir: PathBuf,
         rows: Vec<ListedIdentity>,
     },
     Lint {
@@ -494,12 +483,14 @@ impl Outcome {
         match self {
             Outcome::Slug(slug) => Envelope::ok(json!({ "slug": slug })),
             Outcome::Config(r) => Envelope::ok(value(r)),
+            Outcome::Guide(text) => Envelope::ok(json!({ "text": text })),
             Outcome::Created(c) => {
                 Envelope::ok(json!({ "slug": c.slug, "path": c.dir, "files": c.files }))
             }
-            Outcome::List { root, rows } => {
-                Envelope::ok(json!({ "root": root, "identities": rows }))
-            }
+            Outcome::List {
+                identities_dir,
+                rows,
+            } => Envelope::ok(json!({ "identities_dir": identities_dir, "identities": rows })),
             Outcome::Lint { identity, found } => {
                 let split = |level: Level| {
                     found

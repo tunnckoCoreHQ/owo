@@ -1,4 +1,4 @@
-use crate::identity::read_object;
+use crate::identity::{read_object, SESSIONS, SOURCES};
 use crate::write::Writes;
 use crate::{Fault, Named};
 use anyhow::{bail, Context, Result};
@@ -24,7 +24,7 @@ pub struct SyncCursor {
     pub session: String,
     pub transcript: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub messages: Option<usize>,
+    pub turns: Option<usize>,
     pub until: usize,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub pending: Option<PendingRun>,
@@ -149,7 +149,8 @@ pub struct SyncReport {
 }
 
 pub struct StartRequest<'a> {
-    pub root: &'a Path,
+    pub identities_dir: &'a Path,
+    pub dir: &'a Path,
     pub cwd: &'a Path,
     pub slug: &'a str,
     pub session: &'a str,
@@ -186,11 +187,11 @@ impl Drop for Made {
 }
 
 impl Lock {
-    fn take(root: &Path, session: &str) -> Result<Option<Lock>> {
+    fn take(dir: &Path, session: &str) -> Result<Option<Lock>> {
         if crate::write::dry() {
             return Ok(None);
         }
-        let path = root.join(".owo/sessions").join(format!("{session}.lock"));
+        let path = dir.join(SESSIONS).join(format!("{session}.lock"));
         let dir = path.parent().expect("has parent");
         let made = Made(crate::write::missing(dir));
         fs::create_dir_all(dir)?;
@@ -228,22 +229,22 @@ impl Drop for Lock {
     }
 }
 
-fn cursor_path(root: &Path, session: &str) -> std::path::PathBuf {
-    root.join(".owo/sessions").join(format!("{session}.json"))
+fn cursor_path(dir: &Path, session: &str) -> PathBuf {
+    dir.join(SESSIONS).join(format!("{session}.json"))
 }
 
-fn read_cursor(root: &Path, session: &str) -> Result<Value> {
-    Ok(read_object(&cursor_path(root, session))?.unwrap_or_else(|| json!({})))
+fn read_cursor(dir: &Path, session: &str) -> Result<Value> {
+    Ok(read_object(&cursor_path(dir, session))?.unwrap_or_else(|| json!({})))
 }
 
 fn turns_file(session: &str) -> String {
-    format!(".owo/sessions/{session}.turns.jsonl")
+    format!("{SESSIONS}/{session}.turns.jsonl")
 }
 
 pub fn start(req: &StartRequest, transcript: &Path, format: Format) -> Result<SyncReport> {
     check_session(req.session)?;
-    let _lock = Lock::take(req.root, req.session)?;
-    if let Some(t) = read_cursor(req.root, req.session)?["transcript"].as_str() {
+    let _lock = Lock::take(req.dir, req.session)?;
+    if let Some(t) = read_cursor(req.dir, req.session)?["transcript"].as_str() {
         if t.ends_with(&turns_file(req.session)) {
             return Err(Fault::PushedSession(req.session.into()).into());
         }
@@ -306,9 +307,9 @@ fn drop_cut_off_line(bytes: &mut Vec<u8>) {
 
 pub fn push(req: &StartRequest, turns: &[Turn]) -> Result<SyncReport> {
     check_session(req.session)?;
-    let _lock = Lock::take(req.root, req.session)?;
-    let file = req.root.join(turns_file(req.session));
-    if let Some(t) = read_cursor(req.root, req.session)?["transcript"].as_str() {
+    let _lock = Lock::take(req.dir, req.session)?;
+    let file = req.dir.join(turns_file(req.session));
+    if let Some(t) = read_cursor(req.dir, req.session)?["transcript"].as_str() {
         if !t.ends_with(&turns_file(req.session)) {
             return Err(Fault::TranscriptSession {
                 session: req.session.into(),
@@ -346,18 +347,27 @@ pub fn push(req: &StartRequest, turns: &[Turn]) -> Result<SyncReport> {
         .and(writes)
         .commit()?;
     out.added = Some(added);
-    if let (Some(slice), Some(prompt)) = (&out.slice, &out.prompt) {
-        out.slice_text = Some(crate::write::read_to_string(&req.root.join(slice))?);
-        out.prompt_text = Some(crate::write::read_to_string(&req.root.join(prompt))?);
-    }
+    // A host that pushes turns cannot read the files, so each reply of a pending run has both.
+    let pending = &read_cursor(req.dir, req.session)?["pending"];
+    let text = |key: &str| {
+        let Some(rel) = pending[key].as_str() else {
+            return Ok(None);
+        };
+        let file = req.dir.join(rel);
+        let text = crate::write::read_to_string(&file)
+            .with_context(|| format!("reading {} of the pending run", file.display()))?;
+        anyhow::Ok(Some(text))
+    };
+    out.slice_text = text("slice")?;
+    out.prompt_text = text("prompt")?;
     Ok(out)
 }
 
-fn new_user_turns(messages: &[TranscriptTurn], done: usize, pending_end: Option<usize>) -> usize {
-    let counted_from = pending_end.map_or(done, |end| end.clamp(done, messages.len()));
-    messages[counted_from..]
+fn new_user_turns(turns: &[TranscriptTurn], done: usize, pending_end: Option<usize>) -> usize {
+    let counted_from = pending_end.map_or(done, |end| end.clamp(done, turns.len()));
+    turns[counted_from..]
         .iter()
-        .filter(|m| m.role == "user")
+        .filter(|t| t.role == "user")
         .count()
 }
 
@@ -367,24 +377,24 @@ fn run(
     raw: &str,
     format: Format,
 ) -> Result<(SyncReport, Writes)> {
-    let messages = parse(raw, format)?;
-    if messages.is_empty() && !raw.trim().is_empty() {
-        return Err(Fault::NoMessages {
+    let turns = parse(raw, format)?;
+    if turns.is_empty() && !raw.trim().is_empty() {
+        return Err(Fault::NoTurns {
             transcript: transcript.to_path_buf(),
             format: format.name(),
         }
         .into());
     }
-    let mut doc = read_cursor(req.root, req.session)?;
+    let mut doc = read_cursor(req.dir, req.session)?;
     let done = doc["until"].as_u64().unwrap_or(0) as usize;
-    let done = done.min(messages.len());
-    let until = messages.len();
+    let done = done.min(turns.len());
+    let until = turns.len();
     let pending_end = doc["pending"]["until"].as_u64().map(|u| u as usize);
-    let new_user = new_user_turns(&messages, done, pending_end);
+    let new_user = new_user_turns(&turns, done, pending_end);
     let due = new_user > 0 && (req.now || new_user >= req.every);
     let from = (0..done)
         .rev()
-        .filter(|&i| messages[i].role == "user")
+        .filter(|&i| turns[i].role == "user")
         .nth(OVERLAP_TURNS - 1)
         .unwrap_or(0);
     let mut out = SyncReport {
@@ -399,7 +409,7 @@ fn run(
     };
     doc["session"] = json!(req.session);
     doc["transcript"] = json!(transcript.display().to_string());
-    doc["messages"] = json!(until);
+    doc["turns"] = json!(until);
     if doc.get("until").is_none() {
         doc["until"] = json!(0);
     }
@@ -409,93 +419,97 @@ fn run(
     let mut writes = Writes::default();
     if due {
         let date = crate::state::now()[..10].to_string();
-        let slice = format!(
-            "sources/{}/{date}_{}_{from}-{until}.md",
-            req.slug, req.session
-        );
-        let mut body = format!("# Session {} ({from}-{until})\n\nIdentity: {}. Transcript: {}. Messages {from} to {until}.{}\n", req.session, req.slug, transcript.display(), if done == 0 { String::new() } else { format!(" Messages before {done} were synced already.") });
-        for (i, m) in messages[from..until].iter().enumerate() {
+        let cite = format!("{date}_{}_{from}-{until}.md", req.session);
+        let slice = format!("{SOURCES}/{cite}");
+        let mut body = format!("# Session {} ({from}-{until})\n\nIdentity: {}. Transcript: {}. Turns {from} to {until}.{}\n", req.session, req.slug, transcript.display(), if done == 0 { String::new() } else { format!(" Turns before {done} were synced already.") });
+        for (i, t) in turns[from..until].iter().enumerate() {
             let id =
-                m.id.as_ref()
+                t.id.as_ref()
                     .map(|id| format!(" ({id})"))
                     .unwrap_or_default();
-            body.push_str(&format!("\n## {} {}{id}\n\n{}\n", from + i, m.role, m.text));
+            body.push_str(&format!("\n## {} {}{id}\n\n{}\n", from + i, t.role, t.text));
         }
-        let file = req.root.join(&slice);
+        let file = req.dir.join(&slice);
         writes = writes.file(&file, &file, body);
-        let prompt = format!(".owo/sessions/{}.prompt.md", req.session);
+        let prompt = format!("{SESSIONS}/{}.prompt.md", req.session);
         let project = req
             .project
             .map(|p| format!(" --project {p}"))
             .unwrap_or_default();
-        let root = fs::canonicalize(req.root).unwrap_or_else(|_| req.root.to_path_buf());
-        let quoted = format!("'{}'", root.display().to_string().replace('\'', "'\\''"));
+        let real = |p: &Path| fs::canonicalize(p).unwrap_or_else(|_| p.to_path_buf());
+        let identities_dir = real(req.identities_dir).display().to_string();
+        let quoted = format!("'{}'", identities_dir.replace('\'', "'\\''"));
         let text = format!(
-            "Use owo ingest (the ingest path of the owo skill) for identity `{slug}`{proj}.\n\nRaw material: the slice `{slice}` (relative to the root `{root}`).{earlier}\n\nStart every owo command in this run, the commands of the skill too, with the exact prefix `{owo}`, so each one acts on this root and identity. Use the owo CLI only, not an owo MCP server or connector.\n\n1. `{owo} context{project}` and `{owo} state`.\n2. Route each durable fact in the slice to its home; add `{cite}#L<a>-L<b>` to each entry's frontmatter `sources`.\n3. Run the checkpoint: `{owo} stamp && {owo} index && {owo} lint --changed`.\n4. Report changed paths or \"no changes\".\n5. When the checkpoint passes, finish the run with `{owo} sync done --session {session} --until {until}`.\n",
+            "Use owo ingest (the ingest path of the owo skill) for identity `{slug}`{proj}.\n\nRaw material: the slice `{slice}` (relative to the identity folder `{dir}`).{earlier}\n\nRun every owo operation of this run on this identities dir and identity. If you read this prompt from a file, start each command, the commands of the skill too, with the exact prefix `{owo}`. If it came in a `sync_push` result, use the tools of that same MCP server with `identity` set to `{slug}`, such as `sync_done` for `owo sync done`; its `guide` tool gives the owo skill. Do not use any other owo server or connector.\n\n1. `{owo} context{project}` and `{owo} state`.\n2. Route each durable fact in the slice to its home; add `{cite}#L<a>-L<b>` to each entry's frontmatter `sources`.\n3. Run the checkpoint: `{owo} stamp && {owo} index && {owo} lint --changed`.\n4. Report changed paths or \"no changes\".\n5. When the checkpoint passes, finish the run with `{owo} sync done --session {session} --until {until}`.\n",
             slug = req.slug,
-            earlier = if done == 0 { String::new() } else { format!(" Messages before {done} were ingested in an earlier run; the first part is overlap for context.") },
-            root = root.display(),
-            owo = format!("owo --root {quoted} -i {}", req.slug),
+            earlier = if done == 0 { String::new() } else { format!(" Turns before {done} were ingested in an earlier run; the first part is overlap for context.") },
+            dir = real(req.dir).display(),
+            owo = format!("owo --identities-dir {quoted} -i {}", req.slug),
             proj = req.project.map(|p| format!(" on project `{p}`")).unwrap_or_default(),
-            cite = slice.trim_start_matches("sources/"),
             session = req.session,
         );
-        let file = req.root.join(&prompt);
+        let file = req.dir.join(&prompt);
         writes = writes.file(&file, &file, text);
         doc["pending"] = json!({ "from": from, "until": until, "slice": slice, "prompt": prompt });
         out.slice = Some(slice);
         out.prompt = Some(prompt);
     }
-    let path = cursor_path(req.root, req.session);
+    let path = cursor_path(req.dir, req.session);
     Ok((out, writes.and(Writes::default().json(&path, &path, &doc)?)))
 }
 
 #[derive(Debug, Serialize)]
 pub struct PendingSession {
+    pub identity: String,
     pub session: String,
     pub prompt: String,
     pub from: usize,
     pub until: usize,
 }
 
-pub fn due(root: &Path, slug: Option<&str>) -> Result<Vec<PendingSession>> {
-    let prefix = slug.map(|s| format!("sources/{s}/"));
-    let dir = root.join(".owo/sessions");
-    let entries = match fs::read_dir(&dir) {
-        Ok(e) => e,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(vec![]),
-        Err(e) => return Err(e).with_context(|| format!("reading {}", dir.display())),
+/// The pending runs of one identity, or of every identity in the identities dir.
+pub fn due(identities_dir: &Path, slug: Option<&str>) -> Result<Vec<PendingSession>> {
+    let slugs = match slug {
+        Some(slug) => vec![slug.to_string()],
+        None => crate::config::list_identities(identities_dir),
     };
     let mut out = vec![];
-    for entry in entries {
-        let path = entry?.path();
-        if path.extension().is_none_or(|e| e != "json") {
-            continue;
-        }
-        let Some(doc) = read_object(&path)? else {
-            continue;
+    for slug in slugs {
+        let dir = identities_dir.join(&slug).join(SESSIONS);
+        let entries = match fs::read_dir(&dir) {
+            Ok(e) => e,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(e) => return Err(e).with_context(|| format!("reading {}", dir.display())),
         };
-        let cursor = SyncCursor::deserialize(&doc)
-            .with_context(|| format!("{} does not parse; fix it by hand", path.display()))?;
-        let of_identity =
-            |p: &PendingRun| prefix.as_ref().is_none_or(|pre| p.slice.starts_with(pre));
-        if let Some(p) = cursor.pending.filter(of_identity) {
-            out.push(PendingSession {
-                session: cursor.session,
-                prompt: p.prompt,
-                from: p.from,
-                until: p.until,
-            });
+        for entry in entries {
+            let path = entry?.path();
+            if path.extension().is_none_or(|e| e != "json") {
+                continue;
+            }
+            let Some(doc) = read_object(&path)? else {
+                continue;
+            };
+            let cursor = SyncCursor::deserialize(&doc)
+                .with_context(|| format!("{} does not parse; fix it by hand", path.display()))?;
+            if let Some(p) = cursor.pending {
+                out.push(PendingSession {
+                    identity: slug.clone(),
+                    session: cursor.session,
+                    prompt: p.prompt,
+                    from: p.from,
+                    until: p.until,
+                });
+            }
         }
     }
-    out.sort_by(|a, b| a.session.cmp(&b.session));
+    out.sort_by(|a, b| (&a.identity, &a.session).cmp(&(&b.identity, &b.session)));
     Ok(out)
 }
 
-pub fn done(root: &Path, session: &str, until: usize) -> Result<SyncCursor> {
+pub fn done(dir: &Path, session: &str, until: usize) -> Result<SyncCursor> {
     check_session(session)?;
-    let _lock = Lock::take(root, session)?;
-    let mut doc = read_cursor(root, session)?;
+    let _lock = Lock::take(dir, session)?;
+    let mut doc = read_cursor(dir, session)?;
     if doc.get("session").is_none() {
         return Err(Fault::NoSyncCursor(session.into()).into());
     }
@@ -507,8 +521,8 @@ pub fn done(root: &Path, session: &str, until: usize) -> Result<SyncCursor> {
         }
         .into());
     }
-    if let Some(seen) = doc["messages"].as_u64().filter(|n| until as u64 > *n) {
-        return Err(Fault::PastMessages { until, seen }.into());
+    if let Some(seen) = doc["turns"].as_u64().filter(|n| until as u64 > *n) {
+        return Err(Fault::PastTurns { until, seen }.into());
     }
     doc["until"] = json!(until);
     if doc
@@ -519,7 +533,7 @@ pub fn done(root: &Path, session: &str, until: usize) -> Result<SyncCursor> {
     }
     let cursor = SyncCursor::deserialize(&doc)
         .with_context(|| format!("the sync cursor of session {session:?} does not parse"))?;
-    let path = cursor_path(root, session);
+    let path = cursor_path(dir, session);
     Writes::default().json(&path, &path, &doc)?.commit()?;
     Ok(cursor)
 }

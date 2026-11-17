@@ -1,19 +1,14 @@
 use crate::output::{exit, Output};
 use crate::text;
-use owo_core::{Outcome, Ran};
+use owo_core::{Outcome, Result};
 
-pub fn output(ran: Ran, json: bool, quiet: bool) -> Output {
-    let outcome = match ran.result {
+pub fn output(result: Result<Outcome>, json: bool, quiet: bool) -> Output {
+    let outcome = match result {
         Ok(o) => o,
-        Err(e) => {
-            return Output {
-                warnings: ran.warnings,
-                ..Output::from(anyhow::Error::from(e))
-            }
-        }
+        Err(e) => return Output::from(anyhow::Error::from(e)),
     };
     let envelope = outcome.envelope();
-    let mut warnings = ran.warnings;
+    let mut warnings = vec![];
     let mut text = String::new();
     if !json {
         warnings.extend(envelope.text_warnings());

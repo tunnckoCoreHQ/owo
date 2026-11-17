@@ -5,7 +5,7 @@ use serde_json::{json, Value};
 use std::path::Path;
 use tempfile::TempDir;
 
-fn root(ids: &[&str]) -> TempDir {
+fn ids_dir(ids: &[&str]) -> TempDir {
     let tmp = TempDir::new().unwrap();
     let examples = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples");
     for id in ids {
@@ -26,16 +26,17 @@ fn root(ids: &[&str]) -> TempDir {
     tmp
 }
 
-fn env(root: &Path) -> Env {
+fn env(ids_dir: &Path) -> Env {
     Env {
-        cwd: root.to_path_buf(),
+        cwd: ids_dir.to_path_buf(),
+        owo_dir: Some(".owo".into()),
         ..Env::default()
     }
 }
 
-fn select(root: &Path) -> Select {
+fn select(ids_dir: &Path) -> Select {
     Select {
-        root: Some(root.to_path_buf()),
+        identities_dir: Some(ids_dir.to_path_buf()),
         ..Select::default()
     }
 }
@@ -49,7 +50,7 @@ fn call(name: &str, arguments: Value) -> Value {
 
 #[test]
 fn mcp_reply_answers_one_message() {
-    let tmp = root(&["nicole"]);
+    let tmp = ids_dir(&["nicole"]);
     let (sel, env) = (select(tmp.path()), env(tmp.path()));
 
     let init = json!({ "jsonrpc": "2.0", "id": 1, "method": "initialize", "params": { "protocolVersion": "2025-03-26" } });
@@ -107,7 +108,7 @@ fn mcp_reply_answers_one_message() {
 
 #[test]
 fn mcp_serves_a_reader_and_a_writer() {
-    let tmp = root(&["nicole"]);
+    let tmp = ids_dir(&["nicole"]);
     let (sel, env) = (select(tmp.path()), env(tmp.path()));
     let input = format!(
         "{}\n\n{}\n{}\n",
@@ -129,10 +130,10 @@ fn mcp_serves_a_reader_and_a_writer() {
 
 #[test]
 fn mcp_dry_run_names_the_file_and_writes_none() {
-    let tmp = root(&["nicole"]);
+    let tmp = ids_dir(&["nicole"]);
     let (sel, env) = (select(tmp.path()), env(tmp.path()));
     let args =
-        json!({ "identity": "nicole", "kind": "character", "title": "Mara Voss", "dryRun": true });
+        json!({ "identity": "nicole", "type": "character", "title": "Mara Voss", "dryRun": true });
     let r = reply(call("add", args), &sel, &env);
     assert_eq!(r["result"]["isError"], false, "{r}");
     let text = r["result"]["content"][0]["text"].as_str().unwrap();

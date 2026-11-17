@@ -1,6 +1,7 @@
 # Agents
 
 - Read `lat.md/lat.md` first. `lat.md/` is the one description of behavior.
+- Name things with the terms of `GLOSSARY.md`, in code, docs and replies. It has one name for each concept, and the names to avoid.
 - Before committing: `cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test`.
 - Keep `lat.md/` current: update the section that describes changed behavior in the same commit.
 - use gitswitch olstenlarck for contributing

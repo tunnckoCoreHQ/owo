@@ -8,11 +8,15 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use tempfile::TempDir;
 
-pub fn owo(root: &Path) -> Command {
+/// An `owo` on the identities dir `ids`, with its owo dir in `ids/.owo`.
+pub fn owo(ids: &Path) -> Command {
     let mut cmd = Command::cargo_bin("owo").unwrap();
-    cmd.arg("--root")
-        .arg(root)
-        .env_remove("OWO_ROOT")
+    cmd.arg("--identities-dir")
+        .arg(ids)
+        .env("OWO_DIR", ids.join(".owo"))
+        .env_remove("OWO_CONFIG")
+        .env_remove("OWO_TEMPLATES_DIR")
+        .env_remove("OWO_IDENTITIES_DIR")
         .env_remove("OWO_IDENTITY")
         .env_remove("OWO_PROJECT");
     cmd

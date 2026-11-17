@@ -5,11 +5,11 @@ description: Load this when you embody an owo identity, or when a prompt asks fo
 
 # owo
 
-An owo Identity is a folder of Markdown files in three Scopes: `persona/`, `life/` and `work/`. The `owo` CLI does every step that needs no judgment. The owo MCP server has the same Operations as tools, such as `sync_done` for `owo sync done`.
+An owo Identity is a folder of Markdown files in three Scopes: `persona/`, `life/` and `work/`. The `owo` CLI does every step that needs no judgment. The owo MCP server has the same Operations as tools, such as `sync_done` for `owo sync done`. When you have only that server and no shell, call the tool for each command in this skill, and read the files of this skill with the `guide` tool.
 
 The words in capitals, such as Entry, Daily Log or Reflection, are the terms of [references/glossary.md](references/glossary.md). Name things with those terms when you write or report, and read the glossary when a term in this skill or in owo output is new to you.
 
-In a Root with more than one Identity, name the Identity in each call. On the CLI that is `-i <slug>`, and on an MCP tool it is the `identity` argument. When the Host gave you an Identity, use that one. In such a Root, a CLI command that reads an Identity exits 3 when no Identity is selected.
+In an Identities Dir with more than one Identity, name the Identity in each call. On the CLI that is `-i <slug>`, and on an MCP tool it is the `identity` argument. When the Host gave you an Identity, use that one. In such an Identities Dir, a CLI command that reads an Identity exits 3 when no Identity is selected.
 
 ## Routing
 

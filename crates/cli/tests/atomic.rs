@@ -210,7 +210,7 @@ fn atomic_sync_start_replaces_the_prompt() {
     let tmp = setup();
     transcript(tmp.path(), 1);
     assert!(run(tmp.path(), &[&START[..], &["--now"]].concat()));
-    let prompt = tmp.path().join("ids/.owo/sessions/s1.prompt.md");
+    let prompt = tmp.path().join("ids/nicole/sessions/s1.prompt.md");
     let before = ino(&prompt);
     transcript(tmp.path(), 2);
     assert!(run(tmp.path(), &[&START[..], &["--now"]].concat()));
@@ -223,7 +223,7 @@ fn atomic_sync_start_is_all_or_nothing() {
     let tmp = setup();
     let ids = tmp.path().join("ids");
     transcript(tmp.path(), 1);
-    block(&ids.join(".owo/sessions/s1.prompt.md"));
+    block(&ids.join("nicole/sessions/s1.prompt.md"));
     let before = snapshot(&ids);
     assert!(!run(tmp.path(), &[&START[..], &["--now"]].concat()));
     assert_eq!(snapshot(&ids), before);
@@ -233,7 +233,7 @@ fn atomic_sync_start_is_all_or_nothing() {
 fn atomic_sync_push_is_all_or_nothing() {
     let tmp = setup();
     let ids = tmp.path().join("ids");
-    block(&ids.join(".owo/sessions/s1.prompt.md"));
+    block(&ids.join("nicole/sessions/s1.prompt.md"));
     let before = snapshot(&ids);
     assert!(!run(
         tmp.path(),
@@ -318,7 +318,7 @@ fn atomic_core_turns_a_non_utf8_path_into_utf8_text() {
         .current_dir(&work)
         .args(["migrate", "v1"])
         .arg(bad(b"v1\xff"))
-        .args(["--out", "root/lumen"])
+        .args(["--out", "ids_dir/lumen"])
         .output()
         .unwrap();
     assert!(
@@ -326,7 +326,7 @@ fn atomic_core_turns_a_non_utf8_path_into_utf8_text() {
         "{}",
         String::from_utf8_lossy(&out.stderr)
     );
-    assert!(work.join("root/lumen/identity.json").is_file());
+    assert!(work.join("ids_dir/lumen/identity.json").is_file());
     fs::write(
         work.join("t\u{FFFD}.jsonl"),
         "{\"role\":\"user\",\"text\":\"hi\"}\n",
@@ -358,21 +358,22 @@ fn atomic_core_turns_a_non_utf8_path_into_utf8_text() {
 #[cfg(not(target_os = "macos"))]
 #[test]
 fn atomic_core_api_turns_a_non_utf8_path_into_utf8_text() {
-    use owo_core::{Env, Root, Select, SkillRequest};
+    use owo_core::{Env, Identities, Select, SkillRequest};
     use std::ffi::OsStr;
     use std::os::unix::ffi::OsStrExt;
     let tmp = setup();
     let work = tmp.path().join("work");
     let sel = Select {
-        root: Some(tmp.path().join("ids")),
+        identities_dir: Some(tmp.path().join("ids")),
         identity: Some("nicole".into()),
-        project: None,
+        ..Select::default()
     };
     let env = Env {
         cwd: work.clone(),
+        owo_dir: Some(".owo".into()),
         ..Env::default()
     };
-    let id = Root::open(&sel, &env).unwrap().identity().unwrap();
+    let id = Identities::open(&sel, &env).unwrap().identity().unwrap();
     let out = PathBuf::from(OsStr::from_bytes(b"api\xff"));
     let shown = id.export_skill(&SkillRequest { out }).unwrap();
     assert_eq!(shown, "api\u{FFFD}/SKILL.md");

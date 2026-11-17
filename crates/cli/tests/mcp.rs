@@ -4,8 +4,8 @@ use common::{copy_example, examples, owo};
 use serde_json::{json, Value};
 use std::path::Path;
 
-fn raw_session(root: &Path, id: &str, input: Vec<u8>) -> Vec<Value> {
-    let out = owo(root)
+fn raw_session(ids_dir: &Path, id: &str, input: Vec<u8>) -> Vec<Value> {
+    let out = owo(ids_dir)
         .args(["-i", id, "mcp"])
         .write_stdin(input)
         .output()
@@ -155,10 +155,13 @@ fn mcp_sends_turns_on_stdin_and_joins_flag_values() {
 fn mcp_remote_serves_http() {
     use std::io::{BufRead, BufReader, Read, Write};
     let mut child = std::process::Command::new(env!("CARGO_BIN_EXE_owo"))
-        .env_remove("OWO_ROOT")
+        .env("OWO_DIR", examples().join(".owo"))
+        .env_remove("OWO_CONFIG")
+        .env_remove("OWO_TEMPLATES_DIR")
+        .env_remove("OWO_IDENTITIES_DIR")
         .env_remove("OWO_IDENTITY")
         .env_remove("OWO_PROJECT")
-        .arg("--root")
+        .arg("--identities-dir")
         .arg(examples())
         .args(["-i", "nicole", "mcp", "--remote", "--port", "0"])
         .stdout(std::process::Stdio::piped())
@@ -233,8 +236,8 @@ fn mcp_remote_serves_http() {
     );
 }
 
-fn cli_result(root: &Path, args: &[&str], stdin: &str) -> (String, bool) {
-    let out = owo(root)
+fn cli_result(ids_dir: &Path, args: &[&str], stdin: &str) -> (String, bool) {
+    let out = owo(ids_dir)
         .args(["-i", "nicole"])
         .args(args)
         .write_stdin(stdin)
@@ -336,4 +339,53 @@ fn mcp_tool_results_equal_the_cli_output() {
     );
     assert!(text(&replies[1]).contains("since and days cannot be used together"));
     assert!(replies.iter().all(|r| r["result"]["isError"] == true));
+}
+
+#[test]
+fn mcp_alone_runs_a_sync_run_from_push_to_done() {
+    let tmp = copy_example("nicole");
+    let turns = json!([{ "id": 1, "role": "user", "text": "Ines moved to Porto." }]);
+    let replies = raw_session(
+        tmp.path(),
+        "nicole",
+        lines(&[
+            json!({ "jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {} }),
+            call(
+                2,
+                "sync_push",
+                json!({ "session": "c1", "now": true, "turns": turns }),
+            ),
+            call(3, "sync_push", json!({ "session": "c1", "turns": [] })),
+            call(4, "guide", json!({ "path": "ingest" })),
+            call(
+                5,
+                "add",
+                json!({ "type": "character", "title": "Porto Ines" }),
+            ),
+            call(6, "sync_done", json!({ "session": "c1", "until": 1 })),
+            call(7, "sync_due", json!({})),
+        ]),
+    );
+    let instructions = replies[0]["result"]["instructions"].as_str().unwrap();
+    assert!(instructions.contains("`sync_push`") && instructions.contains("`guide`"));
+    let data = |n: usize| -> Value { serde_json::from_str::<Value>(text(&replies[n])).unwrap() };
+    let first = data(1);
+    assert_eq!(first["data"]["due"], true);
+    let prompt = first["data"]["prompt_text"].as_str().unwrap();
+    assert!(prompt.contains("`identity` set to `nicole`"), "{prompt}");
+    let again = data(2);
+    assert_eq!(again["data"]["due"], false);
+    assert_eq!(
+        again["data"]["prompt_text"], first["data"]["prompt_text"],
+        "a later push has the text of the pending run"
+    );
+    assert_eq!(again["data"]["slice_text"], first["data"]["slice_text"]);
+    assert!(text(&replies[3]).starts_with("# owo ingest"));
+    assert_eq!(
+        data(4)["data"]["path"],
+        "life/characters/porto-ines.md",
+        "add takes the entry type as `type`"
+    );
+    assert_eq!(data(5)["ok"], true);
+    assert_eq!(data(6)["data"]["due"], json!([]));
 }

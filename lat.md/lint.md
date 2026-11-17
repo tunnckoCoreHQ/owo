@@ -6,8 +6,8 @@
 
 Each rule has a code usable with `--rule`.
 
-- `tree` (error): required files and folders; `identity.json` schema `owo/1` and slug; SoulSpec required fields; location folders have `overview.md`, slug names, one level deep; files outside the layout; Markdown files that are not valid UTF-8 (owo reads them with U+FFFD in place of the bad bytes, and `owo stamp` refuses to run until they are fixed).
-- `schema` (error, empty summary warns): frontmatter per [[formats#Entry frontmatter]].
+- `tree` (error, a `.gitignore` without `sessions/` warns): required files and folders; `identity.json` schema `owo/1` and slug; SoulSpec required fields; location folders have `overview.md`, slug names, one level deep; files outside the layout; Markdown files that are not valid UTF-8 (owo reads them with U+FFFD in place of the bad bytes, and `owo stamp` refuses to run until they are fixed). It warns when the `.gitignore` of the identity folder has no `sessions/` line; see [[decisions#Sources and sessions live in the identity folder]].
+- `schema` (error, empty summary warns): frontmatter per [[formats#Entry frontmatter]]. A day has one daily log: a second daily log with the same `date` is an error that names the first.
 - `persona-plain` (error): persona files have no frontmatter.
 - `links` (error): every wikilink in body and frontmatter resolves; ambiguous wikilinks warn, and so does a `#Section` the target lacks. `wiki:` wikilinks belong to the `wiki` rule.
 - `unique` (error): titles and aliases are unique across the identity.

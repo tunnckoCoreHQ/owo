@@ -1,6 +1,6 @@
 use owo_core as req;
 use owo_core::{
-    acp, AddRequest, ContextFormat, ContextRequest, Env, ErrorKind, Fault, Kind, Named, Root,
+    acp, AddRequest, ContextFormat, ContextRequest, Env, ErrorKind, Fault, Identities, Kind, Named,
     Scope, SearchRequest, Select,
 };
 use serde_json::{json, Value};
@@ -9,7 +9,7 @@ use std::path::Path;
 use std::sync::mpsc;
 use tempfile::TempDir;
 
-fn root(ids: &[&str]) -> TempDir {
+fn ids_dir(ids: &[&str]) -> TempDir {
     let tmp = TempDir::new().unwrap();
     let examples = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples");
     for id in ids {
@@ -32,25 +32,26 @@ fn root(ids: &[&str]) -> TempDir {
 
 fn select(dir: &Path, identity: Option<&str>) -> Select {
     Select {
-        root: Some(dir.to_path_buf()),
+        identities_dir: Some(dir.to_path_buf()),
         identity: identity.map(str::to_string),
-        project: None,
+        ..Select::default()
     }
 }
 
 fn env(dir: &Path) -> Env {
     Env {
         cwd: dir.to_path_buf(),
+        owo_dir: Some(".owo".into()),
         ..Env::default()
     }
 }
 
-fn open(dir: &Path, identity: Option<&str>) -> Root {
-    Root::open(&select(dir, identity), &env(dir)).unwrap()
+fn open(dir: &Path, identity: Option<&str>) -> Identities {
+    Identities::open(&select(dir, identity), &env(dir)).unwrap()
 }
 #[test]
 fn a_root_lists_and_selects_identities() {
-    let tmp = root(&["nicole", "reviewer"]);
+    let tmp = ids_dir(&["nicole", "reviewer"]);
     let r = open(tmp.path(), None);
     let slugs: Vec<String> = r.list().into_iter().map(|row| row.slug).collect();
     assert_eq!(slugs, ["nicole", "reviewer"]);
@@ -60,7 +61,7 @@ fn a_root_lists_and_selects_identities() {
     let r = open(tmp.path(), Some("nobody"));
     assert!(matches!(r.identity(), Err(e) if e.kind == ErrorKind::Config));
 
-    let one = root(&["nicole"]);
+    let one = ids_dir(&["nicole"]);
     assert_eq!(
         open(one.path(), None).config.identity.as_deref(),
         Some("nicole")
@@ -69,7 +70,7 @@ fn a_root_lists_and_selects_identities() {
 
 #[test]
 fn read_side_calls_return_typed_results() {
-    let tmp = root(&["nicole"]);
+    let tmp = ids_dir(&["nicole"]);
     let id = open(tmp.path(), Some("nicole")).identity().unwrap();
 
     let hit = id
@@ -200,7 +201,7 @@ fn read_side_calls_return_typed_results() {
 
 #[test]
 fn write_side_calls_change_the_identity() {
-    let tmp = root(&["nicole"]);
+    let tmp = ids_dir(&["nicole"]);
     let r = open(tmp.path(), Some("nicole"));
     let id = r.identity().unwrap();
 
@@ -260,7 +261,7 @@ fn write_side_calls_change_the_identity() {
     assert!(sync.push("s1", &[bad], &Default::default()).is_err());
     assert!(matches!(
         r.sync_done(&req::SyncDoneRequest { session: "s1".into(), until: 9 }),
-        Err(e) if e.fault == Some(Fault::PastMessages { until: 9, seen: 1 })
+        Err(e) if e.fault == Some(Fault::PastTurns { until: 9, seen: 1 })
     ));
     let cursor = r
         .sync_done(&req::SyncDoneRequest {
@@ -268,7 +269,7 @@ fn write_side_calls_change_the_identity() {
             until: 1,
         })
         .unwrap();
-    assert_eq!((cursor.until, cursor.messages), (1, Some(1)));
+    assert_eq!((cursor.until, cursor.turns), (1, Some(1)));
 }
 
 #[test]
@@ -313,11 +314,11 @@ fn mcp_server(identity: Option<&str>) -> (String, Vec<String>) {
     ("owo".to_string(), args)
 }
 
-fn start(root: &Path, options: acp::Options, replies: Vec<Vec<String>>) -> Session {
+fn start(ids_dir: &Path, options: acp::Options, replies: Vec<Vec<String>>) -> Session {
     let warnings = std::sync::Arc::new(std::sync::Mutex::new(vec![]));
     let proxy = acp::Proxy::new(
-        &select(root, Some("nicole")),
-        &env(root),
+        &select(ids_dir, Some("nicole")),
+        &env(ids_dir),
         options,
         Shared(warnings.clone()),
     )
@@ -395,7 +396,7 @@ fn end(id: u64) -> String {
 
 #[test]
 fn acp_proxy_runs_on_given_streams() {
-    let tmp = root(&["nicole", "reviewer"]);
+    let tmp = ids_dir(&["nicole", "reviewer"]);
     let odd = r#"{ "jsonrpc": "2.0", "id": 9, "method": "_vendor/ask", "params": {"b": [1, 2]} }"#;
     let odd_reply = r#"{"jsonrpc":"2.0",  "id":9, "result":{"x" : 1}}"#;
     let mut p = start(
@@ -451,7 +452,7 @@ fn acp_proxy_runs_on_given_streams() {
 
     assert!(p.end().is_empty(), "no warnings");
     let stored =
-        std::fs::read_to_string(tmp.path().join(".owo/sessions/s1.nicole.turns.jsonl")).unwrap();
+        std::fs::read_to_string(tmp.path().join("nicole/sessions/s1.nicole.turns.jsonl")).unwrap();
     let stored: Vec<Value> = stored
         .lines()
         .map(|l| serde_json::from_str(l).unwrap())
@@ -467,7 +468,7 @@ fn acp_proxy_runs_on_given_streams() {
 
 #[test]
 fn acp_inject_puts_the_context_in_the_first_prompt() {
-    let tmp = root(&["nicole"]);
+    let tmp = ids_dir(&["nicole"]);
     let id = open(tmp.path(), Some("nicole")).identity().unwrap();
     let context = id.context_text(
         &id.context(&ContextRequest {
@@ -504,7 +505,7 @@ fn acp_inject_puts_the_context_in_the_first_prompt() {
 
 #[test]
 fn acp_push_writes_the_run_when_due() {
-    let tmp = root(&["nicole"]);
+    let tmp = ids_dir(&["nicole"]);
     let mut replies = vec![vec![new_reply()]];
     replies.extend((2..=7).map(|i| vec![chunk(&format!("m{i}"), "ok"), end(i)]));
     let mut p = start(
@@ -530,12 +531,13 @@ fn acp_push_writes_the_run_when_due() {
     assert_eq!(due.len(), 1, "six user turns make a run due");
     assert_eq!(due[0].session, "s1.nicole");
     assert_eq!((due[0].from, due[0].until), (0, 12));
-    assert!(tmp.path().join(&due[0].prompt).is_file());
+    assert_eq!(due[0].identity, "nicole");
+    assert!(tmp.path().join("nicole").join(&due[0].prompt).is_file());
 }
 
 #[test]
 fn acp_dry_run_stores_no_turns() {
-    let tmp = root(&["nicole"]);
+    let tmp = ids_dir(&["nicole"]);
     let mut replies = vec![vec![new_reply()]];
     replies.extend((2..=7).map(|i| vec![chunk(&format!("m{i}"), "ok"), end(i)]));
     let mut p = start(
@@ -557,7 +559,7 @@ fn acp_dry_run_stores_no_turns() {
         p.read();
     }
     let warnings = String::from_utf8(p.end()).unwrap();
-    let sessions = tmp.path().join(".owo/sessions");
+    let sessions = tmp.path().join("nicole/sessions");
     for path in [
         sessions.join("s1.nicole.turns.jsonl"),
         sessions.join("s1.nicole.json"),
@@ -568,9 +570,9 @@ fn acp_dry_run_stores_no_turns() {
     }
     let slice = format!(
         "owo: would write {}",
-        tmp.path().join("sources/nicole/").display()
+        tmp.path().join("nicole/sources/").display()
     );
     assert!(warnings.contains(&slice), "{warnings}");
-    assert!(!tmp.path().join(".owo").exists());
-    assert!(!tmp.path().join("sources").exists());
+    assert!(!sessions.exists());
+    assert!(!tmp.path().join("nicole/sources").exists());
 }

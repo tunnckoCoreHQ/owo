@@ -106,9 +106,8 @@ pub fn add(id: &Identity, req: &Request, project: Option<&str>) -> Result<(Strin
         .kind
         .template()
         .expect("every entry type has a template");
-    let root = id.dir.parent().unwrap_or(&id.dir);
     let mut text = templates::fill(
-        &templates::get(root, &format!("{name}.md"), builtin),
+        &templates::get(id.templates_dir.as_deref(), &format!("{name}.md"), builtin),
         &values,
     );
     let fill_line = |text: &str, from: &'static str, to: &str, field| {

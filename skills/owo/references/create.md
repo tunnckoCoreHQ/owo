@@ -4,7 +4,7 @@ Create an Identity once, from what the user says about it. This thread has two p
 
 ## Make the folder
 
-Run `owo new "<Name>"`. It makes `<root>/<slug>/` from the templates and prints that folder. `owo config` shows which Root it uses. Use that Slug as the Identity in every later call.
+Run `owo new "<Name>"`. It makes `<slug>/` in the Identities Dir from the templates and prints that folder. `owo config` shows which Identities Dir it uses. Use that Slug as the Identity in every later call.
 
 ## Ask
 
