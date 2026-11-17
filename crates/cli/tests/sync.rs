@@ -474,3 +474,26 @@ fn sync_due_with_an_identity_lists_only_its_runs() {
     assert_eq!(sessions(&["-i", "nicole"]), ["n1"]);
     assert_eq!(sessions(&["-i", "reviewer"]), ["r1"]);
 }
+
+#[test]
+fn sync_push_fails_when_a_file_of_the_pending_run_is_gone() {
+    let tmp = copy_example("nicole");
+    let push = |turns: &str| {
+        owo(tmp.path())
+            .args(["-i", "nicole", "sync", "push", "--session", "g1", "--now"])
+            .arg("--turns")
+            .arg(turns)
+            .output()
+            .unwrap()
+    };
+    assert!(push(r#"[{"id":1,"role":"user","text":"hi"}]"#)
+        .status
+        .success());
+    fs::remove_file(tmp.path().join("nicole/sessions/g1.prompt.md")).unwrap();
+    let out = push("[]");
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        !out.status.success() && stderr.contains("g1.prompt.md of the pending run"),
+        "a reply with no prompt would hide the run: {stderr}"
+    );
+}

@@ -350,11 +350,16 @@ pub fn push(req: &StartRequest, turns: &[Turn]) -> Result<SyncReport> {
     // A host that pushes turns cannot read the files, so each reply of a pending run has both.
     let pending = &read_cursor(req.dir, req.session)?["pending"];
     let text = |key: &str| {
-        let rel = pending[key].as_str()?;
-        crate::write::read_to_string(&req.dir.join(rel)).ok()
+        let Some(rel) = pending[key].as_str() else {
+            return Ok(None);
+        };
+        let file = req.dir.join(rel);
+        let text = crate::write::read_to_string(&file)
+            .with_context(|| format!("reading {} of the pending run", file.display()))?;
+        anyhow::Ok(Some(text))
     };
-    out.slice_text = text("slice");
-    out.prompt_text = text("prompt");
+    out.slice_text = text("slice")?;
+    out.prompt_text = text("prompt")?;
     Ok(out)
 }
 

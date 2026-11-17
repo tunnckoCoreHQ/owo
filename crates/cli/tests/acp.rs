@@ -463,7 +463,7 @@ fn the_owo_command_switches_the_identity_of_a_session() {
     );
     assert!(!tmp
         .path()
-        .join(".owo/sessions/s.nicole.turns.jsonl")
+        .join("nicole/sessions/s.nicole.turns.jsonl")
         .exists());
 }
 
@@ -547,7 +547,7 @@ fn a_turn_stays_with_the_identity_it_started_with() {
     );
     assert!(!tmp
         .path()
-        .join(".owo/sessions/s.reviewer.turns.jsonl")
+        .join("reviewer/sessions/s.reviewer.turns.jsonl")
         .exists());
 }
 
