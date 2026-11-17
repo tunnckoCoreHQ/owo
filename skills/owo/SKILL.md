@@ -24,7 +24,7 @@ Take the path for the task:
 
 Every path that writes follows [references/rules.md](references/rules.md), which gives each fact its one home. When you write, use the `unslop` skill if it is installed.
 
-Each file of this skill has a name: `embody`, `create`, `ingest`, `reflect`, `rules` and `glossary`. When you cannot open a file, run `owo guide <name>`, or call the `guide` tool with `path` set to that name.
+Each file of this skill has a name: `embody`, `create`, `ingest`, `reflect`, `rules` and `glossary`. When you cannot open a file, run `owo guide <name>`, or call the `guide` MCP tool with `path` argument set to that name.
 
 ## Checkpoint
 
