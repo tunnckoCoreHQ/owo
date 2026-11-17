@@ -5,7 +5,7 @@ description: Load this when you embody an owo identity, or when a prompt asks fo
 
 # owo
 
-An owo Identity is a folder of Markdown files in three Scopes: `persona/`, `life/` and `work/`. The `owo` CLI does every step that needs no judgment. The owo MCP server has the same Operations as tools, such as `sync_done` for `owo sync done`. When you have only that server and no shell, call the tool for each command in this skill, and read the files of this skill with the `guide` tool.
+An owo Identity is a folder of Markdown files in three Scopes: `persona/`, `life/` and `work/`. The `owo` CLI does every step that needs no judgment. The owo MCP server has the same Operations as tools, such as `sync_done` for `owo sync done`. When you have only that server and no shell, call the tool for each command in this skill.
 
 The words in capitals, such as Entry, Daily Log or Reflection, are the terms of [references/glossary.md](references/glossary.md). Name things with those terms when you write or report, and read the glossary when a term in this skill or in owo output is new to you.
 
@@ -23,6 +23,8 @@ Take the path for the task:
 | owo reflect, to compile MEMORY and change the Persona from Evidence | [references/reflect.md](references/reflect.md) |
 
 Every path that writes follows [references/rules.md](references/rules.md), which gives each fact its one home. When you write, use the `unslop` skill if it is installed.
+
+Each file of this skill has a name: `embody`, `create`, `ingest`, `reflect`, `rules` and `glossary`. When you cannot open a file, run `owo guide <name>`, or call the `guide` tool with `path` set to that name.
 
 ## Checkpoint
 
