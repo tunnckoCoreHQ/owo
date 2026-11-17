@@ -1,5 +1,5 @@
 use crate::request::{scalar, Args, Field, Type};
-use crate::{operations, Env, Envelope, Operation, Outcome, Ran, Select};
+use crate::{operations, Env, Envelope, Operation, Outcome, Result, Select};
 use anyhow::Context;
 use serde_json::{json, Map, Value};
 use std::io::{BufRead, BufReader, Read, Write};
@@ -10,7 +10,7 @@ const PROTOCOL: &str = "2025-06-18";
 const SUPPORTED: &[&str] = &[PROTOCOL, "2025-03-26", "2024-11-05"];
 
 fn returns_text(op: &Operation) -> bool {
-    matches!(op.path, ["context"] | ["show"] | ["persona"])
+    matches!(op.path, ["context"] | ["show"] | ["persona"] | ["guide"])
 }
 
 fn schema_type(f: &Field) -> &'static str {
@@ -91,9 +91,9 @@ fn run_tool(op: &Operation, params: &Value, select: &Select, env: &Env) -> Value
         map.get(key).and_then(scalar).or_else(|| default.clone())
     };
     let select = Select {
-        root: select.root.clone(),
         identity: pick("identity", &select.identity),
         project: pick("project", &select.project),
+        ..select.clone()
     };
     let mut args = map.clone();
     args.remove("identity");
@@ -106,13 +106,13 @@ fn run_tool(op: &Operation, params: &Value, select: &Select, env: &Env) -> Value
     let ran = Args::new(&op.name(), &op.fields, args)
         .and_then(|args| op.run(&args, &select, env, &mut std::io::empty()));
     match ran {
-        Ok(ran) => reply_of(op, ran),
+        Ok(outcome) => reply_of(op, outcome),
         Err(e) => result(e.to_string(), true),
     }
 }
 
-fn reply_of(op: &Operation, ran: Ran) -> Value {
-    let (mut warnings, outcome) = (ran.warnings, ran.result);
+fn reply_of(op: &Operation, outcome: Result<Outcome>) -> Value {
+    let mut warnings = vec![];
     let lines = |w: &[String]| w.iter().map(|w| crate::warning_line(w)).collect::<String>();
     let (stdout, stderr, error) = match &outcome {
         _ if !returns_text(op) => {
@@ -143,6 +143,7 @@ fn text(o: &Outcome) -> String {
         Outcome::Context { text, .. }
         | Outcome::Show { text, .. }
         | Outcome::Persona { text, .. } => text.clone(),
+        Outcome::Guide(text) => text.to_string(),
         _ => String::new(),
     }
 }
@@ -157,7 +158,7 @@ fn respond(id: &Value, method: &str, params: &Value, select: &Select, env: &Env)
             "protocolVersion": params["protocolVersion"].as_str().filter(|v| SUPPORTED.contains(v)).unwrap_or(PROTOCOL),
             "capabilities": { "tools": {} },
             "serverInfo": { "name": "owo", "version": env!("CARGO_PKG_VERSION") },
-            "instructions": "owo manages one identity: persona/, life/ and work/. Start with `context`, read more with `resolve`, `search`, `show` and `links`, create entries with `add`, fill or edit their text with `write`, then run `stamp`, `index` and `lint`.",
+            "instructions": "owo manages one identity: persona/, life/ and work/. Start with `context`, read more with `resolve`, `search`, `show` and `links`, create entries with `add`, fill or edit their text with `write`, then run `stamp`, `index` and `lint`. To record a session, send its turns with `sync_push`; when the result has `prompt_text`, do that ingest with the tools of this server. `guide` gives the owo skill, which has the rules for each task.",
         })),
         "ping" => ok(json!({})),
         "tools/list" => ok(json!({

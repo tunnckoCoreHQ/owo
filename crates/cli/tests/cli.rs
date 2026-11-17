@@ -21,8 +21,8 @@ fn aria() -> (TempDir, PathBuf) {
     (tmp, dir)
 }
 
-fn lint_json(root: &Path, rules: &[&str]) -> Value {
-    let mut cmd = owo(root);
+fn lint_json(ids_dir: &Path, rules: &[&str]) -> Value {
+    let mut cmd = owo(ids_dir);
     cmd.args(["-i", "aria", "lint", "--json"]);
     for r in rules {
         cmd.args(["--rule", r]);
@@ -385,7 +385,7 @@ fn stamp_tracks_changes_by_hash() {
 #[test]
 fn templates_list_show_and_override() {
     let tmp = TempDir::new().unwrap();
-    let tpl = tmp.path().join(".templates");
+    let tpl = tmp.path().join(".owo/templates");
     fs::create_dir_all(tpl.join("persona")).unwrap();
     let character = "---\ntype: character\ntitle: \"{{title_yaml}}\"\naliases: []\nsummary: \"\"\nstatus: canon\ncreated: {{today}}\nupdated: {{today}}\nsources: []\n---\n\n# {{title}}\n\nCustom.\n";
     fs::write(tpl.join("character.md"), character).unwrap();
@@ -553,17 +553,23 @@ fn persona_prints_identity_and_soul_or_the_flagged_files() {
 
 fn owo_in(cwd: &Path, home: &Path) -> assert_cmd::Command {
     let mut cmd = assert_cmd::Command::cargo_bin("owo").unwrap();
-    cmd.current_dir(cwd)
-        .env_remove("OWO_ROOT")
-        .env_remove("OWO_IDENTITY")
-        .env_remove("OWO_PROJECT")
-        .env("HOME", home)
-        .env("XDG_DATA_HOME", home.join(".local/share"));
+    cmd.current_dir(cwd).env("HOME", home);
+    for name in [
+        "OWO_DIR",
+        "OWO_CONFIG",
+        "OWO_IDENTITIES_DIR",
+        "OWO_TEMPLATES_DIR",
+        "OWO_IDENTITY",
+        "OWO_PROJECT",
+        "XDG_CONFIG_HOME",
+    ] {
+        cmd.env_remove(name);
+    }
     cmd
 }
 
 #[test]
-fn owo_toml_in_a_parent_sets_identity_and_project() {
+fn config_in_the_owo_dir_sets_the_identities_dir_and_the_identity() {
     let tmp = copy_example("reviewer");
     copy_tree(&examples().join("nicole"), &tmp.path().join("nicole"));
     owo(tmp.path())
@@ -573,18 +579,20 @@ fn owo_toml_in_a_parent_sets_identity_and_project() {
         .success();
     let repo = tmp.path().join("repo");
     let home = tmp.path().join("home");
-    fs::create_dir_all(repo.join("sub")).unwrap();
+    let owo_dir = home.join(".config/owo");
     fs::create_dir_all(repo.join("wiki/mural")).unwrap();
-    fs::create_dir_all(&home).unwrap();
+    fs::create_dir_all(&owo_dir).unwrap();
     fs::write(repo.join("wiki/mural/lat.md"), "# Mural\n").unwrap();
     fs::write(
-        repo.join(".owo.toml"),
-        "identity = \"reviewer\"\nproject = \"mural\"\n",
+        owo_dir.join("config.toml"),
+        "identities_dir = \"../../..\"\nidentity = \"reviewer\"\n",
     )
     .unwrap();
-    let mut cmd = owo_in(&repo.join("sub"), &home);
-    cmd.arg("--root").arg(tmp.path());
-    let out = cmd.args(["context", "--json"]).output().unwrap();
+    let out = owo_in(&repo, &home)
+        .env("OWO_PROJECT", "mural")
+        .args(["context", "--json"])
+        .output()
+        .unwrap();
     assert!(out.status.success());
     assert!(
         out.stderr.is_empty(),
@@ -595,44 +603,157 @@ fn owo_toml_in_a_parent_sets_identity_and_project() {
     assert_eq!(v["data"]["identity"], "reviewer");
     assert_eq!(v["data"]["project"], "mural");
     assert_eq!(v["data"]["wiki"]["exists"], true, "{v}");
-    assert!(v["data"]["wiki"]["path"]
-        .as_str()
-        .unwrap()
-        .ends_with("repo/wiki/mural"));
-    let v = json(
-        owo_in(&repo.join("sub"), &home)
-            .arg("--root")
-            .arg(tmp.path())
-            .args(["-i", "nicole", "config"]),
-    );
+    let v = json(owo_in(&repo, &home).args(["-i", "nicole", "config"]));
     assert_eq!(v["data"]["identity"], "nicole", "the flag beats the file");
+    assert_eq!(
+        v["data"]["identities_dir_source"]["global-config"],
+        owo_dir.join("config.toml").to_str().unwrap()
+    );
 }
 
 #[test]
-fn owo_toml_root_in_a_parent_warns() {
+fn config_prints_each_path_and_where_it_comes_from() {
     let tmp = copy_example("nicole");
-    let repo = tmp.path().join("repo");
     let home = tmp.path().join("home");
-    fs::create_dir_all(repo.join("sub")).unwrap();
     fs::create_dir_all(&home).unwrap();
-    fs::write(repo.join(".owo.toml"), "root = \"..\"\n").unwrap();
-    let out = owo_in(&repo.join("sub"), &home)
-        .args(["config", "--json"])
-        .output()
-        .unwrap();
-    let stderr = String::from_utf8_lossy(&out.stderr);
-    assert!(
-        stderr.contains("warning: the root comes from") && stderr.contains("repo/.owo.toml"),
-        "{stderr}"
-    );
-    let v: Value = serde_json::from_slice(&out.stdout).unwrap();
-    assert_eq!(
-        v["data"]["identity"], "nicole",
-        "the only identity in the root"
-    );
-    let out = owo_in(&repo, &home)
-        .args(["config", "--json"])
+    let out = owo_in(tmp.path(), &home)
+        .args(["-D", "dir", "-R", ".", "config"])
+        .env("OWO_TEMPLATES_DIR", "tpl")
         .output()
         .unwrap();
     assert!(out.status.success() && out.stderr.is_empty());
+    let here = tmp.path().display();
+    assert_eq!(
+        String::from_utf8_lossy(&out.stdout),
+        format!(
+            "owo dir: {here}/dir (flag)\nconfig: {here}/dir/config.toml (default)\nidentities dir: {here}/. (flag)\ntemplates dir: {here}/tpl (environment)\nidentity: nicole (only identity)\nproject: -\n"
+        )
+    );
+    let out = owo_in(tmp.path(), &home)
+        .args(["-c", "missing.toml", "config"])
+        .output()
+        .unwrap();
+    assert_eq!(out.status.code(), Some(3));
+    assert!(String::from_utf8_lossy(&out.stderr).contains("missing.toml"));
+}
+
+#[test]
+fn a_second_daily_log_of_a_day_is_a_schema_error() {
+    let (tmp, dir) = aria();
+    assert!(rules_in(&lint_json(tmp.path(), &["schema"]), "errors").is_empty());
+    fs::write(
+        dir.join("life/daily-log/2026-06-14_again.md"),
+        "---\ntype: daily-log\ntitle: Again\naliases: []\nsummary: \"\"\nstatus: canon\ncreated: 2026-06-14\nupdated: 2026-06-14\nsources: []\ndate: 2026-06-14\n---\n\n- x\n",
+    )
+    .unwrap();
+    let v = lint_json(tmp.path(), &["schema"]);
+    assert_eq!(
+        rules_in(&v, "errors"),
+        ["schema:life/daily-log/2026-06-14_sailing-day.md"],
+        "{v}"
+    );
+    assert!(v["errors"][0]["message"]
+        .as_str()
+        .unwrap()
+        .contains("merge it into life/daily-log/2026-06-14_again.md"));
+}
+
+#[test]
+fn lint_warns_when_the_gitignore_does_not_name_the_sessions() {
+    let (tmp, dir) = aria();
+    let warnings = || rules_in(&lint_json(tmp.path(), &["tree"]), "warnings");
+    assert!(warnings().is_empty());
+    fs::write(dir.join(".gitignore"), "target/\n").unwrap();
+    assert_eq!(warnings(), ["tree:.gitignore"]);
+    fs::remove_file(dir.join(".gitignore")).unwrap();
+    assert_eq!(warnings(), ["tree:.gitignore"], "with Git or without it");
+}
+
+#[test]
+fn slices_and_session_files_are_not_entries() {
+    let tmp = TempDir::new().unwrap();
+    owo(tmp.path()).args(["new", "Thea"]).assert().success();
+    let dir = tmp.path().join("thea");
+    assert_eq!(
+        fs::read_to_string(dir.join(".gitignore")).unwrap(),
+        "sessions/\n"
+    );
+    let git = |args: &[&str]| {
+        let ok = std::process::Command::new("git")
+            .arg("-C")
+            .arg(tmp.path())
+            .args(["-c", "user.email=t@example.com", "-c", "user.name=t"])
+            .args(args)
+            .output()
+            .unwrap()
+            .status
+            .success();
+        assert!(ok, "git {args:?}");
+    };
+    git(&["init", "-q"]);
+    git(&["add", "-A"]);
+    git(&["commit", "-qm", "init"]);
+    owo(tmp.path())
+        .args(["sync", "push", "--session", "s1", "--now", "--turns"])
+        .arg(r#"[{"id":1,"role":"user","text":"I moved to Lisbon."}]"#)
+        .assert()
+        .success();
+    assert!(dir.join("sessions/s1.prompt.md").is_file());
+    assert_eq!(fs::read_dir(dir.join("sources")).unwrap().count(), 1);
+
+    let v = json(owo(tmp.path()).arg("lint"));
+    assert_eq!(v["errors"], serde_json::json!([]), "{v}");
+    assert_eq!(v["warnings"], serde_json::json!([]), "{v}");
+    let slice = json(owo(tmp.path()).args(["search", "Lisbon"]));
+    assert_eq!(slice["data"]["hits"], serde_json::json!([]), "{slice}");
+
+    // Git ignores neither folder now, and owo still leaves both out.
+    fs::write(dir.join(".gitignore"), "").unwrap();
+    let v = json(owo(tmp.path()).arg("changes"));
+    assert_eq!(v["data"]["pending"], serde_json::json!([".gitignore"]));
+    git(&["add", "-A"]);
+    git(&["commit", "-qm", "a sync run"]);
+    let days = json(owo(tmp.path()).arg("changes"))["data"]["days"].to_string();
+    assert!(
+        !days.contains("sources/") && !days.contains("sessions/"),
+        "{days}"
+    );
+}
+
+#[test]
+fn resolve_and_search_take_a_kind() {
+    let (tmp, _) = aria();
+    let resolve = |kind: &str| {
+        owo(tmp.path())
+            .args(["-i", "aria", "resolve", "Sam", "--kind", kind])
+            .assert()
+    };
+    resolve("character")
+        .success()
+        .stdout("life/characters/sam.md\n");
+    resolve("location").code(1);
+    resolve("persona").code(1);
+    owo(tmp.path())
+        .args(["-i", "aria", "resolve", "Sam", "--type", "character"])
+        .assert()
+        .code(2);
+}
+
+#[test]
+fn guide_prints_the_skill_and_its_files() {
+    let skill = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../skills/owo");
+    let tmp = TempDir::new().unwrap();
+    for (args, file) in [
+        (&["guide"][..], "SKILL.md"),
+        (&["guide", "ingest"][..], "references/ingest.md"),
+        (&["guide", "rules"][..], "references/rules.md"),
+        (&["guide", "glossary"][..], "references/glossary.md"),
+    ] {
+        owo(tmp.path())
+            .args(args)
+            .assert()
+            .success()
+            .stdout(fs::read_to_string(skill.join(file)).unwrap());
+    }
+    owo(tmp.path()).args(["guide", "nope"]).assert().code(2);
 }

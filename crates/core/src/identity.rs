@@ -10,6 +10,15 @@ use walkdir::WalkDir;
 
 pub const PERSONA_FILES: &[&str] = &["IDENTITY.md", "SOUL.md", "VOICE.md", "LOOK.md", "MEMORY.md"];
 
+pub const SOURCES: &str = "sources";
+pub const SESSIONS: &str = "sessions";
+/// The folders of an identity that hold no entries: the load and the Git calls leave them out.
+pub const NOT_ENTRIES: [&str; 2] = [SOURCES, SESSIONS];
+
+fn holds_entries(rel: &Path) -> bool {
+    !NOT_ENTRIES.iter().any(|dir| rel.starts_with(dir))
+}
+
 struct KindRow {
     kind: Kind,
     name: &'static str,
@@ -230,6 +239,7 @@ pub struct Identity {
     pub project: Option<String>,
     pub home: Option<PathBuf>,
     pub cwd: PathBuf,
+    pub templates_dir: Option<PathBuf>,
 }
 
 pub fn classify(rel: &str) -> Kind {
@@ -304,8 +314,8 @@ pub fn read_object(path: &Path) -> Result<Option<Json>> {
 }
 
 impl Identity {
-    pub fn load(root: &Path, slug: &str) -> Result<Self> {
-        let dir = root.join(slug);
+    pub fn load(identities_dir: &Path, slug: &str) -> Result<Self> {
+        let dir = identities_dir.join(slug);
         let (manifest, manifest_error) =
             match crate::write::read_to_string(&dir.join("identity.json")) {
                 Ok(text) => match serde_json::from_str::<Json>(&text) {
@@ -317,7 +327,10 @@ impl Identity {
         let md = |p: &Path| p.extension().and_then(|e| e.to_str()) == Some("md");
         let mut files = BTreeMap::new();
         if !crate::write::dry() || dir.exists() {
-            for item in WalkDir::new(&dir).sort_by_file_name() {
+            let walk = WalkDir::new(&dir).sort_by_file_name().into_iter();
+            let in_scope =
+                |item: &walkdir::DirEntry| holds_entries(item.path().strip_prefix(&dir).unwrap());
+            for item in walk.filter_entry(in_scope) {
                 let item = item
                     .map_err(std::io::Error::from)
                     .with_context(|| format!("walking {}", dir.display()))?;
@@ -333,7 +346,7 @@ impl Identity {
         files.extend(
             crate::write::kept_under(&dir)
                 .into_iter()
-                .filter(|(rel, _)| md(rel)),
+                .filter(|(rel, _)| md(rel) && holds_entries(rel)),
         );
         let mut entries = vec![];
         for (rel, bytes) in files {
@@ -356,6 +369,7 @@ impl Identity {
             home: None,
             cwd: PathBuf::new(),
             project: None,
+            templates_dir: None,
             entries,
         })
     }

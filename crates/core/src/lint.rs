@@ -1,4 +1,4 @@
-use crate::identity::{life_categories, Entry, Identity, Kind, PERSONA_FILES};
+use crate::identity::{life_categories, Entry, Identity, Kind, PERSONA_FILES, SESSIONS};
 use crate::markdown;
 use crate::output::{Diagnostic, Level};
 use crate::slug::is_slug;
@@ -110,6 +110,14 @@ fn tree(id: &Identity, out: &mut Vec<Diagnostic>) {
             out.push(err(rel, "required folder is missing"));
         }
     }
+    let ignores_sessions = fs::read_to_string(dir.join(".gitignore"))
+        .is_ok_and(|text| text.lines().any(|l| l.trim().trim_matches('/') == SESSIONS));
+    if !ignores_sessions {
+        out.push(warn(
+            ".gitignore",
+            "the line `sessions/` is missing; Git would track the session files",
+        ));
+    }
 
     match (&id.manifest, &id.manifest_error) {
         (_, Some(e)) => out.push(err("identity.json", format!("invalid JSON: {e}"))),
@@ -181,6 +189,21 @@ fn tree(id: &Identity, out: &mut Vec<Diagnostic>) {
 fn schema(id: &Identity, out: &mut Vec<Diagnostic>) {
     for e in id.entries.iter().filter(|e| e.kind.has_frontmatter()) {
         check_entry_schema(e, out);
+    }
+    let mut logs: BTreeMap<NaiveDate, &str> = BTreeMap::new();
+    for e in id.entries.iter().filter(|e| e.kind == Kind::DailyLog) {
+        let Some(day) = e.field_str("date").as_deref().and_then(parse_date) else {
+            continue;
+        };
+        match logs.get(&day) {
+            Some(first) => out.push(err(
+                &e.rel,
+                format!("{day} has a second daily log; merge it into {first}"),
+            )),
+            None => {
+                logs.insert(day, &e.rel);
+            }
+        }
     }
 }
 

@@ -4,14 +4,14 @@ use serde::Deserialize;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-pub const LOCAL_CONFIG: &str = ".owo.toml";
-pub const GLOBAL_CONFIG: &str = "owo.toml";
+pub const CONFIG_FILE: &str = "config.toml";
 
 #[derive(Debug, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct FileConfig {
-    pub root: Option<String>,
+    pub identities_dir: Option<String>,
+    pub templates_dir: Option<String>,
     pub identity: Option<String>,
-    pub project: Option<String>,
     pub sync_every: Option<usize>,
     pub auto_ingest: Option<bool>,
     pub ingest_command: Option<Vec<String>>,
@@ -22,7 +22,6 @@ pub struct FileConfig {
 pub enum Origin {
     Flag,
     Env,
-    LocalConfig(PathBuf),
     GlobalConfig(PathBuf),
     Default,
     OnlyIdentity,
@@ -30,8 +29,14 @@ pub enum Origin {
 
 #[derive(Debug, serde::Serialize)]
 pub struct Resolved {
-    pub root: PathBuf,
-    pub root_source: Origin,
+    pub owo_dir: PathBuf,
+    pub owo_dir_source: Origin,
+    pub config: PathBuf,
+    pub config_source: Origin,
+    pub identities_dir: PathBuf,
+    pub identities_dir_source: Origin,
+    pub templates_dir: PathBuf,
+    pub templates_dir_source: Origin,
     pub identity: Option<String>,
     pub identity_source: Option<Origin>,
     pub project: Option<String>,
@@ -40,8 +45,6 @@ pub struct Resolved {
     pub ingest_command: Option<Vec<String>>,
 }
 
-type Loaded = Option<(Origin, FileConfig)>;
-
 pub fn expand_home(value: &str, home: Option<&Path>) -> PathBuf {
     match (value.strip_prefix("~/"), home) {
         (Some(rest), Some(home)) => home.join(rest),
@@ -49,36 +52,9 @@ pub fn expand_home(value: &str, home: Option<&Path>) -> PathBuf {
     }
 }
 
-fn load(path: Option<PathBuf>, origin: fn(PathBuf) -> Origin) -> anyhow::Result<Loaded> {
-    let Some(path) = path else {
-        return Ok(None);
-    };
-    let text = fs::read_to_string(&path).with_context(|| format!("reading {}", path.display()))?;
-    let config = toml::from_str(&text).with_context(|| format!("parsing {}", path.display()))?;
-    Ok(Some((origin(path), config)))
-}
-
-pub fn find_local_config(start: &Path) -> Option<PathBuf> {
-    start
-        .ancestors()
-        .map(|dir| dir.join(LOCAL_CONFIG))
-        .find(|p| p.is_file())
-}
-
-fn lookup(
-    flag: Option<String>,
-    env: Option<&String>,
-    files: &[Loaded],
-    field: fn(&FileConfig) -> Option<&String>,
-) -> Option<(String, Origin)> {
-    flag.map(|v| (v, Origin::Flag))
-        .or_else(|| env.map(|v| (v.clone(), Origin::Env)))
-        .or_else(|| {
-            files
-                .iter()
-                .flatten()
-                .find_map(|(origin, c)| Some((field(c)?.clone(), origin.clone())))
-        })
+fn load(path: &Path) -> anyhow::Result<FileConfig> {
+    let text = fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
+    toml::from_str(&text).with_context(|| format!("parsing {}", path.display()))
 }
 
 pub fn resolve(select: &Select, env: &Env) -> Result<Resolved> {
@@ -86,75 +62,86 @@ pub fn resolve(select: &Select, env: &Env) -> Result<Resolved> {
         .home
         .as_deref()
         .filter(|h| h.to_str().is_some_and(|s| !s.is_empty()));
-    let local = load(find_local_config(&env.cwd), Origin::LocalConfig)?;
+    // A flag or a variable is a path from the working folder.
+    let given = |flag: &Option<PathBuf>, var: &Option<String>| {
+        let flag = flag.as_ref().map(|p| (env.cwd.join(p), Origin::Flag));
+        flag.or_else(|| {
+            var.as_ref()
+                .map(|v| (env.cwd.join(expand_home(v, home)), Origin::Env))
+        })
+    };
 
-    let root_flag = select
-        .root
-        .as_ref()
-        .map(|p| p.to_string_lossy().into_owned());
-    let (root, root_source) = match lookup(
-        root_flag,
-        env.owo_root.as_ref(),
-        std::slice::from_ref(&local),
-        |c| c.root.as_ref(),
-    ) {
-        Some((value, origin)) => {
-            let base = match &origin {
-                Origin::LocalConfig(p) => p.parent().unwrap_or(Path::new(".")),
-                _ => env.cwd.as_path(),
-            };
-            (base.join(expand_home(&value, home)), origin)
-        }
+    let (owo_dir, owo_dir_source) = match given(&select.owo_dir, &env.owo_dir) {
+        Some(found) => found,
         None => (
-            env.xdg_data_home
+            env.xdg_config_home
                 .clone()
-                .or_else(|| home.map(|h| h.join(".local/share")))
-                .ok_or(Fault::NoRoot)?
+                .or_else(|| home.map(|h| h.join(".config")))
+                .ok_or(Fault::NoOwoDir)?
                 .join("owo"),
             Origin::Default,
         ),
     };
-    let global = load(
-        Some(root.join(GLOBAL_CONFIG)).filter(|p| p.is_file()),
-        Origin::GlobalConfig,
-    )?;
-    let configs = [local, global];
+    let (config, config_source) = given(&select.config, &env.owo_config)
+        .unwrap_or_else(|| (owo_dir.join(CONFIG_FILE), Origin::Default));
+    let file = match config_source {
+        Origin::Default if !config.is_file() => FileConfig::default(),
+        _ => load(&config)?,
+    };
+    // A path in the config is a path from the folder of the config file.
+    let base = config.parent().unwrap_or(Path::new("."));
+    let dir = |found: Option<(PathBuf, Origin)>, key: &Option<String>, default: &str| {
+        found
+            .or_else(|| {
+                let path = base.join(expand_home(key.as_ref()?, home));
+                Some((path, Origin::GlobalConfig(config.clone())))
+            })
+            .unwrap_or_else(|| (owo_dir.join(default), Origin::Default))
+    };
+    let (identities_dir, identities_dir_source) = dir(
+        given(&select.identities_dir, &env.owo_identities_dir),
+        &file.identities_dir,
+        "identities",
+    );
+    let (templates_dir, templates_dir_source) = dir(
+        given(&None, &env.owo_templates_dir),
+        &file.templates_dir,
+        "templates",
+    );
 
-    let (identity, identity_source) = lookup(
-        select.identity.clone(),
-        env.owo_identity.as_ref(),
-        &configs,
-        |c| c.identity.as_ref(),
-    )
-    .or_else(|| only_identity(&root).map(|slug| (slug, Origin::OnlyIdentity)))
-    .unzip();
-    let [local, _global] = &configs;
-    let project = lookup(
-        select.project.clone(),
-        env.owo_project.as_ref(),
-        std::slice::from_ref(local),
-        |c| c.project.as_ref(),
-    )
-    .map(|(value, _)| value);
+    let (identity, identity_source) = select
+        .identity
+        .clone()
+        .map(|v| (v, Origin::Flag))
+        .or_else(|| env.owo_identity.clone().map(|v| (v, Origin::Env)))
+        .or_else(|| {
+            let origin = Origin::GlobalConfig(config.clone());
+            file.identity.clone().map(|v| (v, origin))
+        })
+        .or_else(|| only_identity(&identities_dir).map(|slug| (slug, Origin::OnlyIdentity)))
+        .unzip();
+    let project = select.project.clone().or_else(|| env.owo_project.clone());
 
     Ok(Resolved {
-        root,
-        root_source,
+        owo_dir,
+        owo_dir_source,
+        config,
+        config_source,
+        identities_dir,
+        identities_dir_source,
+        templates_dir,
+        templates_dir_source,
         identity,
         identity_source,
         project,
-        sync_every: first(&configs, |c| c.sync_every),
-        auto_ingest: first(&configs, |c| c.auto_ingest).unwrap_or(false),
-        ingest_command: first(&configs, |c| c.ingest_command.clone()),
+        sync_every: file.sync_every,
+        auto_ingest: file.auto_ingest.unwrap_or(false),
+        ingest_command: file.ingest_command,
     })
 }
 
-fn first<T>(configs: &[Loaded], field: impl Fn(&FileConfig) -> Option<T>) -> Option<T> {
-    configs.iter().flatten().find_map(|(_, c)| field(c))
-}
-
-pub fn list_identities(root: &Path) -> Vec<String> {
-    let Ok(entries) = fs::read_dir(root) else {
+pub fn list_identities(identities_dir: &Path) -> Vec<String> {
+    let Ok(entries) = fs::read_dir(identities_dir) else {
         return vec![];
     };
     let mut slugs: Vec<String> = entries
@@ -166,8 +153,8 @@ pub fn list_identities(root: &Path) -> Vec<String> {
     slugs
 }
 
-fn only_identity(root: &Path) -> Option<String> {
-    let mut slugs = list_identities(root);
+fn only_identity(identities_dir: &Path) -> Option<String> {
+    let mut slugs = list_identities(identities_dir);
     if slugs.len() == 1 {
         slugs.pop()
     } else {
@@ -189,10 +176,10 @@ pub fn need_identity(r: &Resolved) -> Result<String> {
     let slug = r
         .identity
         .clone()
-        .ok_or_else(|| Fault::NoIdentity(r.root.clone()))?;
+        .ok_or_else(|| Fault::NoIdentity(r.identities_dir.clone()))?;
     check_slug("identity", &slug)?;
-    if !r.root.join(&slug).is_dir() {
-        return Err(Fault::NoIdentityFolder(r.root.join(&slug)).into());
+    if !r.identities_dir.join(&slug).is_dir() {
+        return Err(Fault::NoIdentityFolder(r.identities_dir.join(&slug)).into());
     }
     Ok(slug)
 }
@@ -221,68 +208,84 @@ mod tests {
     }
 
     #[test]
-    fn default_root_uses_xdg_data_home_then_home() {
+    fn default_owo_dir_uses_xdg_config_home_then_home() {
         let tmp = tempfile::tempdir().unwrap();
         let mut e = env(tmp.path());
-        assert_eq!(
-            resolve(&Select::default(), &e).unwrap().root,
-            tmp.path().join("home/.local/share/owo")
-        );
-        e.xdg_data_home = Some(tmp.path().join("data"));
-        assert_eq!(
-            resolve(&Select::default(), &e).unwrap().root,
-            tmp.path().join("data/owo")
-        );
+        let r = resolve(&Select::default(), &e).unwrap();
+        let owo_dir = tmp.path().join("home/.config/owo");
+        assert_eq!(r.owo_dir, owo_dir);
+        assert_eq!(r.config, owo_dir.join("config.toml"));
+        assert_eq!(r.identities_dir, owo_dir.join("identities"));
+        assert_eq!(r.templates_dir, owo_dir.join("templates"));
+        e.xdg_config_home = Some(tmp.path().join("xdg"));
+        let r = resolve(&Select::default(), &e).unwrap();
+        assert_eq!(r.identities_dir, tmp.path().join("xdg/owo/identities"));
     }
 
     #[test]
-    fn precedence_flag_env_local_global() {
+    fn precedence_flag_env_config_default() {
         let tmp = tempfile::tempdir().unwrap();
-        let data = tmp.path().join("home/.local/share/owo");
-        fs::create_dir_all(&data).unwrap();
+        let owo_dir = tmp.path().join("home/.config/owo");
+        fs::create_dir_all(&owo_dir).unwrap();
         fs::write(
-            data.join(GLOBAL_CONFIG),
-            "root = \"~/ids\"\nidentity = \"global-pick\"\nsync_every = 3\n",
+            owo_dir.join(CONFIG_FILE),
+            "identities_dir = \"~/ids\"\ntemplates_dir = \"tpl\"\nidentity = \"config-pick\"\nsync_every = 3\n",
         )
         .unwrap();
         let mut s = Select::default();
         let mut e = env(tmp.path());
         let r = resolve(&s, &e).unwrap();
-        assert_eq!(r.root, data, "the global config sets no root");
-        assert_eq!(r.identity.as_deref(), Some("global-pick"));
+        assert_eq!(r.identities_dir, tmp.path().join("home/ids"));
+        assert_eq!(
+            r.templates_dir,
+            owo_dir.join("tpl"),
+            "from the config folder"
+        );
+        assert_eq!(r.identity.as_deref(), Some("config-pick"));
         assert_eq!(r.sync_every, Some(3));
 
-        let proj = tmp.path().join("proj/sub");
-        fs::create_dir_all(&proj).unwrap();
-        fs::create_dir_all(tmp.path().join("proj/ids")).unwrap();
-        fs::write(
-            tmp.path().join("proj/ids").join(GLOBAL_CONFIG),
-            "identity = \"global-two\"\nsync_every = 4\n",
-        )
-        .unwrap();
-        fs::write(
-            tmp.path().join("proj/.owo.toml"),
-            "root = \"ids\"\nidentity = \"thea\"\nproject = \"api\"\n",
-        )
-        .unwrap();
-        e.cwd = proj;
-        let r = resolve(&s, &e).unwrap();
-        assert_eq!(r.root, tmp.path().join("proj/ids"));
-        assert_eq!(r.identity.as_deref(), Some("thea"));
-        assert_eq!(r.project.as_deref(), Some("api"));
-        assert_eq!(r.sync_every, Some(4), "the global config of that root");
-
-        e.owo_root = Some("/env/root".into());
+        e.owo_identities_dir = Some("env-ids".into());
+        e.owo_templates_dir = Some("/env/tpl".into());
         e.owo_identity = Some("env-id".into());
         let r = resolve(&s, &e).unwrap();
-        assert_eq!(r.root, PathBuf::from("/env/root"));
+        assert_eq!(r.identities_dir, tmp.path().join("env-ids"));
+        assert_eq!(r.templates_dir, PathBuf::from("/env/tpl"));
         assert_eq!(r.identity.as_deref(), Some("env-id"));
 
-        s.root = Some(PathBuf::from("/flag/root"));
+        s.identities_dir = Some(PathBuf::from("/flag/ids"));
         s.identity = Some("flag-id".into());
         let r = resolve(&s, &e).unwrap();
-        assert_eq!(r.root, PathBuf::from("/flag/root"));
+        assert_eq!(r.identities_dir, PathBuf::from("/flag/ids"));
         assert_eq!(r.identity.as_deref(), Some("flag-id"));
+    }
+
+    #[test]
+    fn config_file_comes_from_flag_env_then_owo_dir() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut e = env(tmp.path());
+        fs::create_dir_all(tmp.path().join("other")).unwrap();
+        fs::write(
+            tmp.path().join("other/owo.toml"),
+            "identities_dir = \"ids\"\n",
+        )
+        .unwrap();
+        e.owo_dir = Some("dir".into());
+        e.owo_config = Some("other/owo.toml".into());
+        let r = resolve(&Select::default(), &e).unwrap();
+        assert_eq!(r.owo_dir, tmp.path().join("dir"));
+        assert_eq!(r.identities_dir, tmp.path().join("other/ids"));
+        assert_eq!(r.templates_dir, tmp.path().join("dir/templates"));
+
+        let s = Select {
+            config: Some("missing.toml".into()),
+            ..Default::default()
+        };
+        let err = resolve(&s, &e).unwrap_err().to_string();
+        assert!(err.contains("missing.toml"), "{err}");
+
+        fs::write(tmp.path().join("other/owo.toml"), "root = \"ids\"\n").unwrap();
+        let err = resolve(&Select::default(), &e).unwrap_err().to_string();
+        assert!(err.contains("unknown field `root`"), "{err}");
     }
 
     #[test]
@@ -291,7 +294,7 @@ mod tests {
         fs::create_dir_all(tmp.path().join("thea")).unwrap();
         fs::write(tmp.path().join("thea/identity.json"), "{}").unwrap();
         let select = Select {
-            root: Some(tmp.path().to_path_buf()),
+            identities_dir: Some(tmp.path().to_path_buf()),
             ..Default::default()
         };
         let r = resolve(&select, &env(tmp.path())).unwrap();

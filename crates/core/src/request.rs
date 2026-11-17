@@ -1,5 +1,5 @@
 use crate::{
-    CardSpec, ContextFormat, Error, ErrorKind, Fault, Kind, Result, Rule, Scope, SyncFormat,
+    CardSpec, ContextFormat, Error, ErrorKind, Fault, Guide, Kind, Result, Rule, Scope, SyncFormat,
 };
 use chrono::NaiveDate;
 use serde_json::{Map, Value};
@@ -551,9 +551,7 @@ impl Request for AddRequest {
     fn read(r: &mut Reader, b: Self) -> Self {
         Self {
             kind: r.choice_in(
-                Field::positional("kind", "Entry type")
-                    .required()
-                    .value_name("TYPE"),
+                Field::positional("type", "Entry type").required(),
                 crate::entry_types(),
                 b.kind,
             ),
@@ -688,10 +686,7 @@ impl Request for ResolveRequest {
                 Field::new("name", "Entry name, alias, path or [[wikilink]]").required(),
                 b.name,
             ),
-            kind: r.named(
-                Field::new("type", "Limit to one entry type").value_name("KIND"),
-                b.kind,
-            ),
+            kind: r.named(Field::new("kind", "Limit to one kind"), b.kind),
         }
     }
 }
@@ -862,7 +857,7 @@ impl Request for SearchRequest {
                 b.scope,
             ),
             types: r.all_named(
-                Field::new("type", "Limit to entry types (repeatable)").value_name("TYPES"),
+                Field::new("kind", "Limit to kinds (repeatable)").value_name("KINDS"),
                 b.types,
             ),
             project: b.project,
@@ -1070,6 +1065,22 @@ impl Request for SoulspecRequest {
     }
 }
 
+#[derive(Debug, Clone, Copy, Default)]
+pub struct GuideRequest {
+    pub path: Option<Guide>,
+}
+
+impl Request for GuideRequest {
+    fn read(r: &mut Reader, b: Self) -> Self {
+        Self {
+            path: r.named(
+                Field::positional("path", "One file of the skill (default: its entry file)"),
+                b.path,
+            ),
+        }
+    }
+}
+
 pub const DEFAULT_SYNC_EVERY: usize = 6;
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -1150,7 +1161,7 @@ impl Request for SyncPushRequest {
             turns: r.json(
                 Field::new(
                     "turns",
-                    "JSON array of {\"id\", \"role\", \"text\"}; id is the turn id, the host's id for that message, and a stored turn id is skipped",
+                    "JSON array of {\"id\", \"role\", \"text\"}; id is the turn id, the host's own id for that turn, and a stored turn id is skipped",
                 )
                 .hyphen(),
                 b.turns,
@@ -1176,7 +1187,7 @@ impl Request for SyncDoneRequest {
             until: r.int_or(
                 Field::new(
                     "until",
-                    "Message index the ingest run reached (the until from sync start)",
+                    "Turn index the ingest run reached (the until from sync start)",
                 )
                 .required(),
                 b.until,
@@ -1196,7 +1207,7 @@ impl Request for MigrateRequest {
         Self {
             path: r.required_path(Field::positional("path", "The v1 identity folder"), b.path),
             out: r.required_path(
-                Field::new("out", "New identity folder, <root>/<slug>"),
+                Field::new("out", "New identity folder, <identities-dir>/<slug>"),
                 b.out,
             ),
         }

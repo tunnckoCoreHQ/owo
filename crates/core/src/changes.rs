@@ -48,11 +48,10 @@ pub fn changes(id: &Identity, since: Option<&str>) -> anyhow::Result<Changes> {
             Some((s, Err(_))) => args.push(format!("--since={s}")),
             None => {}
         }
-        args.extend(["--".into(), ".".into()]);
         let args: Vec<&str> = args.iter().map(String::as_str).collect();
         let mut days: BTreeMap<String, Vec<Change>> = BTreeMap::new();
         let log = (!no_commit)
-            .then(|| crate::git::run(&id.dir, &args))
+            .then(|| crate::git::run_on_entries(&id.dir, &args))
             .flatten();
         if let Some(out) = log {
             for block in out.split('\u{1}').filter(|b| !b.trim().is_empty()) {

@@ -84,7 +84,7 @@ impl From<anyhow::Error> for Output {
 
 fn says(fault: &Fault) -> String {
     match fault {
-        Fault::NoRoot => format!("{fault}: pass --root or set OWO_ROOT"),
+        Fault::NoOwoDir => format!("{fault}: pass --config-dir, or set OWO_DIR or HOME"),
         Fault::NoIdentity(_) => format!("{fault}: pass -i <slug> or set OWO_IDENTITY"),
         Fault::NeedsTitle(kind) => format!("`owo add {}` needs a title", kind.name()),
         Fault::KindNeeds {
@@ -107,7 +107,7 @@ fn says(fault: &Fault) -> String {
         | Fault::InjectNeedsIdentity => format!("--{fault}"),
         Fault::UnknownTemplate(_) => format!("{fault}; run `owo templates` for the list"),
         Fault::NoIdentityFolder(_) => {
-            format!("{fault}; `owo list` shows the identities in this root")
+            format!("{fault}; `owo list` shows the identities in this identities dir")
         }
         Fault::NoProject(_) => format!("{fault} (run `owo add project-readme`)"),
         Fault::Generated(_) => format!("{fault}; run `owo index` instead"),
@@ -118,14 +118,14 @@ fn says(fault: &Fault) -> String {
         ),
         Fault::PushedSession(_) => format!("{fault}; use `owo sync push`"),
         Fault::TranscriptSession { .. } => format!("{fault}; use `owo sync start`"),
-        Fault::NoMessages { .. } => format!("{fault}; check --format"),
+        Fault::NoTurns { .. } => format!("{fault}; check --format"),
         Fault::NoSyncCursor(_) => format!("{fault}; run `owo sync start` first"),
-        Fault::PastMessages { until, seen } => {
-            format!("--until {until} is past the {seen} messages the last `sync start` read")
+        Fault::PastTurns { until, seen } => {
+            format!("--until {until} is past the {seen} turns the last `sync start` read")
         }
         Fault::OutOfRange { .. } | Fault::Conflict(..) | Fault::Needs(..) => fault.to_string(),
         Fault::NoIngestCommand(_) => {
-            format!("{fault} (set it in .owo.toml or the owo.toml of the root)")
+            format!("{fault} (set it in the config)")
         }
     }
 }

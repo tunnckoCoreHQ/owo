@@ -17,9 +17,9 @@ fn thea() -> TempDir {
     tmp
 }
 
-fn mcp(root: &Path, messages: &[Value]) -> Vec<Value> {
+fn mcp(ids_dir: &Path, messages: &[Value]) -> Vec<Value> {
     let input: String = messages.iter().map(|m| format!("{m}\n")).collect();
-    let out = owo(root)
+    let out = owo(ids_dir)
         .args(["-i", "thea", "mcp"])
         .write_stdin(input)
         .output()
@@ -65,10 +65,13 @@ fn mcp_unknown_tool_is_an_invalid_params_error() {
 fn mcp_remote_refuses_a_body_without_content_length() {
     let tmp = thea();
     let mut child = std::process::Command::new(env!("CARGO_BIN_EXE_owo"))
-        .env_remove("OWO_ROOT")
+        .env("OWO_DIR", tmp.path().join(".owo"))
+        .env_remove("OWO_CONFIG")
+        .env_remove("OWO_TEMPLATES_DIR")
+        .env_remove("OWO_IDENTITIES_DIR")
         .env_remove("OWO_IDENTITY")
         .env_remove("OWO_PROJECT")
-        .arg("--root")
+        .arg("--identities-dir")
         .arg(tmp.path())
         .args(["-i", "thea", "mcp", "--remote", "--port", "0"])
         .stdout(std::process::Stdio::piped())
@@ -158,16 +161,16 @@ fn a_fence_closes_only_on_a_run_at_least_as_long() {
     assert!(!errors.contains("Inside Fence"), "{errors}");
 }
 
-fn add(root: &Path, args: &[&str]) {
-    owo(root)
+fn add(ids_dir: &Path, args: &[&str]) {
+    owo(ids_dir)
         .args(["-i", "thea", "add"])
         .args(args)
         .assert()
         .success();
 }
 
-fn card(root: &Path) -> Value {
-    let out = owo(root)
+fn card(ids_dir: &Path) -> Value {
+    let out = owo(ids_dir)
         .args(["-i", "thea", "export", "persona-card"])
         .output()
         .unwrap();
@@ -290,8 +293,12 @@ fn git(dir: &Path, args: &[&str], date: Option<&str>) {
     assert!(cmd.output().unwrap().status.success(), "git {args:?}");
 }
 
-fn stdout(root: &Path, args: &[&str]) -> String {
-    let out = owo(root).args(["-i", "thea"]).args(args).output().unwrap();
+fn stdout(ids_dir: &Path, args: &[&str]) -> String {
+    let out = owo(ids_dir)
+        .args(["-i", "thea"])
+        .args(args)
+        .output()
+        .unwrap();
     String::from_utf8(out.stdout).unwrap()
 }
 
@@ -306,7 +313,7 @@ fn push_keeps_stored_turns_before_a_cut_multibyte_line() {
             .success();
     };
     push(r#"[{"id":"1","role":"user","text":"héllo"},{"id":"2","role":"assistant","text":"r"}]"#);
-    let store = tmp.path().join(".owo/sessions/s1.turns.jsonl");
+    let store = tmp.path().join("thea/sessions/s1.turns.jsonl");
     let mut bytes = fs::read(&store).unwrap();
     bytes.extend_from_slice(b"{\"id\":\"3\",\"role\":\"user\",\"text\":\"caf\xc3");
     fs::write(&store, bytes).unwrap();
@@ -469,7 +476,7 @@ fn call(id: u64, tool: &str, arguments: Value) -> Value {
 fn mcp_tool_does_not_read_the_servers_stdin() {
     let tmp = thea();
     let mut child = std::process::Command::new(assert_cmd::cargo::cargo_bin("owo"))
-        .arg("--root")
+        .arg("--identities-dir")
         .arg(tmp.path())
         .args(["-i", "thea", "mcp"])
         .stdin(std::process::Stdio::piped())
@@ -519,7 +526,7 @@ fn mcp_with_a_closed_stdout_exits_with_the_write_error() {
     let (reader, writer) = std::io::pipe().unwrap();
     drop(reader);
     let mut child = std::process::Command::new(assert_cmd::cargo::cargo_bin("owo"))
-        .arg("--root")
+        .arg("--identities-dir")
         .arg(tmp.path())
         .args(["-i", "thea", "mcp"])
         .stdin(std::process::Stdio::piped())
@@ -558,7 +565,7 @@ fn mcp_refuses_a_nul_in_an_argument() {
 fn code_with_open_stdin(args: &[&str]) -> Option<i32> {
     let tmp = TempDir::new().unwrap();
     let mut child = std::process::Command::new(assert_cmd::cargo::cargo_bin("owo"))
-        .arg("--root")
+        .arg("--identities-dir")
         .arg(tmp.path())
         .args(args)
         .stdin(std::process::Stdio::piped())
@@ -606,8 +613,8 @@ fn help_into_a_closed_pipe_exits_zero() {
     assert_eq!(status.code(), Some(0));
 }
 
-fn acp_session(root: &Path, flags: &[&str]) -> Proxy {
-    let mut p = start(root, flags, 0);
+fn acp_session(ids_dir: &Path, flags: &[&str]) -> Proxy {
+    let mut p = start(ids_dir, flags, 0);
     p.send(&init(), &[init_reply(json!({}))]);
     p.open(
         &request(1, "session/new", json!({ "cwd": "/tmp", "mcpServers": [] })),

@@ -11,7 +11,7 @@ pub enum ErrorKind {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Fault {
-    NoRoot,
+    NoOwoDir,
     NoIdentity(PathBuf),
     NeedsTitle(Kind),
     OnlyFor {
@@ -51,7 +51,7 @@ pub enum Fault {
         session: String,
         transcript: String,
     },
-    NoMessages {
+    NoTurns {
         transcript: PathBuf,
         format: &'static str,
     },
@@ -60,7 +60,7 @@ pub enum Fault {
         until: usize,
         cursor: usize,
     },
-    PastMessages {
+    PastTurns {
         until: usize,
         seen: u64,
     },
@@ -84,7 +84,7 @@ impl Fault {
             | Fault::Conflict(..)
             | Fault::Needs(..)
             | Fault::InjectNeedsIdentity => ErrorKind::Usage,
-            Fault::NoRoot
+            Fault::NoOwoDir
             | Fault::NoIdentity(_)
             | Fault::NoIdentityFolder(_)
             | Fault::NoProject(_)
@@ -105,8 +105,8 @@ fn article(word: &str) -> &'static str {
 impl std::fmt::Display for Fault {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Fault::NoRoot => f.write_str("cannot resolve a root"),
-            Fault::NoIdentity(root) => write!(f, "no identity selected in {}", root.display()),
+            Fault::NoOwoDir => f.write_str("cannot find the owo dir"),
+            Fault::NoIdentity(dir) => write!(f, "no identity selected in {}", dir.display()),
             Fault::NeedsTitle(kind) => {
                 let name = kind.name();
                 write!(f, "{} {name} entry needs a title", article(name))
@@ -153,18 +153,18 @@ impl std::fmt::Display for Fault {
                 session,
                 transcript,
             } => write!(f, "session {session:?} syncs the transcript {transcript}"),
-            Fault::NoMessages { transcript, format } => write!(
+            Fault::NoTurns { transcript, format } => write!(
                 f,
-                "no user or assistant messages in {} as {format}",
+                "no user or assistant turns in {} as {format}",
                 transcript.display()
             ),
             Fault::NoSyncCursor(s) => write!(f, "no sync cursor for session {s:?}"),
             Fault::BehindSyncCursor { until, cursor } => {
                 write!(f, "until {until} is behind the sync cursor ({cursor})")
             }
-            Fault::PastMessages { until, seen } => write!(
+            Fault::PastTurns { until, seen } => write!(
                 f,
-                "until {until} is past the {seen} messages the last sync step read"
+                "until {until} is past the {seen} turns the last sync step read"
             ),
             Fault::OutOfRange {
                 name,
@@ -174,7 +174,7 @@ impl std::fmt::Display for Fault {
             } => write!(f, "{name} must be from {min} to {max}, not {value}"),
             Fault::Conflict(a, b) => write!(f, "{a} and {b} cannot be used together"),
             Fault::Needs(a, b) => write!(f, "{a} needs {b}"),
-            Fault::InjectNeedsIdentity => f.write_str("inject needs an identity in the root"),
+            Fault::InjectNeedsIdentity => f.write_str("inject needs an identity in the identities dir"),
             Fault::NoIngestCommand(agent) => write!(
                 f,
                 "auto_ingest needs ingest_command: owo knows no ingest command for the agent {agent:?}"

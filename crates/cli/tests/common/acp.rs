@@ -13,12 +13,12 @@ pub struct Proxy {
     pub sent: usize,
 }
 
-pub fn start(root: &Path, flags: &[&str], code: u8) -> Proxy {
+pub fn start(ids_dir: &Path, flags: &[&str], code: u8) -> Proxy {
     let dir = TempDir::new().unwrap();
     let agent = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/acp-agent.sh");
     let mut child = Command::new(assert_cmd::cargo::cargo_bin("owo"))
-        .arg("--root")
-        .arg(root)
+        .arg("--identities-dir")
+        .arg(ids_dir)
         .arg("acp")
         .args(flags)
         .arg("--")
@@ -26,7 +26,10 @@ pub fn start(root: &Path, flags: &[&str], code: u8) -> Proxy {
         .arg(agent)
         .arg(dir.path())
         .arg(code.to_string())
-        .env_remove("OWO_ROOT")
+        .env("OWO_DIR", ids_dir.join(".owo"))
+        .env_remove("OWO_CONFIG")
+        .env_remove("OWO_TEMPLATES_DIR")
+        .env_remove("OWO_IDENTITIES_DIR")
         .env_remove("OWO_IDENTITY")
         .env_remove("OWO_PROJECT")
         .stdin(Stdio::piped())
@@ -150,8 +153,10 @@ pub fn parse(line: &str) -> Value {
     serde_json::from_str(line).unwrap()
 }
 
-pub fn stored(root: &Path, session: &str) -> Vec<Value> {
-    fs::read_to_string(root.join(format!(".owo/sessions/{session}.turns.jsonl")))
+/// The turns stored for `session`, whose name ends in its identity, such as `s.nicole`.
+pub fn stored(ids_dir: &Path, session: &str) -> Vec<Value> {
+    let identity = session.rsplit('.').next().unwrap();
+    fs::read_to_string(ids_dir.join(format!("{identity}/sessions/{session}.turns.jsonl")))
         .unwrap()
         .lines()
         .map(parse)

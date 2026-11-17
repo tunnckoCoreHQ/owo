@@ -20,9 +20,9 @@ impl Setup {
             return Some(format!("Your identity is the owo identity \"{id}\". Before you answer, load it with the `context` tool of the owo MCP server, with the argument `identity` set to \"{id}\", and keep to it."));
         }
         self.owo
-            .root(id)
-            .and_then(|root| {
-                let identity = root.identity()?;
+            .identities(id)
+            .and_then(|ids| {
+                let identity = ids.identity()?;
                 let ctx = identity.context(&crate::ContextRequest::default())?;
                 Ok(identity.context_text(&ctx))
             })
@@ -197,7 +197,7 @@ pub fn ingest_command_for(agent: &[String]) -> Option<Vec<String>> {
 
 struct Ingest {
     command: Vec<String>,
-    root: std::path::PathBuf,
+    identities_dir: std::path::PathBuf,
     busy: Arc<AtomicBool>,
 }
 
@@ -214,23 +214,25 @@ impl Ingest {
             .ok_or_else(|| crate::Fault::NoIngestCommand(agent.join(" ")))?;
         Ok(Some(Ingest {
             command,
-            root: config.root.clone(),
+            identities_dir: config.identities_dir.clone(),
             busy: Arc::default(),
         }))
     }
 
-    /// Starts the agent for the run whose prompt file is `prompt`, unless an agent runs. Its
-    /// output goes nowhere, so the client never sees it. Each failure, a failed check of the
-    /// pending runs included, and a run still pending when the agent exits, is a warning line.
-    fn start(&self, prompt: &str, owo: &Arc<Owo>) {
+    /// Starts the agent for the run of `identity` whose prompt file is `prompt`, unless an agent
+    /// runs. Its output goes nowhere, so the client never sees it. Each failure, a failed check
+    /// of the pending runs included, and a run still pending when the agent exits, is a warning
+    /// line.
+    fn start(&self, identity: &str, prompt: &str, owo: &Arc<Owo>) {
         if self.busy.swap(true, Ordering::SeqCst) {
             return;
         }
-        let started = std::fs::read_to_string(self.root.join(prompt)).and_then(|text| {
+        let shown = format!("{identity}/{prompt}");
+        let started = std::fs::read_to_string(self.identities_dir.join(&shown)).and_then(|text| {
             std::process::Command::new(&self.command[0])
                 .args(&self.command[1..])
                 .arg(text)
-                .current_dir(&self.root)
+                .current_dir(&self.identities_dir)
                 .stdin(std::process::Stdio::null())
                 .stdout(std::process::Stdio::null())
                 .stderr(std::process::Stdio::null())
@@ -239,35 +241,35 @@ impl Ingest {
         let mut child = match started {
             Ok(child) => child,
             Err(e) => {
-                owo.warn(&format!("the ingest of {prompt} did not start: {e}"));
+                owo.warn(&format!("the ingest of {shown} did not start: {e}"));
                 self.busy.store(false, Ordering::SeqCst);
                 return;
             }
         };
         let (busy, owo, prompt) = (self.busy.clone(), owo.clone(), prompt.to_string());
-        let root = self.root.clone();
+        let (identities_dir, identity) = (self.identities_dir.clone(), identity.to_string());
         std::thread::spawn(move || {
             let failed = match child.wait() {
                 Ok(status) if status.success() => None,
                 Ok(status) => Some(status.to_string()),
                 Err(e) => Some(e.to_string()),
             };
-            let pending = match crate::sync::due(&root, None) {
+            let pending = match crate::sync::due(&identities_dir, Some(&identity)) {
                 Ok(runs) => runs.into_iter().find(|r| r.prompt == prompt),
                 Err(e) => {
                     owo.warn(&format!(
-                        "the ingest of {prompt} ended, but its run could not be checked: {e:#}"
+                        "the ingest of {shown} ended, but its run could not be checked: {e:#}"
                     ));
                     None
                 }
             };
             match (pending, failed) {
                 (Some(run), failed) => owo.warn(&format!(
-                    "the ingest of session {} {} and its run is still pending: {prompt}",
+                    "the ingest of session {} {} and its run is still pending: {shown}",
                     run.session,
                     failed.map_or("exited".into(), |f| format!("failed ({f})")),
                 )),
-                (None, Some(f)) => owo.warn(&format!("the ingest of {prompt} failed: {f}")),
+                (None, Some(f)) => owo.warn(&format!("the ingest of {shown} failed: {f}")),
                 (None, None) => {}
             }
             busy.store(false, Ordering::SeqCst);
@@ -284,12 +286,12 @@ struct Owo {
 }
 
 impl Owo {
-    fn root(&self, identity: &str) -> crate::Result<crate::Root> {
+    fn identities(&self, identity: &str) -> crate::Result<crate::Identities> {
         let select = crate::Select {
             identity: Some(identity.into()),
             ..self.select.clone()
         };
-        crate::Root::open(&select, &self.env)
+        crate::Identities::open(&select, &self.env)
     }
 
     fn write(&self, text: &str) {
@@ -315,7 +317,7 @@ impl Proxy {
         options: Options,
         warnings: impl Write + Send + 'static,
     ) -> Result<Self> {
-        let root = crate::Root::open(select, env)?;
+        let ids = crate::Identities::open(select, env)?;
         let owo = Arc::new(Owo {
             env: env.clone(),
             select: crate::Select {
@@ -324,12 +326,11 @@ impl Proxy {
             },
             warnings: Mutex::new(Box::new(warnings)),
             dry_run: options.dry_run,
-            ingest: Ingest::of(&root.config, &options.agent)?.filter(|_| !options.dry_run),
+            ingest: Ingest::of(&ids.config, &options.agent)?.filter(|_| !options.dry_run),
         });
-        root.warnings.iter().for_each(|w| owo.warn(w));
-        let start = root.config.identity.clone();
-        check_start_identity(&root)?;
-        let identities: Vec<_> = root.list().into_iter().map(|r| (r.slug, r.name)).collect();
+        let start = ids.config.identity.clone();
+        check_start_identity(&ids)?;
+        let identities: Vec<_> = ids.list().into_iter().map(|r| (r.slug, r.name)).collect();
         let context = options.inject;
         if identities.is_empty() && context {
             return Err(crate::Fault::InjectNeedsIdentity.into());
@@ -424,9 +425,9 @@ impl Proxy {
     }
 }
 
-fn check_start_identity(root: &crate::Root) -> Result<()> {
-    if root.config.identity.is_some() {
-        root.identity()?.working_project()?;
+fn check_start_identity(ids: &crate::Identities) -> Result<()> {
+    if ids.config.identity.is_some() {
+        ids.identity()?.working_project()?;
     }
     Ok(())
 }
@@ -816,14 +817,14 @@ fn push(
         turns,
     }: Push,
 ) {
-    let run = owo.root(&identity).and_then(|root| {
-        root.sync()?
+    let run = owo.identities(&identity).and_then(|ids| {
+        ids.sync()?
             .push(&session, &turns, &crate::SyncOptions::default())
     });
     match run {
         Ok(run) => {
             if let Some((ingest, prompt)) = owo.ingest.as_ref().zip(run.prompt.or(run.pending)) {
-                ingest.start(&prompt, owo);
+                ingest.start(&identity, &prompt, owo);
             }
         }
         Err(e) => owo.warn(&e.to_string()),

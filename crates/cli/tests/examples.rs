@@ -7,8 +7,8 @@ use std::fs;
 use std::path::Path;
 use tempfile::TempDir;
 
-fn owo_as(root: &Path, id: &str) -> Command {
-    let mut cmd = owo(root);
+fn owo_as(ids_dir: &Path, id: &str) -> Command {
+    let mut cmd = owo(ids_dir);
     cmd.arg("-i").arg(id);
     cmd
 }
@@ -37,22 +37,22 @@ fn resolve_show_links() {
         .assert()
         .success()
         .stdout("life/daily-log/2026-10-30_lighthouse.md\n");
-    let root = examples();
-    owo_as(&root, "reviewer")
+    let ids_dir = examples();
+    owo_as(&ids_dir, "reviewer")
         .args(["resolve", "Mina Okafor"])
         .assert()
         .success()
         .stdout("life/characters/mina-okafor.md\n");
-    owo_as(&root, "reviewer")
+    owo_as(&ids_dir, "reviewer")
         .args(["resolve", "mina-okafr"])
         .assert()
         .code(1);
-    let shown = owo_as(&root, "reviewer")
+    let shown = owo_as(&ids_dir, "reviewer")
         .args(["show", "The Rollback", "--section", "Key facts"])
         .output()
         .unwrap();
     assert!(String::from_utf8_lossy(&shown.stdout).contains("[[Rollback postmortem]]"));
-    let v = json(owo_as(&root, "reviewer").args(["links", "Mina Okafor", "--in"]));
+    let v = json(owo_as(&ids_dir, "reviewer").args(["links", "Mina Okafor", "--in"]));
     let from: Vec<&str> = v["data"]["in"]
         .as_array()
         .unwrap()
@@ -60,7 +60,7 @@ fn resolve_show_links() {
         .map(|l| l["path"].as_str().unwrap())
         .collect();
     assert!(from.contains(&"life/events/the-rollback.md"), "{from:?}");
-    let v = json(owo_as(&root, "nicole").args(["links", "--orphans"]));
+    let v = json(owo_as(&ids_dir, "nicole").args(["links", "--orphans"]));
     assert_eq!(v["data"]["orphans"].as_array().unwrap().len(), 0);
 }
 
@@ -169,12 +169,12 @@ fn changes_days_lists_stamped_files() {
             .sum()
     };
     let tmp = copy_example("reviewer");
-    for root in [tmp.path(), examples().as_path()] {
+    for ids_dir in [tmp.path(), examples().as_path()] {
         for since in [["--days", "36500"], ["--since", "1926-12-11"]] {
-            let v = json(owo_as(root, "reviewer").arg("changes").args(since));
+            let v = json(owo_as(ids_dir, "reviewer").arg("changes").args(since));
             assert!(count(&v) > 20, "{since:?}: {v}");
         }
-        let v = json(owo_as(root, "reviewer").args(["changes", "--since", "2999-01-01"]));
+        let v = json(owo_as(ids_dir, "reviewer").args(["changes", "--since", "2999-01-01"]));
         assert_eq!(count(&v), 0, "{v}");
     }
 }
@@ -574,8 +574,8 @@ fn wiki_links_lint_and_show() {
 #[test]
 fn export_skill_wrapper() {
     let tmp = TempDir::new().unwrap();
-    let root = examples();
-    owo(&root)
+    let ids_dir = examples();
+    owo(&ids_dir)
         .args(["-i", "nicole", "export", "skill", "--out"])
         .arg(tmp.path())
         .assert()
@@ -587,19 +587,19 @@ fn export_skill_wrapper() {
 
 #[test]
 fn flags_list_search_state_add_wiki() {
-    let root = examples();
-    let v = json(owo(&root).arg("list"));
+    let ids_dir = examples();
+    let v = json(owo(&ids_dir).arg("list"));
     let rows = v["data"]["identities"].as_array().unwrap();
     let rook = rows.iter().find(|r| r["slug"] == "reviewer").unwrap();
     assert_eq!(rook["name"], "Rook Halvorsen");
     assert_eq!(rook["projects"].as_array().unwrap().len(), 3);
 
-    let v = json(owo(&root).args([
+    let v = json(owo(&ids_dir).args([
         "-i",
         "reviewer",
         "search",
         "review",
-        "--type",
+        "--kind",
         "project-note",
         "--since",
         "2026-10-29",
@@ -611,7 +611,7 @@ fn flags_list_search_state_add_wiki() {
                 .iter()
                 .all(|h| h["path"].as_str().unwrap().contains("/notes/2026-1"))
     );
-    let v = json(owo(&root).args([
+    let v = json(owo(&ids_dir).args([
         "-i",
         "reviewer",
         "--project",
@@ -628,7 +628,7 @@ fn flags_list_search_state_add_wiki() {
             .unwrap()
             .starts_with("work/projects/ledger-api/")));
     let v = json(
-        owo(&root)
+        owo(&ids_dir)
             .env("OWO_PROJECT", "ledger-api")
             .args(["-i", "reviewer", "search", "rollback"]),
     );
@@ -638,7 +638,7 @@ fn flags_list_search_state_add_wiki() {
         .iter()
         .any(|h| h["path"] == "life/events/the-rollback.md"));
 
-    let v = json(owo(&root).args([
+    let v = json(owo(&ids_dir).args([
         "-i",
         "reviewer",
         "--project",
@@ -685,11 +685,11 @@ fn chunks(png: &[u8]) -> Vec<(String, Vec<u8>)> {
 #[test]
 fn card_png_and_scenario() {
     let tmp = TempDir::new().unwrap();
-    let root = examples();
+    let ids_dir = examples();
     let avatar = tmp.path().join("a.png");
     fs::write(&avatar, common::PNG_1X1).unwrap();
     let out = tmp.path().join("card.png");
-    owo(&root)
+    owo(&ids_dir)
         .args(["-i", "nicole", "export", "persona-card", "--png"])
         .arg(&avatar)
         .arg("--out")
@@ -711,7 +711,7 @@ fn card_png_and_scenario() {
         })
         .collect();
     assert_eq!(names, ["IHDR", "IDAT", "tEXt:chara", "tEXt:ccv3", "IEND"]);
-    owo(&root)
+    owo(&ids_dir)
         .args([
             "-i",
             "nicole",
@@ -735,7 +735,7 @@ fn card_png_and_scenario() {
     );
 
     let v: Value = serde_json::from_slice(
-        &owo(&root)
+        &owo(&ids_dir)
             .args([
                 "-i",
                 "nicole",
@@ -753,7 +753,7 @@ fn card_png_and_scenario() {
         v["data"]["scenario"],
         "The first kiln load that came out whole."
     );
-    let env = json(owo(&root).args(["-i", "nicole", "export", "persona-card"]));
+    let env = json(owo(&ids_dir).args(["-i", "nicole", "export", "persona-card"]));
     assert_eq!(env["ok"], true);
     assert_eq!(env["data"]["spec"], "chara_card_v3");
 }

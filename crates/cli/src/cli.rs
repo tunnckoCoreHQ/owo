@@ -23,7 +23,9 @@ impl Global {
     pub fn of(m: &ArgMatches) -> Self {
         Self {
             select: Select {
-                root: m.get_one::<PathBuf>("root").cloned(),
+                owo_dir: m.get_one::<PathBuf>("owo-dir").cloned(),
+                config: m.get_one::<PathBuf>("config").cloned(),
+                identities_dir: m.get_one::<PathBuf>("identities-dir").cloned(),
                 identity: m.get_one::<String>("identity").cloned(),
                 project: m.get_one::<String>("project").cloned(),
             },
@@ -34,7 +36,7 @@ impl Global {
 }
 
 pub fn command(ops: &[Operation]) -> Command {
-    let mut root = Command::new("owo")
+    let mut owo = Command::new("owo")
         .version(env!("CARGO_PKG_VERSION"))
         .about("One world, one identity: manage living agent identities")
         .subcommand_required(true)
@@ -48,14 +50,14 @@ pub fn command(ops: &[Operation]) -> Command {
             ["links"] => cmd.visible_alias("wikilinks"),
             _ => cmd,
         };
-        root = match op.path {
-            [_] => root.subcommand(cmd),
-            [group, _] if root.find_subcommand(group).is_some() => {
-                root.mut_subcommand(group, |g| g.subcommand(cmd))
+        owo = match op.path {
+            [_] => owo.subcommand(cmd),
+            [group, _] if owo.find_subcommand(group).is_some() => {
+                owo.mut_subcommand(group, |g| g.subcommand(cmd))
             }
             [group, _] => {
                 let about = GROUPS.iter().find(|(g, _)| g == group).map(|(_, a)| *a);
-                root.subcommand(
+                owo.subcommand(
                     Command::new(*group)
                         .about(about.unwrap_or_default())
                         .subcommand_required(true)
@@ -66,28 +68,37 @@ pub fn command(ops: &[Operation]) -> Command {
             _ => unreachable!("an operation path has one or two words"),
         };
     }
-    root.subcommand(mcp()).subcommand(acp())
+    owo.subcommand(mcp()).subcommand(acp())
 }
 
-fn globals() -> [Arg; 5] {
-    [
-        Arg::new("root")
-            .long("root")
-            .value_name("ROOT")
+fn globals() -> [Arg; 7] {
+    let path = |name: &'static str, short: char, long: &'static str| {
+        Arg::new(name)
+            .short(short)
+            .long(long)
+            .value_name("PATH")
             .global(true)
             .value_parser(value_parser!(PathBuf))
-            .help("Root (else OWO_ROOT, .owo.toml, XDG default)"),
+    };
+    [
+        path("owo-dir", 'D', "config-dir")
+            .help("Owo dir (else OWO_DIR, $XDG_CONFIG_HOME/owo, ~/.config/owo)"),
+        path("config", 'c', "config")
+            .help("Config file (else OWO_CONFIG, config.toml in the owo dir)"),
+        path("identities-dir", 'R', "identities-dir").help(
+            "Identities dir (else OWO_IDENTITIES_DIR, identities_dir in the config, identities/ in the owo dir)",
+        ),
         Arg::new("identity")
             .short('i')
             .long("identity")
             .value_name("IDENTITY")
             .global(true)
-            .help("Identity slug (else OWO_IDENTITY, .owo.toml, owo.toml in the root, the only identity)"),
+            .help("Identity slug (else OWO_IDENTITY, identity in the config, the only identity)"),
         Arg::new("project")
             .long("project")
             .value_name("PROJECT")
             .global(true)
-            .help("Project slug (else OWO_PROJECT, .owo.toml); search and export persona-card filter only on this flag"),
+            .help("Project slug (else OWO_PROJECT); search and export persona-card filter only on this flag"),
         Arg::new("json")
             .long("json")
             .global(true)
@@ -132,7 +143,7 @@ fn acp() -> Command {
             Arg::new("inject")
                 .long("inject")
                 .action(ArgAction::SetTrue)
-                .help("Put the identity context in the prompt, and add no owo MCP server (needs an identity in the root)"),
+                .help("Put the identity context in the prompt, and add no owo MCP server (needs an identity in the identities dir)"),
         )
         .arg(
             Arg::new("dry-run")
@@ -158,7 +169,7 @@ fn help(op: &Operation, f: &Field) -> &'static str {
         (["templates", "show"], "name") => "Template name from `owo templates list`",
         (["links"], "name") => "Entry name, alias, path or [[wikilink]] (not needed with --orphans)",
         (["export", "persona-card"], "png") => "Embed the card in this PNG avatar (needs --out)",
-        (["sync", "push"], "turns") => "JSON array of {\"id\", \"role\", \"text\"}; id is the turn id, the host's id for that message, and a stored turn id is skipped (default: stdin)",
+        (["sync", "push"], "turns") => "JSON array of {\"id\", \"role\", \"text\"}; id is the turn id, the host's own id for that turn, and a stored turn id is skipped (default: stdin)",
         _ => f.help,
     }
 }

@@ -35,10 +35,10 @@ Conflicts between pieces of raw material become `life/conflicts/` entries; the r
 
 ## Integration
 
-A host needs two hooks: one that loads `owo context` into the prompt, and one that calls `owo sync` after a turn.
+A host needs two hooks: one that loads `owo context` into the prompt, and one that calls `owo sync` after a turn. A local host has owo and the identities dir on its machine, and its agent runs owo commands. A remote host reaches owo only through an MCP server, and its agent calls tools.
 
-- A host with a local transcript calls `owo sync start --session <session_id> --transcript <path> --format <fmt>` after each turn, and starts an ingest agent in the background with the ingest prompt when a run is due; the prompt asks for owo ingest and ends with `owo sync done`. For Claude Code this is a `Stop` hook with `--format claude-jsonl`, and a `SessionStart` hook or the exported skill wraps `owo context`.
-- A host with no transcript on this machine, such as a hosted chat over MCP, calls `owo sync push` with its recent turns.
+- A local host with a transcript calls `owo sync start --session <session_id> --transcript <path> --format <fmt>` after each turn, and starts an ingest agent in the background with the ingest prompt when a run is due; the prompt asks for owo ingest and ends with `owo sync done`. For Claude Code this is a `Stop` hook with `--format claude-jsonl`, and a `SessionStart` hook or the exported skill wraps `owo context`.
+- A remote host, such as a hosted chat, calls the `sync_push` tool with its recent turns. When the result has `prompt_text`, its agent does that ingest with the tools of the same server, and reads the skill with the `guide` tool; see [[decisions#The ingest prompt names its interface]]. A local host with no transcript file calls `owo sync push` the same way.
 - MCP hosts run `owo mcp`; see [[decisions#MCP calls the library]].
 - ACP clients run the agent through `owo acp`, which stores the turns with `owo sync push` and gives the agent the identity, and with `auto_ingest` runs the ingest of each due or pending run in the background; see [[decisions#ACP proxy passes lines through]] and [[decisions#ACP proxy runs the ingest in the background]].
 - Hosts that load skills use `skills/owo/` or the wrapper from `owo export skill`.

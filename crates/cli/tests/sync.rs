@@ -32,11 +32,11 @@ fn sync_start_and_done() {
     assert_eq!(v["data"]["due"], true);
     assert_eq!(v["data"]["until"], 8);
     let src = v["data"]["slice"].as_str().unwrap();
-    assert!(src.starts_with("sources/nicole/") && src.ends_with("_s1_0-8.md"));
-    assert!(fs::read_to_string(tmp.path().join(src))
+    assert!(src.starts_with("sources/") && src.ends_with("_s1_0-8.md"));
+    assert!(fs::read_to_string(tmp.path().join("nicole").join(src))
         .unwrap()
         .contains("hello 4"));
-    assert!(tmp.path().join(".owo/sessions/s1.prompt.md").is_file());
+    assert!(tmp.path().join("nicole/sessions/s1.prompt.md").is_file());
     run(&["done", "--session", "s1", "--until", "8"]);
     fs::write(
         &t,
@@ -110,7 +110,12 @@ fn sync_reads_claude_jsonl() {
             .arg(&t),
     );
     assert_eq!(v["data"]["until"], 2);
-    let src = fs::read_to_string(tmp.path().join(v["data"]["slice"].as_str().unwrap())).unwrap();
+    let src = fs::read_to_string(
+        tmp.path()
+            .join("nicole")
+            .join(v["data"]["slice"].as_str().unwrap()),
+    )
+    .unwrap();
     assert!(src.contains("A cat it is.") && !src.contains("tool_result"));
     assert!(src.contains("## 0 user (u-1)"), "slice shows the host id");
 }
@@ -152,7 +157,7 @@ fn sync_waits_for_a_pending_run() {
     let v = start();
     assert_eq!(v["data"]["due"], true);
     assert_eq!(v["data"]["from"], 0, "the unfinished run is covered again");
-    assert!(!tmp.path().join(".owo/sessions/s2.lock").exists());
+    assert!(!tmp.path().join("nicole/sessions/s2.lock").exists());
 }
 
 #[test]
@@ -189,9 +194,15 @@ fn sync_done_and_prompt_guards() {
         "ledger-api",
     ])
     .success();
-    let prompt = fs::read_to_string(tmp.path().join(".owo/sessions/s3.prompt.md")).unwrap();
+    let prompt = fs::read_to_string(tmp.path().join("reviewer/sessions/s3.prompt.md")).unwrap();
     assert!(
-        prompt.contains("--root '") && prompt.contains("context --project ledger-api"),
+        prompt.contains("--identities-dir '") && prompt.contains("context --project ledger-api"),
+        "{prompt}"
+    );
+    assert!(
+        prompt
+            .contains("If it came in a `sync_push` result, use the tools of that same MCP server")
+            && !prompt.contains("CLI only"),
         "{prompt}"
     );
     sync(&["done", "--session", "s3", "--until", "500"]).code(1);
@@ -234,8 +245,17 @@ fn sync_push_stores_turns_once() {
         .as_str()
         .unwrap()
         .contains("--until 4"));
-    let stored = fs::read_to_string(tmp.path().join(".owo/sessions/g1.turns.jsonl")).unwrap();
+    let stored = fs::read_to_string(tmp.path().join("nicole/sessions/g1.turns.jsonl")).unwrap();
     assert_eq!(stored.lines().count(), 4);
+    let v = push("[]", &[]);
+    assert_eq!(v["data"]["due"], false);
+    assert!(
+        v["data"]["prompt_text"]
+            .as_str()
+            .unwrap()
+            .contains("--until 4"),
+        "a push that finds the run pending has its texts again"
+    );
     owo(tmp.path())
         .args([
             "-i",
@@ -284,7 +304,7 @@ fn sync_push_refuses_bad_turns_and_file_sessions() {
         r#"[{"id":1,"role":"user","text":"hi"},{"role":"user","text":"no id"}]"#,
     );
     push("g1", r#"[{"id":1,"role":"system","text":"hi"}]"#);
-    assert!(!tmp.path().join(".owo/sessions/g1.turns.jsonl").exists());
+    assert!(!tmp.path().join("nicole/sessions/g1.turns.jsonl").exists());
     let t = tmp.path().join("t.jsonl");
     fs::write(&t, r#"{"role":"user","text":"hi"}"#).unwrap();
     owo(tmp.path())
@@ -333,7 +353,12 @@ fn sync_reads_opencode_json() {
             .arg(&t),
     );
     assert_eq!(v["data"]["until"], 2);
-    let src = fs::read_to_string(tmp.path().join(v["data"]["slice"].as_str().unwrap())).unwrap();
+    let src = fs::read_to_string(
+        tmp.path()
+            .join("nicole")
+            .join(v["data"]["slice"].as_str().unwrap()),
+    )
+    .unwrap();
     assert!(src.contains("## 0 user (m1)") && src.contains("## 1 assistant (m2)\n\nPainted."));
     assert!(!src.contains("hidden"));
 }
@@ -341,7 +366,7 @@ fn sync_reads_opencode_json() {
 #[test]
 fn sync_push_survives_a_cut_store_and_guards_the_session() {
     let tmp = copy_example("nicole");
-    let sessions = tmp.path().join(".owo/sessions");
+    let sessions = tmp.path().join("nicole/sessions");
     fs::create_dir_all(&sessions).unwrap();
     fs::write(
         sessions.join("g1.turns.jsonl"),
@@ -392,7 +417,8 @@ fn sync_push_survives_a_cut_store_and_guards_the_session() {
 #[test]
 fn sync_every_from_config_and_sync_due() {
     let tmp = copy_example("nicole");
-    fs::write(tmp.path().join(".owo.toml"), "sync_every = 2\n").unwrap();
+    fs::create_dir_all(tmp.path().join(".owo")).unwrap();
+    fs::write(tmp.path().join(".owo/config.toml"), "sync_every = 2\n").unwrap();
     let run = |args: &[&str]| {
         json(
             owo(tmp.path())
@@ -403,7 +429,7 @@ fn sync_every_from_config_and_sync_due() {
     };
     let turns = r#"[{"id":1,"role":"user","text":"a"},{"id":2,"role":"user","text":"b"}]"#;
     let v = run(&["push", "--session", "g1", "--turns", turns]);
-    assert_eq!(v["data"]["every"], 2, "sync_every from .owo.toml");
+    assert_eq!(v["data"]["every"], 2, "sync_every from the config");
     assert_eq!(v["data"]["due"], true);
     let v = run(&["push", "--session", "g2", "--every", "5", "--turns", turns]);
     assert_eq!(v["data"]["every"], 5, "--every wins over sync_every");
@@ -411,7 +437,7 @@ fn sync_every_from_config_and_sync_due() {
     let v = run(&["due"]);
     assert_eq!(
         v["data"]["due"],
-        serde_json::json!([{ "session": "g1", "prompt": ".owo/sessions/g1.prompt.md", "from": 0, "until": 2 }])
+        serde_json::json!([{ "identity": "nicole", "session": "g1", "prompt": "sessions/g1.prompt.md", "from": 0, "until": 2 }])
     );
     run(&["done", "--session", "g1", "--until", "2"]);
     assert_eq!(run(&["due"])["data"]["due"], serde_json::json!([]));

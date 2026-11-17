@@ -77,7 +77,7 @@ fn title_of(text: &str, stem: &str) -> String {
         .unwrap_or_else(|| stem.replace('-', " "))
 }
 
-fn take_sources(body: &str, slug: &str) -> (Vec<String>, Vec<String>, String) {
+fn take_sources(body: &str) -> (Vec<String>, Vec<String>, String) {
     let (mut cites, mut links, mut rest) = (vec![], vec![], vec![]);
     let mut inside = false;
     for line in body.lines() {
@@ -102,7 +102,7 @@ fn take_sources(body: &str, slug: &str) -> (Vec<String>, Vec<String>, String) {
         let item = item.replace('`', "");
         let item = item.trim_end_matches(['.', ' ']);
         let item = match item.strip_prefix("sources/") {
-            Some(path) => format!("{slug}/{path}"),
+            Some(path) => path.to_string(),
             None => item.to_string(),
         };
         if !cites.contains(&item) {
@@ -133,12 +133,11 @@ fn normalize(
     date: Option<&str>,
     parent: Option<&str>,
     today: &str,
-    slug: &str,
 ) -> String {
     let split = crate::markdown::split(text);
     let mut map = frontmatter(text);
     let title = title_of(text, stem);
-    let (cites, links, body) = take_sources(split.body, slug);
+    let (cites, links, body) = take_sources(split.body);
     let mut set = |k: &str, v: Value| {
         if !map.contains_key(k) {
             map.insert(k.to_string(), v);
@@ -234,7 +233,6 @@ fn migrate_locations(
     locs: &Path,
     dir: &Path,
     today: &str,
-    slug: &str,
     rel: &dyn Fn(&Path) -> String,
     r: &mut Report,
 ) -> Result<()> {
@@ -244,15 +242,7 @@ fn migrate_locations(
             return anyhow::Ok(());
         }
         r.place(&dir.join(&to), rel(from), to, || {
-            Ok(normalize(
-                text,
-                kind,
-                &stem_of(from),
-                None,
-                parent,
-                today,
-                slug,
-            ))
+            Ok(normalize(text, kind, &stem_of(from), None, parent, today))
         })
     };
     let loose: Vec<PathBuf> = md_files(locs)
@@ -313,7 +303,7 @@ fn migrate_locations(
     Ok(())
 }
 
-pub fn v1(cwd: &Path, src: &Path, out: &Path) -> Result<Report> {
+pub fn v1(cwd: &Path, src: &Path, out: &Path, templates_dir: &Path) -> Result<Report> {
     let refs = cwd.join(src).join("references");
     if !refs.is_dir() {
         bail!(
@@ -330,7 +320,7 @@ pub fn v1(cwd: &Path, src: &Path, out: &Path) -> Result<Report> {
         .parent()
         .filter(|p| !p.as_os_str().is_empty())
         .unwrap_or(Path::new("."));
-    let root = &cwd.join(shown);
+    let identities_dir = &cwd.join(shown);
     let src = &cwd.join(src);
     let manifest: Value = fs::read_to_string(refs.join("manifest.json"))
         .ok()
@@ -341,24 +331,25 @@ pub fn v1(cwd: &Path, src: &Path, out: &Path) -> Result<Report> {
         .or(manifest["display_name"].as_str())
         .map(str::to_string)
         .unwrap_or_else(|| slug.clone());
-    let sources = root.join("sources").join(&slug);
-    let had_sources = sources.exists();
-    crate::create::new_identity(root, shown, &name, &slug)?;
-    let mut report = fill(src, &refs, root, &slug, &manifest).inspect_err(|_| {
+    crate::create::new_identity(identities_dir, shown, Some(templates_dir), &name, &slug)?;
+    let mut report = fill(src, &refs, identities_dir, &slug, &manifest).inspect_err(|_| {
         if crate::write::dry() {
             return;
         }
-        let _ = fs::remove_dir_all(root.join(&slug));
-        if !had_sources {
-            let _ = fs::remove_dir_all(&sources);
-        }
+        let _ = fs::remove_dir_all(identities_dir.join(&slug));
     })?;
     report.dir = shown.join(&slug).display().to_string();
     Ok(report)
 }
 
-fn fill(src: &Path, refs: &Path, root: &Path, slug: &str, manifest: &Value) -> Result<Report> {
-    let dir = root.join(slug);
+fn fill(
+    src: &Path,
+    refs: &Path,
+    identities_dir: &Path,
+    slug: &str,
+    manifest: &Value,
+) -> Result<Report> {
+    let dir = identities_dir.join(slug);
     let today = crate::state::today();
     let mut r = Report {
         identity: slug.to_string(),
@@ -489,13 +480,12 @@ fn fill(src: &Path, refs: &Path, root: &Path, slug: &str, manifest: &Value) -> R
                         date.as_deref().filter(|_| *dated),
                         None,
                         &today,
-                        slug,
                     ))
                 },
             )?;
         }
     }
-    migrate_locations(&world.join("locations"), &dir, &today, slug, &rel, &mut r)?;
+    migrate_locations(&world.join("locations"), &dir, &today, &rel, &mut r)?;
     if let Ok(text) = fs::read_to_string(world.join("meta/conflicts.md")) {
         for block in format!("\n{text}").split("\n## ").skip(1) {
             let (title, body) = block.split_once('\n').unwrap_or((block, ""));
@@ -517,7 +507,7 @@ fn fill(src: &Path, refs: &Path, root: &Path, slug: &str, manifest: &Value) -> R
             );
             crate::write::file(
                 &dir.join(&file),
-                normalize(&doc, "conflict", &name, None, None, &today, slug),
+                normalize(&doc, "conflict", &name, None, None, &today),
             )?;
             r.moved
                 .push(("references/world/meta/conflicts.md".into(), file));
@@ -539,9 +529,9 @@ fn fill(src: &Path, refs: &Path, root: &Path, slug: &str, manifest: &Value) -> R
         let name = e.path().strip_prefix(&from).expect("under sources");
         let name = name.to_string_lossy().replace('\\', "/");
         r.place(
-            &root.join("sources").join(slug).join(&name),
+            &dir.join(crate::identity::SOURCES).join(&name),
             rel(e.path()),
-            format!("<root>/sources/{slug}/{name}"),
+            format!("sources/{name}"),
             || Ok(fs::read(e.path())?),
         )?;
     }
@@ -557,7 +547,7 @@ fn fill(src: &Path, refs: &Path, root: &Path, slug: &str, manifest: &Value) -> R
         }
     }
 
-    let id = crate::identity::Identity::load(root, slug)?;
+    let id = crate::identity::Identity::load(identities_dir, slug)?;
     crate::index::write_as(&id, &id.dir)?;
     crate::stamp::run(&id, false)?;
     r.checklist = vec![

@@ -2,23 +2,25 @@
 
 The on-disk formats the code reads and writes.
 
-## Root layout
+## Owo dir layout
 
-The root holds identity folders and shared working data. It works well as a Git repository; `owo changes` reads its history.
+The owo dir holds what owo itself needs, apart from the identities. By default it also holds the identities dir.
 
-- `<slug>/`: one identity per folder.
-- `sources/<slug>/`: raw material (transcripts, notes, slices), outside every identity. Entries cite files here.
-- `.owo/sessions/`: sync cursors (`<session>.json`), ingest prompts, locks and turns files (`<session>.turns.jsonl`).
-- `.templates/`: optional template overrides; see [[formats#Templates]].
-- `owo.toml`: the optional global config; see [[formats#Config resolution]].
+- `config.toml`: the optional global config; see [[formats#Config resolution]].
+- `templates/`: the templates dir, with optional template overrides; see [[formats#Templates]].
+- `identities/`: the identities dir, with one identity per folder, `<slug>/`. It can be any other folder. It works well as a Git repository; `owo changes` reads its history.
 
 ## Identity layout
 
-An identity is `<root>/<slug>/` with `identity.json`, `persona/`, `life/` and `work/`; `owo new` creates every folder and file listed here.
+An identity is `<identities-dir>/<slug>/` with `identity.json`, `.gitignore`, `persona/`, `life/` and `work/`, which `owo new` creates, and `sources/` and `sessions/`, which the first sync run or migrate creates.
 
 - `persona/`: `soul.json` (SoulSpec v0.5), `state.json`, `IDENTITY.md`, `SOUL.md`, `VOICE.md`, `LOOK.md`, `MEMORY.md`, `examples/{good,bad,greetings}.md`.
 - `life/`: `state.json`, `_index.md`, `timeline.md`, and one folder per category: characters, locations, cultures, factions, events, eras, threads, conflicts, insights, writing, daily-log (the daily logs), journal.
 - `work/`: `state.json`, `PROFILE.md` (the work profile), `_index.md`, `projects/<p>/README.md` (the project readme), `projects/<p>/notes/YYYY-MM-DD_<slug>.md` (the project notes).
+- `sources/`: raw material (transcripts, notes, slices). Entries cite files here, so it is committed with the identity.
+- `sessions/`: the session data of sync: sync cursors (`<session>.json`), ingest prompts (`<session>.prompt.md`), locks and turns files (`<session>.turns.jsonl`). These are working files of one machine, so `.gitignore` holds the line `sessions/`.
+
+No file in `sources/` or `sessions/` is an entry; see [[decisions#Sources and sessions live in the identity folder]].
 
 Each top-level location is a folder with `overview.md`. Rooms and angles are sibling files beside it, and location folders sit one level deep.
 
@@ -51,7 +53,7 @@ Persona files link by name: `[[IDENTITY]]`, `[[SOUL]]`, `[[VOICE]]`, `[[LOOK]]`,
 
 Every life and work entry has YAML frontmatter with `type`, `title`, `aliases`, `summary`, `status`, `created`, `updated`, `sources`. Lists are block lists (`  - item`); an empty list is `[]`. A title or alias holds no `#`, `|`, `[` or `]`, because those break a `[[link]]` to it; `owo add` refuses them and the `schema` rule reports them.
 
-`summary` is one line; indexes, search, the current state and persona card lorebooks use it. Citations live only in frontmatter: `sources` (paths relative to `sources/`, optional `#L<a>-L<b>`, or plain text), insight `evidence` and thread `from` are wikilinks. Bodies have no Sources, Evidence or From section, and hold no path of raw material; the rules of the `owo` skill say so too.
+`summary` is one line; indexes, search, the current state and persona card lorebooks use it. Citations live only in frontmatter: `sources` (paths relative to the `sources/` folder of the identity, optional `#L<a>-L<b>`, or plain text), insight `evidence` and thread `from` are wikilinks. Bodies have no Sources, Evidence or From section, and hold no path of raw material; the rules of the `owo` skill say so too.
 
 `type` must match the folder. `status` is `canon`, `disputed` (an open conflict links the entry) or `superseded` (with `superseded_by`). Dates are `YYYY-MM-DD` and are story time: the dates inside the identity's life, not chat timestamps. Dated types (daily-log, journal, writing, project-note) carry `date`, and the file name must start with it. Events need `date`; threads need `state: open|closed`; conflicts need `state: open|resolved`; location details need `parent`; project notes need `project` equal to their project folder.
 
@@ -106,18 +108,27 @@ Each life category `_index.md` lists `- [[Title]] (marks): summary (aliases: ...
 
 ## Config resolution
 
-Root resolves from `--root`, `OWO_ROOT`, `root` in the nearest `.owo.toml` (the local config), then `$XDG_DATA_HOME/owo`.
+owo finds the owo dir first, then the global config, then the two folders the config can set. Each comes from its flag, then its environment variable, then the config key when it has one, then its default.
 
-When the root comes from a `.owo.toml` in a parent of the working folder, owo prints a warning on stderr that names that file, since a cloned repo can ship one.
+| What | Flag | Variable | Config key | Default |
+| :- | :- | :- | :- | :- |
+| Owo dir | `-D`, `--config-dir` | `OWO_DIR` | | `$XDG_CONFIG_HOME/owo`, else `~/.config/owo` |
+| Global config | `-c`, `--config` | `OWO_CONFIG` | | `config.toml` in the owo dir |
+| Identities dir | `-R`, `--identities-dir` | `OWO_IDENTITIES_DIR` | `identities_dir` | `identities/` in the owo dir |
+| Templates dir | | `OWO_TEMPLATES_DIR` | `templates_dir` | `templates/` in the owo dir |
 
-The global config is `<root>/owo.toml`, read after the root resolves. It takes every field of the local config except `root`, which it ignores, since the root must be known before owo can find the file.
+A relative path from a flag or a variable starts at the working folder. A relative path in the config starts at the folder of the config file. `~/` expands to `$HOME` in a variable and in the config. With no flag, no `OWO_DIR`, no `XDG_CONFIG_HOME` and no `HOME`, the owo dir cannot be found, which is a config error.
 
-Identity resolves from `-i`, `OWO_IDENTITY`, `.owo.toml`, the global config, then the only identity in the root. Project resolves from `--project`, `OWO_PROJECT`, `.owo.toml`; see [[decisions#Working project versus project filter]]. A relative `root` value resolves against the folder of the `.owo.toml`; `~/` expands to `$HOME`. The run size of `sync` (`sync_every`, a number) resolves from `.owo.toml`, then the global config, then 6; an explicit `every` wins over it.
+The global config is TOML. The default file may be missing, but a file named with `-c` or `OWO_CONFIG` must exist. A key that owo does not know is a config error, so a key from an older layout, such as `root`, does not pass in silence.
 
-Two fields set the auto-ingest of `owo acp`, and each resolves from `.owo.toml`, then the global config: `auto_ingest` (true or false, false by default) turns it on, and `ingest_command` (an array of strings, such as `["claude", "--permission-mode", "acceptEdits", "--allowedTools", "Bash(owo:*)", "-p"]`) is the ingest command, which gets the ingest prompt as its last argument. Without `ingest_command` the proxy takes the ingest command from the ACP agent command; see [[decisions#ACP proxy runs the ingest in the background]].
+Identity resolves from `-i`, `OWO_IDENTITY`, `identity` in the config, then the only identity in the identities dir. Project resolves from `--project`, then `OWO_PROJECT`; see [[decisions#Working project versus project filter]]. The run size of `sync` is `sync_every` in the config (a number), else 6; an explicit `every` wins over it.
+
+Two config keys set the auto-ingest of `owo acp`: `auto_ingest` (true or false, false by default) turns it on, and `ingest_command` (an array of strings, such as `["claude", "--permission-mode", "acceptEdits", "--allowedTools", "Bash(owo:*)", "-p"]`) is the ingest command, which gets the ingest prompt as its last argument. Without `ingest_command` the proxy takes the ingest command from the ACP agent command; see [[decisions#ACP proxy runs the ingest in the background]].
+
+See [[decisions#One owo dir, and no local config]].
 
 ## Templates
 
-Templates are embedded in the binary. `<root>/.templates/<name>` overrides one, where `<name>` is the identity-relative path for identity files (`persona/IDENTITY.md`, `work/PROFILE.md`) and `<type>.md` for entries (`character.md`, `project-readme.md`).
+Templates are embedded in the binary. `<templates-dir>/<name>` overrides one, where `<name>` is the identity-relative path for identity files (`persona/IDENTITY.md`, `work/PROFILE.md`, `.gitignore`) and `<type>.md` for entries (`character.md`, `project-readme.md`).
 
 Placeholders are `{{name}}`, `{{slug}}`, `{{title}}`, `{{today}}`, `{{date}}`, `{{parent}}`, `{{project}}`. A `{{key_yaml}}` form escapes double quotes for YAML strings, and a `{{key_json}}` form escapes for JSON strings. Filling is one pass, so `{{key}}` text inside a value stays as written. An era's `start` and `end` are empty until the author sets them.

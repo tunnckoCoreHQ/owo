@@ -4,13 +4,18 @@ owo keeps a living agent identity as a folder of plain files. Hosts load the ide
 
 ## Identity
 
-**Root**:
-The folder that holds every **Identity**, the **Raw Material**, the **Global Config** and the session data. It comes from the flag, the environment or the **Local Config**, and otherwise it is the default data folder.
+**Owo Dir**:
+The folder that holds what owo itself needs on one machine: the **Global Config** and the **Templates Dir**, and by default the **Identities Dir**. It comes from the flag or the environment, and otherwise it is the default config folder.
 
-_Avoid: identities root, home, workspace_
+_Avoid: root, home, config folder_
+
+**Identities Dir**:
+The folder that holds every **Identity**, each in its own folder. It comes from the flag, the environment or the **Global Config**, and otherwise it is the `identities/` folder in the **Owo Dir**.
+
+_Avoid: root, identities root, workspace_
 
 **Identity**:
-Who an agent can be, kept as one whole folder in the **Root**, such as `thea/`. It has three **Scopes**: **Persona**, **Life** and **Work**.
+Who an agent can be, kept as one whole folder in the **Identities Dir**, such as `thea/`. It has three **Scopes**: **Persona**, **Life** and **Work**. The folder also holds the **Raw Material** and the session data of the **Identity**.
 
 _Avoid: agent, persona, character, profile_
 
@@ -92,7 +97,7 @@ A `[[...]]` link from one **Entry** to another, by title, alias or **Slug**.
 _Avoid: link, reference, pointer, wiki-link_
 
 **Raw Material**:
-The files outside every **Identity** that **Entries** cite, such as a **Transcript**, a note or a **Slice**.
+The files that **Entries** cite, such as a **Transcript**, a note or a **Slice**. They are in the `sources/` folder of the **Identity**, and none of them is an **Entry**.
 
 _Avoid: source, reference, evidence_
 
@@ -258,9 +263,19 @@ _Avoid: soul history, trail, audit log_
 ## Sessions and sync
 
 **Host**:
-A program that runs an agent in **Sessions**, such as Claude Code or a hosted chat.
+A program that runs an agent in **Sessions**, such as Claude Code or a hosted chat. It is a **Local Host** or a **Remote Host**.
 
 _Avoid: harness, client, platform_
+
+**Local Host**:
+A **Host** on the machine that has owo and the **Identities Dir**. Its agent runs owo commands.
+
+_Avoid: host (for this kind only), CLI host_
+
+**Remote Host**:
+A **Host** that reaches owo only through an MCP server. It keeps no **Identity**, its agent calls tools, and it gives its **Turns** by **Push**.
+
+_Avoid: chat, client, MCP host_
 
 **Session**:
 One chat between a user and an agent on a **Host**, named by the session id of the **Host**.
@@ -370,22 +385,22 @@ A run of an **Operation** that writes nothing and reports the files it would wri
 _Avoid: preview, simulation_
 
 **Selected Identity**:
-The **Identity** that an **Operation** acts on. It comes from the flag, the environment, the **Local Config**, the **Global Config**, or the only **Identity** in the **Root**.
+The **Identity** that an **Operation** acts on. It comes from the flag, the environment, the **Global Config**, or the only **Identity** in the **Identities Dir**.
 
 _Avoid: current identity, active identity, picked identity, selected persona_
 
-**Local Config**:
-The `.owo.toml` file that owo finds from the working folder up. It can set the **Root**, the **Selected Identity** and the **Working Project**.
-
-_Avoid: project file, project config_
-
 **Global Config**:
-The config file in the **Root**. It can set the **Selected Identity** and other values, but not the **Root**.
+The config file of owo, `config.toml` in the **Owo Dir**. It can set the **Identities Dir**, the **Templates Dir**, the **Selected Identity** and other values.
 
-_Avoid: user config, root config_
+_Avoid: user config, local config, project config_
+
+**Templates Dir**:
+The folder of the files that replace the built-in templates of owo. It comes from the environment or the **Global Config**, and otherwise it is the `templates/` folder in the **Owo Dir**.
+
+_Avoid: template overrides, templates folder_
 
 **Working Project**:
-The **Project** that the **Context**, the **Current State**, **Sync** and a new **Project Note** use. It comes from the flag, the environment or the **Local Config**.
+The **Project** that the **Context**, the **Current State**, **Sync** and a new **Project Note** use. It comes from the flag or the environment.
 
 _Avoid: current project, active project_
 

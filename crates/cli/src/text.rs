@@ -42,7 +42,6 @@ fn origin(o: &Origin) -> String {
     match o {
         Origin::Flag => "flag".into(),
         Origin::Env => "environment".into(),
-        Origin::LocalConfig(file) => format!("local config {}", file.display()),
         Origin::GlobalConfig(file) => format!("global config {}", file.display()),
         Origin::Default => "default".into(),
         Origin::OnlyIdentity => "only identity".into(),
@@ -94,17 +93,26 @@ impl Text {
         match outcome {
             Outcome::Slug(value) => self.line(value),
             Outcome::Config(r) => {
-                self.line(format!(
-                    "root: {} ({})",
-                    r.root.display(),
-                    origin(&r.root_source)
-                ));
-                self.line(format!(
-                    "identity: {}",
-                    r.identity.as_deref().unwrap_or("-")
-                ));
+                for (name, path, from) in [
+                    ("owo dir", &r.owo_dir, &r.owo_dir_source),
+                    ("config", &r.config, &r.config_source),
+                    (
+                        "identities dir",
+                        &r.identities_dir,
+                        &r.identities_dir_source,
+                    ),
+                    ("templates dir", &r.templates_dir, &r.templates_dir_source),
+                ] {
+                    self.line(format!("{name}: {} ({})", path.display(), origin(from)));
+                }
+                let from = r.identity_source.as_ref().map(origin);
+                self.line(match (&r.identity, from) {
+                    (Some(identity), Some(from)) => format!("identity: {identity} ({from})"),
+                    _ => "identity: -".into(),
+                });
                 self.line(format!("project: {}", r.project.as_deref().unwrap_or("-")));
             }
+            Outcome::Guide(text) => self.push(text),
             Outcome::Created(c) => {
                 self.say(format!(
                     "created {} ({} files)",
@@ -238,7 +246,10 @@ impl Text {
             }
             Outcome::SyncDue(list) => {
                 for d in list {
-                    self.line(format!("{} {}-{} {}", d.session, d.from, d.until, d.prompt));
+                    self.line(format!(
+                        "{} {}-{} {}/{}",
+                        d.session, d.from, d.until, d.identity, d.prompt
+                    ));
                 }
             }
             Outcome::Migrate(r) => {

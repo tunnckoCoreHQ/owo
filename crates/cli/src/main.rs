@@ -82,7 +82,7 @@ fn run(ops: &[Operation], matches: &ArgMatches, global: &Global, env: &owo_core:
         .map(|args| cli::with_paths(op, m, args))
         .and_then(|args| op.run(&args, &global.select, env, &mut std::io::stdin()));
     match ran {
-        Ok(ran) => render::output(ran, global.json, global.quiet),
+        Ok(result) => render::output(result, global.json, global.quiet),
         Err(e) => Output::from(anyhow::Error::from(e)),
     }
 }
@@ -90,12 +90,15 @@ fn run(ops: &[Operation], matches: &ArgMatches, global: &Global, env: &owo_core:
 fn env() -> owo_core::Env {
     let non_empty = |key: &str| std::env::var(key).ok().filter(|v| !v.is_empty());
     owo_core::Env {
-        owo_root: non_empty("OWO_ROOT"),
+        owo_dir: non_empty("OWO_DIR"),
+        owo_config: non_empty("OWO_CONFIG"),
+        owo_identities_dir: non_empty("OWO_IDENTITIES_DIR"),
+        owo_templates_dir: non_empty("OWO_TEMPLATES_DIR"),
         owo_identity: non_empty("OWO_IDENTITY"),
         owo_project: non_empty("OWO_PROJECT"),
         cwd: std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")),
         home: std::env::var_os("HOME").map(PathBuf::from),
-        xdg_data_home: non_empty("XDG_DATA_HOME").map(PathBuf::from),
+        xdg_config_home: non_empty("XDG_CONFIG_HOME").map(PathBuf::from),
     }
 }
 
