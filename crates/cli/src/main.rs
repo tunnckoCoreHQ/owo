@@ -173,8 +173,20 @@ fn acp(global: &Global, env: &owo_core::Env, options: Options) -> anyhow::Result
     Ok(status.code().unwrap_or(1) as u8)
 }
 
-fn mcp_server(identity: Option<&str>) -> (String, Vec<String>) {
-    let mut args = vec!["mcp".to_string()];
+fn mcp_server(identity: Option<&str>, config: &owo_core::Resolved) -> (String, Vec<String>) {
+    let mut args = vec![
+        "mcp".to_string(),
+        "-D".into(),
+        config.owo_dir.to_string_lossy().into_owned(),
+        "-R".into(),
+        config.identities_dir.to_string_lossy().into_owned(),
+    ];
+    if !matches!(config.config_source, owo_core::Origin::Default) {
+        args.extend(["-c".into(), config.config.to_string_lossy().into_owned()]);
+    }
+    if let Some(project) = &config.project {
+        args.extend(["--project".into(), project.clone()]);
+    }
     if let Some(id) = identity {
         args.extend(["-i".to_string(), id.to_string()]);
     }

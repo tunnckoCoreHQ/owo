@@ -2,6 +2,8 @@
 
 `owo lint` checks one identity. Errors fail the run with exit 1; warnings and infos report only.
 
+The schema rule requires `aliases` and `sources` to be lists of strings. Missing fields and null values fail; an empty list is valid. Outside Git, changed-file lint compares each stamp's local day with today.
+
 ## Rules
 
 Each rule has a code usable with `--rule`.

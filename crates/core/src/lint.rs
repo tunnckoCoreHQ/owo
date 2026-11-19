@@ -259,9 +259,8 @@ fn check_entry_schema(e: &Entry, out: &mut Vec<Diagnostic>) {
     }
     for key in ["aliases", "sources"] {
         match e.field(key) {
-            None | Some(Json::Null) => {}
             Some(Json::Array(items)) if items.iter().all(|i| i.is_string()) => {}
-            Some(_) => out.push(err(rel, format!("{key} must be a list of strings"))),
+            _ => out.push(err(rel, format!("{key} must be a list of strings"))),
         }
     }
     let needs_summary = !matches!(e.kind, Kind::DailyLog | Kind::Journal | Kind::Writing);
@@ -525,7 +524,7 @@ fn supersede(id: &Identity, out: &mut Vec<Diagnostic>) {
 
 fn generated(id: &Identity, out: &mut Vec<Diagnostic>) {
     for rel in index::stale(id) {
-        out.push(err(&rel, "generated file is out of date; run `owo index`"));
+        out.push(err(&rel, "generated file is out of date"));
     }
 }
 

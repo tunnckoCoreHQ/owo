@@ -51,13 +51,16 @@ fn identity_rel(id: &Identity, name: &str) -> Option<String> {
     if !(name.contains('/') || name.ends_with(".md")) {
         return None;
     }
-    let path = std::fs::canonicalize(name.trim()).ok()?;
+    let path = std::fs::canonicalize(id.cwd.join(name.trim())).ok()?;
     let dir = std::fs::canonicalize(&id.dir).ok()?;
     let rel = path.strip_prefix(dir).ok()?;
     Some(rel.to_string_lossy().replace('\\', "/"))
 }
 
 pub fn resolve(id: &Identity, name: &str, kind: Option<Kind>) -> Resolution {
+    let name = name.trim();
+    let target = name.strip_prefix("[[").and_then(|s| s.strip_suffix("]]"));
+    let name = target.map_or(name, |s| s.split(['#', '|']).next().unwrap_or(s).trim());
     let matches_kind = |i: &usize| kind.is_none_or(|k| id.entries[*i].kind == k);
     let hits: Vec<usize> = id
         .resolve_wikilink(identity_rel(id, name).as_deref().unwrap_or(name))

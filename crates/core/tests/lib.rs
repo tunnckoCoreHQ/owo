@@ -200,6 +200,26 @@ fn read_side_calls_return_typed_results() {
 }
 
 #[test]
+fn resolution_uses_the_supplied_working_folder_and_wikilink_target() {
+    let tmp = ids_dir(&["nicole"]);
+    let id = open(tmp.path(), Some("nicole")).identity().unwrap();
+    for name in [
+        "./nicole/life/events/first-firing.md",
+        "[[First Firing#Lines]]",
+        "[[First Firing|firing]]",
+    ] {
+        let hit = id
+            .resolve(&req::ResolveRequest {
+                name: name.into(),
+                kind: None,
+            })
+            .unwrap()
+            .unwrap();
+        assert_eq!(hit.path, "life/events/first-firing.md", "{name}");
+    }
+}
+
+#[test]
 fn write_side_calls_change_the_identity() {
     let tmp = ids_dir(&["nicole"]);
     let r = open(tmp.path(), Some("nicole"));
@@ -306,7 +326,7 @@ impl Write for Shared {
     }
 }
 
-fn mcp_server(identity: Option<&str>) -> (String, Vec<String>) {
+fn mcp_server(identity: Option<&str>, _: &owo_core::Resolved) -> (String, Vec<String>) {
     let mut args = vec!["mcp".to_string()];
     if let Some(id) = identity {
         args.extend(["-i".to_string(), id.to_string()]);

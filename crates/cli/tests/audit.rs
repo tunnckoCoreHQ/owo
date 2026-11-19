@@ -17,6 +17,76 @@ fn thea() -> TempDir {
     tmp
 }
 
+#[test]
+fn schema_requires_aliases_and_sources_lists() {
+    let tmp = copy_example("nicole");
+    let path = tmp.path().join("nicole/life/events/first-firing.md");
+    let original = fs::read_to_string(&path).unwrap();
+    for key in ["aliases", "sources"] {
+        for replacement in [None, Some(format!("{key}: null"))] {
+            let text = original
+                .lines()
+                .filter_map(|line| {
+                    if line.starts_with(&format!("{key}:")) {
+                        replacement.as_deref()
+                    } else {
+                        Some(line)
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join("\n");
+            fs::write(&path, text).unwrap();
+            let r = json(owo(tmp.path()).args(["-i", "nicole", "lint", "--rule", "schema"]));
+            assert_eq!(r["ok"], false, "{r}");
+            assert!(
+                r.to_string()
+                    .contains(&format!("{key} must be a list of strings")),
+                "{r}"
+            );
+        }
+    }
+}
+
+#[test]
+fn changed_lint_keeps_stamps_from_the_same_local_day() {
+    let tmp = copy_example("nicole");
+    let now = chrono::Utc::now();
+    let offset = chrono::FixedOffset::east_opt(14 * 3600).unwrap();
+    let day = now.with_timezone(&offset).date_naive();
+    let stamp = [0, 23]
+        .into_iter()
+        .map(|hour| {
+            day.and_hms_opt(hour, 0, 0)
+                .unwrap()
+                .and_local_timezone(offset)
+                .unwrap()
+        })
+        .find(|t| t.with_timezone(&chrono::Utc).date_naive() != now.date_naive())
+        .unwrap();
+    let path = tmp.path().join("nicole/life/events/first-firing.md");
+    let text = fs::read_to_string(&path).unwrap();
+    fs::write(&path, text.replace("status: canon", "status: invalid")).unwrap();
+    owo(tmp.path())
+        .args(["-i", "nicole", "stamp"])
+        .assert()
+        .success();
+    let state = tmp.path().join("nicole/life/state.json");
+    let mut doc: Value = serde_json::from_str(&fs::read_to_string(&state).unwrap()).unwrap();
+    doc["files"]["events/first-firing.md"]["updated"] =
+        json!(stamp.with_timezone(&chrono::Utc).to_rfc3339());
+    fs::write(&state, doc.to_string()).unwrap();
+    let r = json(owo(tmp.path()).env("TZ", "Etc/GMT-14").args([
+        "-i",
+        "nicole",
+        "lint",
+        "--changed",
+        "--rule",
+        "schema",
+    ]));
+    assert_eq!(r["ok"], false, "{r}");
+    assert!(r.to_string().contains("status"), "{r}");
+}
+
 fn mcp(ids_dir: &Path, messages: &[Value]) -> Vec<Value> {
     let input: String = messages.iter().map(|m| format!("{m}\n")).collect();
     let out = owo(ids_dir)

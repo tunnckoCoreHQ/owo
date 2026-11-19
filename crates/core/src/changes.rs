@@ -120,9 +120,12 @@ pub fn changes(id: &Identity, since: Option<&str>) -> anyhow::Result<Changes> {
 
 pub fn changed_paths(id: &Identity) -> Vec<String> {
     let mut out = crate::git::dirty(&id.dir).unwrap_or_else(|| {
-        let today = crate::state::today();
+        let today = chrono::Local::now().date_naive();
         crate::state::stamps(id)
-            .filter(|(_, _, at)| at.starts_with(&today))
+            .filter(|(_, _, at)| {
+                chrono::DateTime::parse_from_rfc3339(at)
+                    .is_ok_and(|t| t.with_timezone(&chrono::Local).date_naive() == today)
+            })
             .map(|(scope, rel, _)| format!("{scope}/{rel}"))
             .collect()
     });

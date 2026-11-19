@@ -827,7 +827,7 @@ fn context_look_and_with() {
     assert!(!items.iter().any(|(_, p)| *p == "persona/VOICE.md"));
     assert!(v["warnings"]
         .to_string()
-        .contains("--with \\\"Nope\\\" does not resolve"));
+        .contains("with \\\"Nope\\\" does not resolve"));
 }
 
 #[test]

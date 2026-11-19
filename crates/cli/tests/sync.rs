@@ -4,6 +4,81 @@ use common::{copy_example, copy_tree, examples, json, owo};
 use std::fs;
 
 #[test]
+fn forced_sync_includes_assistant_only_additions() {
+    let tmp = copy_example("nicole");
+    let t = tmp.path().join("t.jsonl");
+    fs::write(&t, "{\"role\":\"user\",\"text\":\"hello\"}\n").unwrap();
+    let run = || {
+        json(owo(tmp.path()).args([
+            "-i",
+            "nicole",
+            "sync",
+            "start",
+            "--session",
+            "s1",
+            "--transcript",
+            t.to_str().unwrap(),
+            "--now",
+        ]))
+    };
+    assert_eq!(run()["data"]["due"], true);
+    owo(tmp.path())
+        .args([
+            "-i",
+            "nicole",
+            "sync",
+            "done",
+            "--session",
+            "s1",
+            "--until",
+            "1",
+        ])
+        .assert()
+        .success();
+    fs::write(
+        &t,
+        "{\"role\":\"user\",\"text\":\"hello\"}\n{\"role\":\"assistant\",\"text\":\"answer\"}\n",
+    )
+    .unwrap();
+    let r = run();
+    assert_eq!(r["data"]["due"], true, "{r}");
+    assert_eq!(r["data"]["new_user_turns"], 0);
+    assert_eq!(run()["data"]["due"], false, "pending turns are not new");
+}
+
+#[test]
+fn an_empty_transcript_fails_without_a_cursor() {
+    let tmp = copy_example("nicole");
+    let t = tmp.path().join("empty.jsonl");
+    fs::write(&t, " \n").unwrap();
+    owo(tmp.path())
+        .args([
+            "-i",
+            "nicole",
+            "sync",
+            "start",
+            "--session",
+            "empty",
+            "--transcript",
+            t.to_str().unwrap(),
+        ])
+        .assert()
+        .code(1);
+    assert!(!tmp.path().join("nicole/sessions/empty.json").exists());
+    let r = json(owo(tmp.path()).args([
+        "-i",
+        "nicole",
+        "sync",
+        "push",
+        "--session",
+        "p1",
+        "--turns",
+        "[]",
+    ]));
+    assert_eq!(r["ok"], true, "an empty push remains valid");
+}
+
+#[test]
 fn sync_start_and_done() {
     let tmp = copy_example("nicole");
     let t = tmp.path().join("t.jsonl");
