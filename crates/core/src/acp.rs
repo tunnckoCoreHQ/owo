@@ -163,7 +163,7 @@ fn push_of(identity: Option<String>, session: &str, turns: Vec<crate::Turn>) -> 
 #[derive(Debug, Clone)]
 pub struct Options {
     pub inject: bool,
-    pub mcp_server: fn(Option<&str>) -> (String, Vec<String>),
+    pub mcp_server: fn(Option<&str>, &crate::Resolved) -> (String, Vec<String>),
     pub dry_run: bool,
     pub agent: Vec<String>,
 }
@@ -337,7 +337,7 @@ impl Proxy {
         }
         let setup = (!identities.is_empty()).then(|| {
             let server = (!context).then(|| {
-                let (command, args) = (options.mcp_server)(start.as_deref());
+                let (command, args) = (options.mcp_server)(start.as_deref(), &ids.config);
                 json!({ "name": "owo", "command": command, "args": args, "env": [] })
             });
             Arc::new(Setup {

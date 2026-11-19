@@ -94,7 +94,7 @@ pub fn build(id: &Identity, req: &Request, project: Option<&str>) -> Result<Cont
                 &id.entries[i].rel,
                 &format!("requested: {name}"),
             )),
-            Err(e) => warnings.push(format!("--with {e}")),
+            Err(e) => warnings.push(format!("with {e}")),
         }
     }
     for it in &items {

@@ -41,7 +41,7 @@ fn env(dir: &Path) -> Env {
     }
 }
 
-fn mcp_server(_: Option<&str>) -> (String, Vec<String>) {
+fn mcp_server(_: Option<&str>, _: &owo_core::Resolved) -> (String, Vec<String>) {
     ("owo".into(), vec!["mcp".into()])
 }
 

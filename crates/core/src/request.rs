@@ -290,7 +290,14 @@ impl<'a> Reader<'a> {
 
     pub fn flag(&mut self, f: Field, base: bool) -> bool {
         match self.declare(f, Type::Switch, base.into()) {
-            Some((name, a)) => a.get(name).and_then(Value::as_bool) == Some(true),
+            Some((name, a)) => match a.get(name) {
+                None => base,
+                Some(Value::Bool(value)) => *value,
+                Some(_) => {
+                    self.fail(format!("argument {name:?} must be a boolean"));
+                    base
+                }
+            },
             None => base,
         }
     }

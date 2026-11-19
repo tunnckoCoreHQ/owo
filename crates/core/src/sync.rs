@@ -251,6 +251,13 @@ pub fn start(req: &StartRequest, transcript: &Path, format: Format) -> Result<Sy
     }
     let raw = fs::read_to_string(req.cwd.join(transcript))
         .with_context(|| format!("reading {}", transcript.display()))?;
+    if raw.trim().is_empty() {
+        return Err(Fault::NoTurns {
+            transcript: transcript.to_path_buf(),
+            format: format.name(),
+        }
+        .into());
+    }
     let (out, writes) = run(req, transcript, &raw, format)?;
     writes.commit()?;
     Ok(out)
@@ -391,7 +398,12 @@ fn run(
     let until = turns.len();
     let pending_end = doc["pending"]["until"].as_u64().map(|u| u as usize);
     let new_user = new_user_turns(&turns, done, pending_end);
-    let due = new_user > 0 && (req.now || new_user >= req.every);
+    let counted_from = pending_end.map_or(done, |end| end.clamp(done, turns.len()));
+    let due = if req.now {
+        turns.len() > counted_from
+    } else {
+        new_user > 0 && new_user >= req.every
+    };
     let from = (0..done)
         .rev()
         .filter(|&i| turns[i].role == "user")

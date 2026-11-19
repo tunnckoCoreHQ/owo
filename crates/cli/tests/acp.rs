@@ -13,8 +13,77 @@ fn owo_bin() -> String {
     assert_cmd::cargo::cargo_bin("owo").display().to_string()
 }
 
-fn owo_server() -> serde_json::Value {
-    json!({ "name": "owo", "command": owo_bin(), "args": ["mcp", "-i", "nicole"], "env": [] })
+fn owo_server(ids: &std::path::Path) -> serde_json::Value {
+    json!({ "name": "owo", "command": owo_bin(), "args": ["mcp", "-D", ids.join(".owo"), "-R", ids, "-i", "nicole"], "env": [] })
+}
+
+#[test]
+fn the_injected_mcp_server_keeps_the_proxy_selection() {
+    use std::io::Write;
+    use std::process::{Command, Stdio};
+
+    for custom in [true, false] {
+        let tmp = copy_example("nicole");
+        let dir = tmp.path().join("config-dir");
+        let config = if custom {
+            tmp.path().join("custom.toml")
+        } else {
+            dir.join("config.toml")
+        };
+        if custom {
+            std::fs::write(&config, "sync_every = 3\n").unwrap();
+        }
+        let mut flags = vec!["-D", dir.to_str().unwrap(), "--project", "picture-book"];
+        if custom {
+            flags.extend(["-c", config.to_str().unwrap()]);
+        }
+        let mut p = start(tmp.path(), &flags, 0);
+        p.send(&init(), &[init_reply(json!({}))]);
+        p.open(
+            &request(1, "session/new", json!({ "cwd": "/w" })),
+            &[response(1, json!({ "sessionId": "s" }))],
+            "s",
+            nicole_only("nicole"),
+        );
+        let (_, got) = p.finish();
+        let sent = parse(&got[1]);
+        let server = &sent["params"]["mcpServers"][0];
+        let mut child = Command::new(server["command"].as_str().unwrap())
+            .args(
+                server["args"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|v| v.as_str().unwrap()),
+            )
+            .current_dir(tmp.path())
+            .env("OWO_DIR", tmp.path().join("wrong-dir"))
+            .env_remove("OWO_CONFIG")
+            .env_remove("OWO_IDENTITIES_DIR")
+            .env_remove("OWO_IDENTITY")
+            .env_remove("OWO_PROJECT")
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .spawn()
+            .unwrap();
+        let call = json!({ "jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": { "name": "config", "arguments": {} } });
+        writeln!(child.stdin.take().unwrap(), "{call}").unwrap();
+        let out = child.wait_with_output().unwrap();
+        assert!(out.status.success());
+        let r: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+        assert_eq!(r["result"]["isError"], false, "{r}");
+        let envelope: serde_json::Value =
+            serde_json::from_str(r["result"]["content"][0]["text"].as_str().unwrap()).unwrap();
+        assert_eq!(envelope["data"]["owo_dir"], json!(dir));
+        assert_eq!(envelope["data"]["config"], json!(config));
+        assert_eq!(envelope["data"]["identities_dir"], json!(tmp.path()));
+        assert_eq!(envelope["data"]["identity"], "nicole");
+        assert_eq!(envelope["data"]["project"], "picture-book");
+        if !custom {
+            assert_eq!(envelope["data"]["config_source"], "default");
+            assert!(!config.exists());
+        }
+    }
 }
 
 #[test]
@@ -94,7 +163,7 @@ fn passes_lines_through_and_stores_turns_once() {
             assert_eq!(got, parse(sent));
         } else if i == 1 || i == 7 {
             let mut want = parse(sent);
-            want["params"]["mcpServers"] = json!([owo_server()]);
+            want["params"]["mcpServers"] = json!([owo_server(tmp.path())]);
             assert_eq!(parse(got), want);
         } else {
             assert_eq!(got, sent, "line {i} passes byte for byte");
@@ -154,9 +223,9 @@ fn adds_the_mcp_server_to_each_session_request() {
     assert_eq!(code, 0);
     assert_eq!(got[0], sent[0]);
     for (i, servers) in [
-        (1, json!([fs_server, owo_server()])),
-        (2, json!([owo_server()])),
-        (3, json!([owo_server()])),
+        (1, json!([fs_server, owo_server(tmp.path())])),
+        (2, json!([owo_server(tmp.path())])),
+        (3, json!([owo_server(tmp.path())])),
     ] {
         let mut want = parse(&sent[i]);
         want["params"]["mcpServers"] = servers;
@@ -499,8 +568,10 @@ fn with_no_identity_at_start_a_pick_starts_the_session() {
     );
     let (_, got) = p.finish();
     let mut want = parse(&new);
-    want["params"]["mcpServers"] =
-        json!([{ "name": "owo", "command": owo_bin(), "args": ["mcp"], "env": [] }]);
+    let mut server = owo_server(tmp.path());
+    let args = server["args"].as_array_mut().unwrap();
+    args.truncate(args.len() - 2);
+    want["params"]["mcpServers"] = json!([server]);
     assert_eq!(parse(&got[1]), want, "the server has no identity flag");
     assert_eq!(got[2], prompt(2, "s", &["a"]), "nothing is injected");
     let (text, _) = block(&got[3]);

@@ -49,6 +49,21 @@ fn call(name: &str, arguments: Value) -> Value {
 }
 
 #[test]
+fn malformed_dry_run_cannot_write() {
+    let tmp = ids_dir(&[]);
+    for value in [json!("true"), json!(1), json!([]), json!({})] {
+        let r = reply(
+            call("new", json!({ "name": "Thea", "dryRun": value })),
+            &select(tmp.path()),
+            &env(tmp.path()),
+        );
+        assert_eq!(r["result"]["isError"], true, "{r}");
+        assert!(r.to_string().contains("must be a boolean"), "{r}");
+        assert!(!tmp.path().join("thea").exists());
+    }
+}
+
+#[test]
 fn mcp_reply_answers_one_message() {
     let tmp = ids_dir(&["nicole"]);
     let (sel, env) = (select(tmp.path()), env(tmp.path()));
